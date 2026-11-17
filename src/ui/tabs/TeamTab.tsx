@@ -97,7 +97,9 @@ function Suggestion({ ds }: { ds: Dataset }) {
           )}
           {res.ranked.filter((c) => c.eligible && !res.team.includes(c)).length > 0 && (
             <div class="small muted">
-              Bench (adds no type coverage): {res.ranked.filter((c) => c.eligible && !res.team.includes(c)).map(name).join(', ')}
+              Bench: {res.ranked.filter((c) => c.eligible && !res.team.includes(c)).slice(0, 10).map(name).join(', ')}
+              {res.ranked.filter((c) => c.eligible && !res.team.includes(c)).length > 10 &&
+                ` +${res.ranked.filter((c) => c.eligible && !res.team.includes(c)).length - 10} more`}
             </div>
           )}
           {v.format === 'doubles' && res.team.length < 2 && (
