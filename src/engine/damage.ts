@@ -1,5 +1,6 @@
 import { calculate, Field, Generations, Move as CalcMove, Pokemon as CalcPokemon, toID } from '@smogon/calc';
 import type { BoxMon, Dataset, NpcMon, StatTable } from '../shared/types';
+import type { BattleRules } from './rules';
 
 /**
  * Damage layer on top of @smogon/calc (Gen 9 mechanics).
@@ -168,6 +169,15 @@ export function bestMove(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, moveId
   return best;
 }
 
+/** Under challenge rules the NPC's attacks ignore Wonder Guard: hit a copy without it. */
+export function defenderVsNpc(me: CalcPokemon, rules?: BattleRules): CalcPokemon {
+  if (!rules?.npcIgnoresWonderGuard || me.ability !== 'Wonder Guard') return me;
+  const c = me.clone();
+  // `undefined` falls back to the species' default ability (Wonder Guard again) when the calc clones it.
+  c.ability = 'No Ability' as CalcPokemon['ability'];
+  return c;
+}
+
 function effectiveSpeed(p: CalcPokemon): number {
   let s = p.stats.spe;
   if (p.item === 'Choice Scarf') s *= 1.5;
@@ -190,9 +200,10 @@ export interface Duel {
  * damage, speed/priority decide who hits first. No switching, crits, status
  * or items that heal. Good for ranking, not a full simulator.
  */
-export function duel(ds: Dataset, me: CalcPokemon, myMoves: string[], foe: CalcPokemon, foeMoves: string[], field?: Field): Duel {
-  const mine = bestMove(ds, me, foe, myMoves, field);
-  const theirs = bestMove(ds, foe, me, foeMoves, field);
+export function duel(ds: Dataset, me: CalcPokemon, myMoves: string[], foe: CalcPokemon, foeMoves: string[], field?: Field, rules?: BattleRules): Duel {
+  const legal = (ids: string[]) => (rules?.bannedMoves.size ? ids.filter((id) => !rules.bannedMoves.has(id)) : ids);
+  const mine = bestMove(ds, me, foe, legal(myMoves), field);
+  const theirs = bestMove(ds, foe, defenderVsNpc(me, rules), legal(foeMoves), field);
   const myAvg = mine ? (mine.minPct + mine.maxPct) / 2 : 0;
   const theirAvg = theirs ? (theirs.minPct + theirs.maxPct) / 2 : 0;
 

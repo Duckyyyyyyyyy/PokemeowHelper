@@ -1,6 +1,7 @@
 import type { Field } from '@smogon/calc';
 import type { BoxMon, Dataset, NpcTeamVariant } from '../shared/types';
 import { boxToCalc, makeField, moveDamage, npcToCalc } from './damage';
+import type { BattleRules } from './rules';
 
 export type MoveSource = 'known' | 'level' | 'tm' | 'egg';
 
@@ -27,7 +28,7 @@ export interface MovesetSuggestion {
  * Candidates: moves it already knows, level-up moves at or below its level,
  * and TM moves (you need the TM item). Egg moves are only kept if already known.
  */
-export function suggestMoveset(ds: Dataset, b: BoxMon, v: NpcTeamVariant, opts: { levelCap?: number; allowTM?: boolean } = {}): MovesetSuggestion {
+export function suggestMoveset(ds: Dataset, b: BoxMon, v: NpcTeamVariant, opts: { levelCap?: number; allowTM?: boolean; rules?: BattleRules } = {}): MovesetSuggestion {
   const s = ds.species[b.species];
   const level = b.level ?? opts.levelCap ?? 50;
   const sources = new Map<string, { source: MoveSource; level?: number }>();
@@ -35,7 +36,7 @@ export function suggestMoveset(ds: Dataset, b: BoxMon, v: NpcTeamVariant, opts: 
   for (const [id, l] of s?.levelMoves ?? []) if (l <= level && !sources.has(id)) sources.set(id, { source: 'level', level: l });
   if (opts.allowTM !== false) for (const id of s?.machineMoves ?? []) if (!sources.has(id)) sources.set(id, { source: 'tm' });
 
-  const candidates = [...sources.keys()].filter((id) => ds.moves[id] && ds.moves[id].category !== 'Status');
+  const candidates = [...sources.keys()].filter((id) => ds.moves[id] && ds.moves[id].category !== 'Status' && !opts.rules?.bannedMoves.has(id));
   const me = boxToCalc(ds, b, level);
   const foes = v.team.map((n) => npcToCalc(ds, n));
   const field: Field = makeField(v.format);

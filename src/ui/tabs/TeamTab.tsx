@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { BoxMon, Dataset, Species } from '../../shared/types';
 import { activeTab, box, dataset, selectedNpc, selectedVariant, setBox } from '../store';
 import { Empty, MoveChip, Tip, Types, scoreClass } from '../components/common';
@@ -7,6 +7,8 @@ import { formatMult } from '../../engine/typeChart';
 import { NoData } from './shared';
 import { BoxSyncCard } from '../components/BoxSync';
 import { DuelDetail, MovesetPanel, duelSummary } from '../components/DamageViews';
+import { rulesFor } from '../../engine/rules';
+import { excludedUids, lockedUids, resetTeamPrefs, teamToText, toggleExclude, toggleLock } from '../teamPrefs';
 
 export function TeamTab() {
   const ds = dataset.value;
@@ -25,7 +27,28 @@ export function TeamTab() {
 function Suggestion({ ds }: { ds: Dataset }) {
   const npc = selectedNpc.value;
   const v = npc ? npc.variants[Math.min(selectedVariant.value, npc.variants.length - 1)] : null;
-  const res = useMemo(() => (v ? suggestTeam(ds, box.value, v, { levelCap: v.levelCap }) : null), [ds, v, box.value, npc]);
+  const rules = rulesFor(npc?.category);
+  const locked = lockedUids.value;
+  const excluded = excludedUids.value;
+  const res = useMemo(
+    () => (v ? suggestTeam(ds, box.value, v, { levelCap: v.levelCap, rules, locked, excluded }) : null),
+    [ds, v, box.value, npc, locked, excluded],
+  );
+  const [copied, setCopied] = useState<string | null>(null);
+  useEffect(() => setCopied(null), [res]); // the copied text belongs to the old team
+  const bench = res ? res.ranked.filter((c) => c.eligible && !res.team.includes(c)) : [];
+  const lockedOut = res ? res.ranked.filter((c) => c.locked && !res.team.includes(c)) : [];
+
+  async function exportTeam() {
+    if (!res || !npc || !v) return;
+    const text = teamToText(ds, res.team.map((c) => c.mon), `MeowDex team vs ${v.trainerName ?? npc.name}${npc.variants.length > 1 ? ` (${v.label})` : ''}`);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied('Team copied to the clipboard.');
+    } catch {
+      setCopied(text); // shown in a box to copy by hand
+    }
+  }
   const name = (c: Candidate) => ds.species[c.mon.species]?.name ?? '?';
   const [cell, setCell] = useState<{ j: number; uid: string } | null>(null);
   const [movesFor, setMovesFor] = useState<string | null>(null);
@@ -58,7 +81,12 @@ function Suggestion({ ds }: { ds: Dataset }) {
                 <div class="mon">
                   <div class="av">{s?.name.slice(0, 2).toUpperCase()}</div>
                   <span class="nm">{s?.name}<Types types={s?.types ?? []} /></span>
-                  <span class={`score ${scoreClass(c.avg)}`}>{c.avg}</span>
+                  <span class="row">
+                    <span class={`score ${scoreClass(c.avg)}`}>{c.avg}</span>
+                    <button class={`btn sm${c.locked ? ' primary' : ''}`} onClick={() => toggleLock(c.mon.uid)} aria-pressed={!!c.locked}
+                      title={c.locked ? 'Locked: always on the team. Tap to unlock.' : 'Lock this slot'} aria-label={`${c.locked ? 'Unlock' : 'Lock'} ${s?.name}`}>{c.locked ? '🔒' : '🔓'}</button>
+                    <button class="btn sm" onClick={() => toggleExclude(c.mon.uid)} title="Don't suggest this Pokémon" aria-label={`Exclude ${s?.name}`}>✕</button>
+                  </span>
                   <div class="full small muted">
                     {c.mon.level ? `Lv ${c.mon.level} · ` : ''}Wins {wins}/{v.team.length} 1v1
                     {best ? ` · Best: ${best.name} ${Math.round(best.minPct)}–${Math.round(best.maxPct)}% on ${v.team[bi]?.name}` : ' · No damaging move'}
@@ -68,12 +96,27 @@ function Suggestion({ ds }: { ds: Dataset }) {
                       {movesFor === c.mon.uid ? 'Hide move advice' : 'Best moves for this fight →'}
                     </button>
                   </div>
-                  {movesFor === c.mon.uid && <div class="full"><MovesetPanel ds={ds} mon={c.mon} v={v} /></div>}
+                  {movesFor === c.mon.uid && <div class="full"><MovesetPanel ds={ds} mon={c.mon} v={v} rules={rules} /></div>}
                 </div>
               );
             })}
             {!res.team.length && <div class="small muted">No eligible Pokémon (check the level cap).</div>}
+            {res.team.length > 0 && (
+              <div class="btns" style={{ marginTop: '8px' }}>
+                <button class="btn primary" onClick={exportTeam}>Copy team</button>
+                {(locked.length > 0 || excluded.length > 0) && (
+                  <button class="btn" onClick={resetTeamPrefs} title="Clear every lock and exclusion">Reset locks ({locked.length + excluded.length})</button>
+                )}
+              </div>
+            )}
+            {copied && (copied.startsWith('//') ? (
+              <textarea class="input" style={{ width: '100%', height: '120px', marginTop: '6px' }} readOnly value={copied} aria-label="Team text to copy" />
+            ) : <div class="small muted" role="status" style={{ marginTop: '4px' }}>{copied}</div>)}
+            <div class="small muted" style={{ marginTop: '4px' }}>🔓 lock a Pokémon to keep it on the team · ✕ never suggest it · tap a bench name to lock it in.</div>
           </div>
+          {lockedOut.length > 0 && (
+            <Tip kind="warn">Locked but not on the team: {lockedOut.map((c) => `${name(c)} (${c.reason ?? 'team is full'})`).join(', ')}</Tip>
+          )}
 
           {res.team.length > 0 && (
             <div class="card">
@@ -114,19 +157,28 @@ function Suggestion({ ds }: { ds: Dataset }) {
               Lead with <b>{name(res.lead)}</b>: scores {res.lead.pairs[0]?.score} vs the NPC's first Pokémon ({v.team[0]?.name}).
             </Tip>
           )}
-          {res.ranked.filter((c) => c.eligible && !res.team.includes(c)).length > 0 && (
+          {bench.length > 0 && (
             <div class="small muted">
-              Bench: {res.ranked.filter((c) => c.eligible && !res.team.includes(c)).slice(0, 10).map(name).join(', ')}
-              {res.ranked.filter((c) => c.eligible && !res.team.includes(c)).length > 10 &&
-                ` +${res.ranked.filter((c) => c.eligible && !res.team.includes(c)).length - 10} more`}
+              Bench:{' '}
+              {bench.slice(0, 10).map((c, i) => (
+                <>{i > 0 && ', '}<button class="link small" onClick={() => toggleLock(c.mon.uid)} title={`Lock ${name(c)} into the team (${c.avg})`}>{name(c)}</button></>
+              ))}
+              {bench.length > 10 && ` +${bench.length - 10} more`}
             </div>
           )}
           {v.format === 'doubles' && res.team.length < 2 && (
             <Tip kind="warn">Doubles battles need at least 2 eligible Pokémon.</Tip>
           )}
           {res.ranked.some((c) => !c.eligible) && (
-            <Tip kind="warn">Excluded: {res.ranked.filter((c) => !c.eligible).map((c) => `${name(c)} (${c.reason})`).join(', ')}</Tip>
+            <Tip kind="warn">
+              Not used:{' '}
+              {res.ranked.filter((c) => !c.eligible).map((c, i) => (
+                <>{i > 0 && ', '}{name(c)} ({c.reason})
+                  {excluded.includes(c.mon.uid) && <> <button class="link small" onClick={() => toggleExclude(c.mon.uid)}>undo</button></>}</>
+              ))}
+            </Tip>
           )}
+          {rules.npcIgnoresWonderGuard && <div class="small muted">Challenge rules applied: banned moves score 0 and their attacks ignore Wonder Guard.</div>}
           <div class="foot">Damage via Gen 9 formulas with real stats, moves, abilities and items. 1v1 estimate: both sides use their best move each turn (no switching, crits or healing).</div>
         </>
       )}

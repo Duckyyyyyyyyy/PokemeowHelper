@@ -248,10 +248,16 @@ Xem mockup: **[`docs/ui-mockup.html`](ui-mockup.html)**
 - Luật wiki: *"If the game asks you to wait, let the limit expire instead of repeatedly trying again."* Box sync tuân theo luật này.
 - UI chuyển sang tiếng Anh (2026-11-17).
 
-### Giai đoạn 2 — Damage calc + Team/Moveset optimizer (1,5–2 tuần)
-- Tích hợp `@smogon/calc`, rule modifiers, override cho Pokémon custom.
-- `BoxReader`: đọc box/party của bạn.
-- `teamBuilder` và `moveset` (learnset/TM), ma trận damage.
+### Giai đoạn 2c — Luật challenge + điều khiển đội ✅ (code + test 2026-11-18; chưa chạy thử trong Chrome thật)
+- `engine/rules.ts`: OHKO (Fissure, Guillotine, Horn Drill, Sheer Cold), Destiny Bond, Perish Song, Endeavor, Pain Split bị loại khỏi duel và gợi ý move; đòn của NPC bỏ qua Wonder Guard (cả damage calc lẫn điểm theo hệ).
+- ⚠️ Giả định: luật này chỉ áp dụng cho Gym, Elite Four, Champion (NPC từ khoá `challenges`). Luật không có trong file dữ liệu wiki nên được viết cứng. Tower, Rival, Boss… dùng luật thường.
+- Các move bị cấm vốn đã ra 0 damage trong calc, nên luật chỉ thật sự đổi kết quả với Wonder Guard (ví dụ Shedinja).
+- Tab Team: 🔓 khoá Pokémon vào đội (lock đi trước, greedy lấp phần còn lại, không vượt level cap), ✕ loại Pokémon, bấm tên ở Bench để khoá, nút Reset, **Copy team** (văn bản kiểu Showdown, có ô copy tay nếu clipboard bị chặn). Lưu trong `localStorage` theo `uid` (`game:<id>` không đổi qua các lần sync).
+
+### Giai đoạn 2 — Damage calc + Team/Moveset optimizer ✅ (xong phần code; chờ chạy thử trong Chrome thật)
+- [x] Tích hợp `@smogon/calc`, rule modifiers, override cho Pokémon custom.
+- [x] `BoxReader`: đọc box của bạn (qua API collection, xem 2a).
+- [x] `teamBuilder` và `moveset` (learnset/TM), ma trận damage, khoá/loại slot, xuất đội.
 
 ### Giai đoạn 3 — Live battle advisor (2 tuần) — *chỉ làm nếu Giai đoạn 0 cho phép*
 - `BattleReader` bằng MutationObserver và state machine theo lượt.
