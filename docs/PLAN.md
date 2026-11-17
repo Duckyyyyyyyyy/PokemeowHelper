@@ -226,13 +226,13 @@ Xem mockup: **[`docs/ui-mockup.html`](ui-mockup.html)**
 - [ ] (Khuyến nghị) Hỏi staff game về extension chỉ đọc, chỉ tư vấn.
 - **Kết quả:** chốt schema dữ liệu, danh sách selector, và quyết định có làm Phase 3 hay không.
 
-### Giai đoạn 1 — MVP: NPC + Type advisor 🟡 (code xong và có test 2026-11-17; chưa chạy thử trong Chrome thật – xem README)
+### Giai đoạn 1 — MVP: NPC + Type advisor ✅ (đã chạy thử trong Chrome thật 2026-11-17)
 - Khung extension (MV3, side panel, Pokédex theme, hệ thống tab plugin).
 - Đồng bộ dữ liệu wiki bằng nút bấm (xem mục 0.1), import/export box JSON.
 - Tab NPC: duyệt và tìm kiếm, phân tích điểm yếu theo type chart.
 - Tab Team (bản đơn giản): gợi ý theo type coverage từ danh sách Pokémon nhập tay.
 
-### Giai đoạn 2a — Box sync ✅ (code + test 2026-11-17; chưa chạy thử trong Chrome thật)
+### Giai đoạn 2a — Box sync ✅ (đã chạy thử trong Chrome thật 2026-11-17: 71 Pokémon, 3 trang)
 - Nguồn: `GET /api/collection?egg=false&sort=level&order=desc&limit=30[&cursor=…]`, đúng tham số mà team picker của game dùng. Mỗi Pokémon có species, level, 4 moves, nature, `abilitySlot`, `heldItem`, gender, IVs và EVs.
 - Chỉ chạy khi bạn bấm, hoặc tự làm mới khi mở panel (tối đa 1 lần/5 phút, tắt được). Lần đầu luôn phải bấm tay.
 - Tải lần lượt từng trang, nghỉ khoảng 0,8 s giữa các trang, tối đa 40 trang. Dừng ngay khi gặp 429 hoặc 401/403, và dừng nếu gặp cursor lặp lại.
