@@ -150,8 +150,8 @@ export function suggestTeam(ds: Dataset, box: BoxMon[], v: NpcTeamVariant, opts:
         pick = i;
       }
     });
-    // Stop once nobody improves the answer to any NPC Pokémon (avoid filler picks).
-    if (team.length && gain < 1) break;
+    // Nobody improves coverage any more → fill remaining slots by highest avg (pool is sorted by avg).
+    if (team.length && gain < 1) pick = 0;
     const c = pool.splice(pick, 1)[0];
     team.push(c);
     c.pairs.forEach((p, j) => (bestPer[j] = Math.max(bestPer[j], p.score)));

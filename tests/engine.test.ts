@@ -86,11 +86,17 @@ describe('team suggestion', () => {
   it('respects level cap and team size', () => {
     const v = npc('challenge:brock').variants[0];
     const res = suggestTeam(ds, [box('Squirtle', [], 15), box('Bulbasaur', [], 25), box('Charmander', [], 10), box('Pikachu', [], 12)], v, { levelCap: 19, size: 2 });
-    expect(res.team.length).toBeGreaterThanOrEqual(1);
-    expect(res.team.length).toBeLessThanOrEqual(2);
+    expect(res.team.length).toBe(2);
     expect(res.team.map((c) => ds.species[c.mon.species].name)).not.toContain('Bulbasaur');
     expect(res.ranked.find((c) => ds.species[c.mon.species].name === 'Bulbasaur')!.eligible).toBe(false);
     expect(res.team[0].mon.uid).toBe('Squirtle');
+  });
+  it('fills the team to size even when one Pokémon already covers every NPC Pokémon', () => {
+    const v = npc('challenge:blaine').variants[0]; // all Fire
+    const mons = ['Squirtle', 'Geodude', 'Pidgey', 'Rattata', 'Pikachu', 'Caterpie', 'Ekans', 'Zubat'].map((n) => box(n, [], 15));
+    const res = suggestTeam(ds, mons, v);
+    expect(res.team.length).toBe(6);
+    expect(new Set(res.team.map((c) => c.mon.uid)).size).toBe(6);
   });
   it('rematch teams have no level cap (wiki: League Rematches)', () => {
     const brock = npc('challenge:brock');
