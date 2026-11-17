@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MeowDex UI Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Pokémon brand palette */
+  --yellow:#FFCB05; --yellow-soft:#FFF4C2; --yellow-deep:#C79A00;
+  --blue:#2A75BB; --blue-soft:#E3EEFA; --navy:#1B3A6B; --navy-2:#24497F;
+  --red:#E3350D; --red-soft:#FDE6E0;
+  --green:#22A55B; --green-soft:#DDF5E7;
+  /* surfaces */
+  --bg:#EEF2F8; --surface:#FFFFFF; --surface-2:#F5F7FB; --border:#DCE3EE;
+  --text:#18233A; --muted:#5E6B82; --shadow:0 1px 2px rgba(20,40,80,.06),0 4px 14px rgba(20,40,80,.08);
+  /* type colors */
+  --t-fire:#F08030; --t-water:#4F8BE8; --t-grass:#5DB94A; --t-electric:#F2C40F; --t-ice:#62C6C6;
+  --t-ground:#D4A83A; --t-rock:#B09A3A; --t-dragon:#6A3BE8; --t-flying:#8F7FE8; --t-steel:#7E8FA8;
+  --t-fairy:#E77FA5; --t-psychic:#F0527E; --t-dark:#5E4B3F; --t-ghost:#6A5596;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --bg:#0E1626; --surface:#17223A; --surface-2:#1D2A45; --border:#2A3A5C; --text:#E8EEF8; --muted:#9AA8C2;
+    --yellow-soft:#3A3212; --blue-soft:#1C3254; --red-soft:#3F1F1A; --green-soft:#16382A; --shadow:0 4px 18px rgba(0,0,0,.35); }
+}
+:root[data-theme="dark"]{ --bg:#0E1626; --surface:#17223A; --surface-2:#1D2A45; --border:#2A3A5C; --text:#E8EEF8; --muted:#9AA8C2;
+  --yellow-soft:#3A3212; --blue-soft:#1C3254; --red-soft:#3F1F1A; --green-soft:#16382A; --shadow:0 4px 18px rgba(0,0,0,.35); }
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font-family:Nunito,system-ui,sans-serif;color:var(--text);padding:28px 16px;font-size:14px}
+h1{text-align:center;margin:0 0 4px;font-size:26px;font-weight:900;color:var(--navy)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) h1{color:var(--yellow)}}
+.sub{text-align:center;color:var(--muted);margin:0 0 26px}
+.row{display:flex;flex-wrap:wrap;gap:28px;justify-content:center;align-items:flex-start}
+.cap{font-size:13px;font-weight:700;text-align:center;margin-top:10px;color:var(--muted)}
+
+/* ===== App shell ===== */
+.app{width:340px;max-width:100%;background:var(--surface-2);border-radius:18px;overflow:hidden;box-shadow:0 10px 30px rgba(20,40,80,.18);border:1px solid var(--border)}
+.head{background:var(--navy);padding:12px 14px 10px;color:#fff;position:relative;overflow:hidden}
+.head::after{content:"";position:absolute;right:-34px;top:-34px;width:110px;height:110px;border-radius:50%;
+  background:radial-gradient(circle,transparent 0 13px,rgba(255,255,255,.08) 13px 19px,transparent 19px),
+  linear-gradient(transparent 46%,rgba(255,255,255,.08) 46% 54%,transparent 54%);border:7px solid rgba(255,255,255,.08)}
+.brandrow{display:flex;align-items:center;gap:9px}
+.brand{font-weight:900;font-size:18px;letter-spacing:.2px}
+.brand span{color:var(--yellow)}
+.status{margin-left:auto;font-size:12px;font-weight:700;background:rgba(255,255,255,.12);padding:3px 9px;border-radius:999px;display:flex;align-items:center;gap:5px;position:relative;z-index:1}
+.dot{width:7px;height:7px;border-radius:50%;background:#7CE29E}
+.dot.live{background:#FF5A3C;box-shadow:0 0 0 3px rgba(255,90,60,.25)}
+.tabs{display:flex;gap:4px;margin-top:11px;background:rgba(255,255,255,.1);padding:4px;border-radius:12px;position:relative;z-index:1}
+.tab{flex:1;text-align:center;font-weight:800;font-size:13px;padding:6px 0;border-radius:9px;color:rgba(255,255,255,.75)}
+.tab.on{background:var(--yellow);color:var(--navy);box-shadow:0 2px 0 var(--yellow-deep)}
+.body{padding:12px;display:flex;flex-direction:column;gap:10px;min-height:480px}
+
+/* ===== pieces ===== */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:10px 12px;box-shadow:var(--shadow)}
+.title{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 6px;display:flex;align-items:center;gap:6px}
+.title .r{margin-left:auto;text-transform:none;letter-spacing:0;color:var(--blue)}
+.search{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:8px 11px;color:var(--muted);box-shadow:var(--shadow);font-size:13.5px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--border);color:var(--muted)}
+.chip.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.ball{width:16px;height:16px;border-radius:50%;flex:none;position:relative;border:2px solid #1d2433;background:linear-gradient(var(--red) 0 43%,#1d2433 43% 57%,#fff 57%)}
+.ball::after{content:"";position:absolute;width:5px;height:5px;border-radius:50%;background:#fff;border:1.5px solid #1d2433;left:50%;top:50%;transform:translate(-50%,-50%)}
+.ball.lg{width:24px;height:24px;border-width:2.5px}.ball.lg::after{width:7px;height:7px}
+.type{display:inline-block;font-size:11px;font-weight:800;color:#fff;padding:1px 8px;border-radius:6px;letter-spacing:.2px;vertical-align:1px}
+.fire{background:var(--t-fire)}.water{background:var(--t-water)}.grass{background:var(--t-grass)}.electric{background:var(--t-electric);color:#3d3000}
+.ground{background:var(--t-ground)}.rock{background:var(--t-rock)}.dragon{background:var(--t-dragon)}.flying{background:var(--t-flying)}
+.steel{background:var(--t-steel)}.ice{background:var(--t-ice)}.fairy{background:var(--t-fairy)}.psychic{background:var(--t-psychic)}.dark{background:var(--t-dark)}.ghost{background:var(--t-ghost)}
+
+.npc{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:14px;background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow)}
+.npc.sel{border:2px solid var(--blue);background:linear-gradient(90deg,var(--blue-soft),var(--surface) 70%)}
+.av{width:34px;height:34px;border-radius:10px;background:var(--blue-soft);color:var(--blue);display:grid;place-items:center;font-weight:900;font-size:12.5px;flex:none}
+.npc b{font-weight:800;font-size:14px}.npc small{display:block;color:var(--muted);font-size:12px}
+.diff{margin-left:auto;font-size:11.5px;font-weight:800;padding:2px 8px;border-radius:999px}
+.easy{background:var(--green-soft);color:var(--green)}.mid{background:var(--yellow-soft);color:var(--yellow-deep)}.hard{background:var(--red-soft);color:var(--red)}
+
+.mon{display:grid;grid-template-columns:34px 1fr auto;gap:1px 10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)}
+.mon:last-child{border-bottom:none;padding-bottom:2px}
+.mon .av{grid-row:span 2}
+.mon .nm{font-weight:800;font-size:13.5px}
+.mon .mv{grid-column:2 / 4;color:var(--muted);font-size:12px}
+.lv{font-size:12px;font-weight:700;color:var(--muted)}
+.score{font-weight:900;font-size:13px;padding:2px 8px;border-radius:8px;background:var(--green-soft);color:var(--green)}
+.score.m{background:var(--yellow-soft);color:var(--yellow-deep)}
+
+.tip{display:flex;gap:9px;align-items:flex-start;padding:10px 12px;border-radius:14px;font-size:13px;line-height:1.45}
+.tip .ic{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font-size:12px;font-weight:900;flex:none;color:#fff}
+.tip.info{background:var(--blue-soft)}.tip.info .ic{background:var(--blue)}
+.tip.warn{background:var(--yellow-soft)}.tip.warn .ic{background:var(--yellow-deep)}
+.tip.danger{background:var(--red-soft)}.tip.danger .ic{background:var(--red)}
+
+.btns{display:flex;gap:8px}
+.btn{flex:1;text-align:center;font-weight:800;font-size:13.5px;padding:9px 10px;border-radius:12px;background:var(--surface);color:var(--text);border:1px solid var(--border)}
+.btn.primary{background:var(--yellow);border-color:var(--yellow);color:var(--navy);box-shadow:0 3px 0 var(--yellow-deep)}
+
+.grid{display:grid;grid-template-columns:78px repeat(3,1fr);gap:4px;font-size:12px;text-align:center;align-items:center}
+.grid b{font-weight:800;font-size:11.5px;color:var(--muted)}
+.grid .rn{text-align:left;color:var(--text);font-size:12px}
+.cell{padding:4px 0;border-radius:7px;font-weight:800}
+.c-g{background:var(--green-soft);color:var(--green)}.c-y{background:var(--yellow-soft);color:var(--yellow-deep)}.c-r{background:var(--red-soft);color:var(--red)}.c-n{background:var(--surface-2);color:var(--muted)}
+
+/* battle */
+.fighter{display:grid;grid-template-columns:1fr auto;gap:4px 8px;align-items:center}
+.fighter .nm{font-weight:800}
+.fighter .meta{font-size:12px;color:var(--muted);font-weight:700}
+.hp{grid-column:1 / 3;height:8px;border-radius:999px;background:var(--surface-2);overflow:hidden;border:1px solid var(--border)}
+.hp i{display:block;height:100%;border-radius:999px}
+.side{font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
+.foe{color:var(--red)}.you{color:var(--blue)}
+.move{display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;align-items:center;padding:10px 12px;border-radius:14px;background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow)}
+.move.best{border:2px solid var(--yellow);background:linear-gradient(90deg,var(--yellow-soft),var(--surface) 75%)}
+.rank{width:24px;height:24px;border-radius:8px;display:grid;place-items:center;font-weight:900;font-size:12.5px;background:var(--surface-2);color:var(--muted)}
+.move.best .rank{background:var(--yellow);color:var(--navy)}
+.move b{font-size:14px}
+.pct{font-weight:900;font-size:13px}
+.move .why{grid-column:2 / 4;color:var(--muted);font-size:12px}
+.ok{color:var(--green)}.bad{color:var(--red)}
+
+/* HUD */
+.hud{width:260px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:10px 12px;box-shadow:0 10px 28px rgba(20,40,80,.22);border-top:4px solid var(--yellow)}
+.hud-h{display:flex;align-items:center;gap:8px;font-weight:900;margin-bottom:8px}
+.hud-h .x{margin-left:auto;color:var(--muted);font-weight:700}
+
+.legend{max-width:1120px;margin:30px auto 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.legend .card{font-size:13.5px;line-height:1.5}
+.sw{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:4px;border:1px solid rgba(0,0,0,.1)}
+</style>
+</head>
+<body>
+<h1>MeowDex — UI mockup</h1>
+<p class="sub">Side panel Chrome (~340px) · màu Pokémon · 4 tab + mini HUD khi đang battle</p>
+
+<div class="row">
+  <!-- ===== 1. NPC ===== -->
+  <div>
+    <div class="app">
+      <div class="head">
+        <div class="brandrow"><span class="ball lg"></span><span class="brand">Meow<span>Dex</span></span><span class="status"><i class="dot"></i>Đã kết nối</span></div>
+        <div class="tabs"><div class="tab on">NPC</div><div class="tab">Team</div><div class="tab">Battle</div><div class="tab">⚙</div></div>
+      </div>
+      <div class="body">
+        <div class="search">🔍 Tìm NPC, gym, tower…</div>
+        <div class="chips"><span class="chip on">Tất cả</span><span class="chip">Gym</span><span class="chip">Champion</span><span class="chip">Tower</span></div>
+        <div class="npc"><div class="av">GL</div><div><b>Gym Leader Brock</b><small>Kanto · Singles · Lv 14</small></div><span class="diff easy">Dễ</span></div>
+        <div class="npc sel"><div class="av">CH</div><div><b>Champion Lance</b><small>Kanto · Singles · Lv 62</small></div><span class="diff hard">Khó</span></div>
+        <div class="npc"><div class="av">BT</div><div><b>Battle Tower #12</b><small>Doubles · Lv 50</small></div><span class="diff mid">Vừa</span></div>
+        <div class="card">
+          <p class="title">Đội hình của Lance <span class="r">3 Pokémon</span></p>
+          <div class="mon"><div class="av">DR</div><span class="nm">Dragonite <span class="type dragon">Dragon</span> <span class="type flying">Flying</span></span><span class="lv">Lv 62</span><span class="mv">Outrage · Extreme Speed · Fire Punch · Dragon Dance</span></div>
+          <div class="mon"><div class="av">GY</div><span class="nm">Gyarados <span class="type water">Water</span> <span class="type flying">Flying</span></span><span class="lv">Lv 60</span><span class="mv">Waterfall · Ice Fang · Earthquake · Intimidate</span></div>
+          <div class="mon"><div class="av">AE</div><span class="nm">Aerodactyl <span class="type rock">Rock</span> <span class="type flying">Flying</span></span><span class="lv">Lv 60</span><span class="mv">Stone Edge · Earthquake · Crunch · Ice Fang</span></div>
+        </div>
+        <div class="tip warn"><span class="ic">!</span><div>Cả đội yếu <span class="type ice">Ice</span> và <span class="type rock">Rock</span>. Luật: chặn OHKO, cho phép weather.</div></div>
+        <div class="btns"><div class="btn primary">Gợi ý đội →</div><div class="btn">Ghi chú</div></div>
+      </div>
+    </div>
+    <div class="cap">① NPC — duyệt challenge</div>
+  </div>
+
+  <!-- ===== 2. TEAM ===== -->
+  <div>
+    <div class="app">
+      <div class="head">
+        <div class="brandrow"><span class="ball lg"></span><span class="brand">Meow<span>Dex</span></span><span class="status"><i class="dot"></i>Đã kết nối</span></div>
+        <div class="tabs"><div class="tab">NPC</div><div class="tab on">Team</div><div class="tab">Battle</div><div class="tab">⚙</div></div>
+      </div>
+      <div class="body">
+        <div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px">
+          <div><div class="title" style="margin:0">Đối thủ</div><b>Champion Lance</b></div>
+          <div style="text-align:right"><div class="title" style="margin:0;justify-content:flex-end">Nguồn</div><b>Box (148) ▾</b></div>
+        </div>
+        <div class="card">
+          <p class="title">Đội gợi ý <span class="r">Thắng ~78%</span></p>
+          <div class="mon"><div class="av">MA</div><span class="nm">Mamoswine <span class="type ice">Ice</span> <span class="type ground">Ground</span></span><span class="score">92</span><span class="mv">Ice Shard · Icicle Crash · Earthquake · Stealth Rock</span></div>
+          <div class="mon"><div class="av">MG</div><span class="nm">Magnezone <span class="type electric">Elec</span> <span class="type steel">Steel</span></span><span class="score">88</span><span class="mv">Thunderbolt · Flash Cannon · Volt Switch · Protect</span></div>
+          <div class="mon"><div class="av">GA</div><span class="nm">Gardevoir <span class="type psychic">Psy</span> <span class="type fairy">Fairy</span></span><span class="score m">71</span><span class="mv">Moonblast · Psychic · Calm Mind · Thunderbolt (TM)</span></div>
+        </div>
+        <div class="card">
+          <p class="title">Ma trận đối đầu</p>
+          <div class="grid">
+            <span></span><b>Dragonite</b><b>Gyarados</b><b>Aerodactyl</b>
+            <b class="rn">Mamoswine</b><span class="cell c-g">OHKO</span><span class="cell c-n">45%</span><span class="cell c-g">OHKO</span>
+            <b class="rn">Magnezone</b><span class="cell c-y">52%</span><span class="cell c-g">OHKO</span><span class="cell c-y">61%</span>
+            <b class="rn">Gardevoir</b><span class="cell c-g">2HKO</span><span class="cell c-n">38%</span><span class="cell c-r">28%</span>
+          </div>
+        </div>
+        <div class="tip info"><span class="ic">i</span><div>Ra trận trước bằng <b>Mamoswine</b>: Ice Shard (ưu tiên +1) hạ Dragonite trước khi nó Dragon Dance.</div></div>
+        <div class="btns"><div class="btn primary">Tối ưu lại</div><div class="btn">Khoá slot</div><div class="btn">Xuất</div></div>
+      </div>
+    </div>
+    <div class="cap">② Team — gợi ý đội + moveset</div>
+  </div>
+
+  <!-- ===== 3. BATTLE ===== -->
+  <div>
+    <div class="app">
+      <div class="head">
+        <div class="brandrow"><span class="ball lg"></span><span class="brand">Meow<span>Dex</span></span><span class="status"><i class="dot live"></i>Lượt 3</span></div>
+        <div class="tabs"><div class="tab">NPC</div><div class="tab">Team</div><div class="tab on">Battle</div><div class="tab">⚙</div></div>
+      </div>
+      <div class="body">
+        <div class="card fighter"><span class="side foe">Đối thủ · Lance</span><span></span><span class="nm">Dragonite <span class="type dragon">Dragon</span></span><span class="meta">Lv 62 · +1 Atk</span><div class="hp"><i style="width:64%;background:var(--yellow)"></i></div></div>
+        <div class="card fighter"><span class="side you">Bạn</span><span></span><span class="nm">Mamoswine <span class="type ice">Ice</span></span><span class="meta">141 / 185 HP</span><div class="hp"><i style="width:76%;background:var(--green)"></i></div></div>
+        <p class="title" style="margin:4px 0 0">Nên dùng</p>
+        <div class="move best"><span class="rank">1</span><b>Ice Shard</b><span class="pct ok">81% KO</span><span class="why">88–104% · đánh trước nhờ ưu tiên +1</span></div>
+        <div class="move"><span class="rank">2</span><b>Icicle Crash</b><span class="pct ok">130%+</span><span class="why">Chắc KO nhưng Dragonite nhanh hơn</span></div>
+        <div class="move"><span class="rank">3</span><b>Earthquake</b><span class="pct bad">0%</span><span class="why">Flying miễn nhiễm Ground</span></div>
+        <div class="tip danger"><span class="ic">!</span><div>NPC có thể dùng <b>Outrage</b> (70%) → bạn còn ~12% HP. Cân nhắc đổi sang Magnezone.</div></div>
+      </div>
+    </div>
+    <div class="cap">③ Battle — gợi ý realtime</div>
+  </div>
+
+  <!-- ===== 4. HUD ===== -->
+  <div>
+    <div class="hud">
+      <div class="hud-h"><span class="ball"></span>MeowDex<span class="x">— ✕</span></div>
+      <div class="move best" style="box-shadow:none;margin-bottom:7px"><span class="rank">1</span><b>Ice Shard</b><span class="pct ok">81% KO</span></div>
+      <div style="font-size:12.5px;color:var(--muted)">2. Icicle Crash · 3. Đổi → Magnezone</div>
+    </div>
+    <div class="cap">④ Mini HUD (tuỳ chọn, kéo-thả)<br>chỉ hiển thị, không bấm hộ</div>
+  </div>
+</div>
+
+<div class="legend">
+  <div class="card"><p class="title">Bảng màu Pokémon</p><span class="sw" style="background:var(--yellow)"></span>Vàng: hành động chính, tab đang chọn<br><span class="sw" style="background:var(--navy)"></span>Xanh navy: header, thương hiệu<br><span class="sw" style="background:var(--blue)"></span>Xanh dương: thông tin, lựa chọn<br><span class="sw" style="background:var(--red)"></span>Đỏ Pokéball: đối thủ, cảnh báo</div>
+  <div class="card"><p class="title">Dễ theo dõi</p>Thẻ trắng bo góc, bóng nhẹ; mỗi màn hình đọc từ trên xuống: <b>bối cảnh → kết quả → gợi ý → hành động</b>. Màu trạng thái nhất quán: <span class="ok"><b>xanh lá = tốt/KO</b></span>, vàng = trung bình, <span class="bad"><b>đỏ = rủi ro</b></span>.</div>
+  <div class="card"><p class="title">Chữ & mở rộng</p>Nunito cho mọi chữ, tối thiểu 11–12px. Mỗi tab là module độc lập; thêm tab mới chỉ cần đăng ký vào thanh tab. Có sẵn light/dark mode.</div>
+</div>
+</body>
+</html>
