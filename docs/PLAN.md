@@ -232,6 +232,13 @@ Xem mockup: **[`docs/ui-mockup.html`](ui-mockup.html)**
 - Tab NPC: duyệt và tìm kiếm, phân tích điểm yếu theo type chart.
 - Tab Team (bản đơn giản): gợi ý theo type coverage từ danh sách Pokémon nhập tay.
 
+### Giai đoạn 2b — Damage calc ✅ (code + test 2026-11-18; chưa chạy thử trong Chrome thật)
+- Công thức chỉ số **đã xác minh** với game: Timburr Lv16 Modest có IV/EV lấy từ box API cho ra 51/30/24/17/20/20, đúng như bảng chỉ số trong game.
+- `engine/damage.ts`: dùng `@smogon/calc` 0.12 (Gen 9). baseStats/types của species và power/type/category của move luôn lấy từ dữ liệu game. Species không có trong dex của calc thì dùng placeholder kèm overrides.
+- Duel 1v1: mỗi bên dùng đòn mạnh nhất mỗi lượt; speed, priority và Choice Scarf quyết định ai đánh trước. Điểm: thắng = 55–100 theo HP còn lại, thua = 0–45 theo sát thương gây ra.
+- `engine/moveset.ts`: gợi ý 4 đòn gây sát thương tốt nhất từ đòn đang biết, đòn level-up ≤ level hiện tại, và TM.
+- Giả định còn lại: chưa đối chiếu damage thực tế trong trận (sẽ làm ở Giai đoạn 3 bằng battle log). Frontier Brain không có level nên giả định Lv 50.
+
 ### Giai đoạn 2a — Box sync ✅ (đã chạy thử trong Chrome thật 2026-11-17: 71 Pokémon, 3 trang)
 - Nguồn: `GET /api/collection?egg=false&sort=level&order=desc&limit=30[&cursor=…]`, đúng tham số mà team picker của game dùng. Mỗi Pokémon có species, level, 4 moves, nature, `abilitySlot`, `heldItem`, gender, IVs và EVs.
 - Chỉ chạy khi bạn bấm, hoặc tự làm mới khi mở panel (tối đa 1 lần/5 phút, tắt được). Lần đầu luôn phải bấm tay.

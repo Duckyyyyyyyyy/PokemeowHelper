@@ -6,6 +6,7 @@ import { suggestTeam, type Candidate } from '../../engine/teamSuggest';
 import { formatMult } from '../../engine/typeChart';
 import { NoData } from './shared';
 import { BoxSyncCard } from '../components/BoxSync';
+import { DuelDetail, MovesetPanel, duelSummary } from '../components/DamageViews';
 
 export function TeamTab() {
   const ds = dataset.value;
@@ -26,6 +27,8 @@ function Suggestion({ ds }: { ds: Dataset }) {
   const v = npc ? npc.variants[Math.min(selectedVariant.value, npc.variants.length - 1)] : null;
   const res = useMemo(() => (v ? suggestTeam(ds, box.value, v, { levelCap: v.levelCap }) : null), [ds, v, box.value, npc]);
   const name = (c: Candidate) => ds.species[c.mon.species]?.name ?? '?';
+  const [cell, setCell] = useState<{ j: number; uid: string } | null>(null);
+  const [movesFor, setMovesFor] = useState<string | null>(null);
 
   return (
     <>
@@ -48,17 +51,24 @@ function Suggestion({ ds }: { ds: Dataset }) {
             <p class="title">Suggested team <span class="r">Coverage {res.coverage}/100</span></p>
             {res.team.map((c) => {
               const s = ds.species[c.mon.species];
-              const bi = c.pairs.reduce((a, p, i) => (p.bestHit.mult > c.pairs[a].bestHit.mult ? i : a), 0);
-              const best = c.pairs[bi];
+              const bi = c.pairs.reduce((a, p, i) => ((p.duel?.mine?.expectedPct ?? 0) > (c.pairs[a].duel?.mine?.expectedPct ?? 0) ? i : a), 0);
+              const best = c.pairs[bi]?.duel?.mine;
+              const wins = c.pairs.filter((p) => p.duel?.win).length;
               return (
                 <div class="mon">
                   <div class="av">{s?.name.slice(0, 2).toUpperCase()}</div>
                   <span class="nm">{s?.name}<Types types={s?.types ?? []} /></span>
                   <span class={`score ${scoreClass(c.avg)}`}>{c.avg}</span>
                   <div class="full small muted">
-                    {c.mon.level ? `Lv ${c.mon.level} · ` : ''}
-                    Best hit: {best?.bestHit.option?.moveName ?? `${best?.bestHit.option?.type ?? ''} move`} {formatMult(best?.bestHit.mult ?? 1)} on {v.team[bi]?.name}
+                    {c.mon.level ? `Lv ${c.mon.level} · ` : ''}Wins {wins}/{v.team.length} 1v1
+                    {best ? ` · Best: ${best.name} ${Math.round(best.minPct)}–${Math.round(best.maxPct)}% on ${v.team[bi]?.name}` : ' · No damaging move'}
                   </div>
+                  <div class="full">
+                    <button class="link small" onClick={() => setMovesFor(movesFor === c.mon.uid ? null : c.mon.uid)} aria-expanded={movesFor === c.mon.uid}>
+                      {movesFor === c.mon.uid ? 'Hide move advice' : 'Best moves for this fight →'}
+                    </button>
+                  </div>
+                  {movesFor === c.mon.uid && <div class="full"><MovesetPanel ds={ds} mon={c.mon} v={v} /></div>}
                 </div>
               );
             })}
@@ -78,15 +88,24 @@ function Suggestion({ ds }: { ds: Dataset }) {
                     {res.team.map((c) => {
                       const p = c.pairs[j];
                       return (
-                        <span class={`cell c-${p.score >= 70 ? 'g' : p.score >= 45 ? 'y' : 'r'}`} title={`${name(c)} vs ${m.name}: deals ${formatMult(p.bestHit.mult)} · takes up to ${formatMult(p.worstTaken.mult)}${p.worstTaken.moveName ? ` (${p.worstTaken.moveName})` : ''}`}>
+                        <button
+                          class={`cell c-${p.score >= 70 ? 'g' : p.score >= 45 ? 'y' : 'r'}${cell?.j === j && cell.uid === c.mon.uid ? ' sel' : ''}`}
+                          title={p.duel ? `${name(c)} vs ${m.name}: ${duelSummary(p.duel)}` : `${name(c)} vs ${m.name}: deals ${formatMult(p.bestHit.mult)}`}
+                          onClick={() => setCell(cell?.j === j && cell.uid === c.mon.uid ? null : { j, uid: c.mon.uid })}
+                        >
                           {p.score}
-                        </span>
+                        </button>
                       );
                     })}
                   </>
                 ))}
               </div>
-              <div class="small muted" style={{ marginTop: '6px' }}>Hover a cell to see damage dealt/taken.</div>
+              <div class="small muted" style={{ marginTop: '6px' }}>Tap a cell for the damage numbers. 55+ = you win the 1v1.</div>
+              {cell && (() => {
+                const c = res.team.find((t) => t.mon.uid === cell.uid);
+                const p = c?.pairs[cell.j];
+                return c && p?.duel ? <DuelDetail ds={ds} you={c.mon} foeName={v.team[cell.j].name} d={p.duel} /> : null;
+              })()}
             </div>
           )}
 
@@ -106,7 +125,7 @@ function Suggestion({ ds }: { ds: Dataset }) {
           {res.ranked.some((c) => !c.eligible) && (
             <Tip kind="warn">Excluded: {res.ranked.filter((c) => !c.eligible).map((c) => `${name(c)} (${c.reason})`).join(', ')}</Tip>
           )}
-          <div class="foot">Based on types, your Pokémon's moves and known abilities. No stats, speed or damage yet.</div>
+          <div class="foot">Damage via Gen 9 formulas with real stats, moves, abilities and items. 1v1 estimate: both sides use their best move each turn (no switching, crits or healing).</div>
         </>
       )}
     </>

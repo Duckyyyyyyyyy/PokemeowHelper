@@ -1,10 +1,13 @@
 import type { BoxMon, Dataset, NpcMon, NpcTeamVariant } from '../shared/types';
 import { effectiveness } from './typeChart';
 import { monAbilities, monTypes } from './analysis';
+import { boxToCalc, duel, makeField, npcToCalc, type Duel } from './damage';
+import type { Pokemon as CalcPokemon } from '@smogon/calc';
 
 /**
- * Phase 1 team suggestion: TYPE MATCHUPS ONLY (no stats, no damage calc).
- * Scores are 0–100 per (your Pokémon, NPC Pokémon) pair.
+ * Team suggestion. Two scorers, both 0–100 per (your Pokémon, NPC Pokémon) pair:
+ *  - 'damage' (default): 1v1 duel estimate with real stats via @smogon/calc (see damage.ts)
+ *  - 'type': type matchups only (Phase 1, kept as a fallback and for tests)
  */
 
 export interface AttackOption {
@@ -38,6 +41,8 @@ export interface PairResult {
   score: number;
   bestHit: { mult: number; option?: AttackOption };
   worstTaken: { mult: number; moveName?: string };
+  /** Present in 'damage' mode. */
+  duel?: Duel;
 }
 
 export function scorePair(ds: Dataset, b: BoxMon, npc: NpcMon): PairResult {
@@ -88,10 +93,39 @@ export interface Suggestion {
   ranked: Candidate[];
 }
 
-export function suggestTeam(ds: Dataset, box: BoxMon[], v: NpcTeamVariant, opts: { levelCap?: number; size?: number } = {}): Suggestion {
+/** Moves used for one of your Pokémon: its known damaging moves, else level-up moves it can know at its level. */
+export function movesForBox(ds: Dataset, b: BoxMon): string[] {
+  const known = b.moves.filter((id) => ds.moves[id] && ds.moves[id].category !== 'Status');
+  if (known.length) return b.moves;
+  const lv = b.level ?? 100;
+  return (ds.species[b.species]?.levelMoves ?? []).filter(([id, l]) => l <= lv && ds.moves[id]?.category !== 'Status').map(([id]) => id);
+}
+
+export interface SuggestOptions {
+  levelCap?: number;
+  size?: number;
+  mode?: 'damage' | 'type';
+}
+
+/** Scores one of your Pokémon against every NPC Pokémon of a team variant. */
+export function scoreAgainstTeam(ds: Dataset, mon: BoxMon, v: NpcTeamVariant, opts: SuggestOptions = {}, npcCalc?: CalcPokemon[]): PairResult[] {
+  if (opts.mode === 'type') return v.team.map((n) => scorePair(ds, mon, n));
+  const field = makeField(v.format);
+  const me = boxToCalc(ds, mon, opts.levelCap ?? 50);
+  const myMoves = movesForBox(ds, mon);
+  const foes = npcCalc ?? v.team.map((n) => npcToCalc(ds, n));
+  return v.team.map((n, j) => {
+    const typeView = scorePair(ds, mon, n);
+    const d = duel(ds, me, myMoves, foes[j], n.moves, field);
+    return { ...typeView, score: d.score, duel: d };
+  });
+}
+
+export function suggestTeam(ds: Dataset, box: BoxMon[], v: NpcTeamVariant, opts: SuggestOptions = {}): Suggestion {
   const size = opts.size ?? 6;
+  const npcCalc = opts.mode === 'type' ? undefined : v.team.map((n) => npcToCalc(ds, n));
   const ranked: Candidate[] = box.map((mon) => {
-    const pairs = v.team.map((n) => scorePair(ds, mon, n));
+    const pairs = scoreAgainstTeam(ds, mon, v, opts, npcCalc);
     const tooHigh = opts.levelCap !== undefined && mon.level !== undefined && mon.level > opts.levelCap;
     return {
       mon,

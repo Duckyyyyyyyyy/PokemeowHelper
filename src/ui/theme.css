@@ -144,3 +144,9 @@ button { cursor: pointer; }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 13px; }
 .kv span:nth-child(odd) { color: var(--muted); }
 .foot { font-size: 11.5px; color: var(--muted); text-align: center; padding: 4px 0 10px; }
+
+/* Phase 2: clickable matrix cells */
+button.cell { border: 0; font: inherit; font-weight: 800; cursor: pointer; width: 100%; }
+button.cell:focus-visible { outline: 3px solid var(--blue); outline-offset: 1px; }
+button.cell.sel { box-shadow: inset 0 0 0 2px var(--text); }
+.statline { font-variant-numeric: tabular-nums; }

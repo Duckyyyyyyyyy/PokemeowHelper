@@ -4,6 +4,7 @@ import { activeTab, dataset, selectedNpc, selectedNpcId, selectedVariant } from 
 import { Avatar, Empty, MoveChip, Tip, TypeBadge, Types } from '../components/common';
 import { bestAttackTypes, bestDefensiveTypes, monTypes, teamNotes } from '../../engine/analysis';
 import { NoData } from './shared';
+import { ASSUMED_NPC_LEVEL, npcToCalc } from '../../engine/damage';
 
 const FILTERS: { id: string; label: string; cats: string[] }[] = [
   { id: 'all', label: 'All', cats: [] },
@@ -95,15 +96,27 @@ function MonRow({ ds, m }: { ds: Dataset; m: NpcMon }) {
   const item = m.item ? ds.items[m.item]?.name ?? m.item : null;
   const ability = m.ability ?? (m.possibleAbilities ? m.possibleAbilities.join(' / ') : null);
   const evs = m.evs ? Object.entries(m.evs).filter(([, v]) => v).map(([k, v]) => `${v} ${k.toUpperCase()}`).join(', ') : '';
+  const stats = useMemo(() => {
+    try {
+      return npcToCalc(ds, m).stats;
+    } catch {
+      return null;
+    }
+  }, [ds, m]);
   return (
     <div class="mon">
       <div class="av">{m.name.slice(0, 2).toUpperCase()}</div>
       <span class="nm">{m.name}<Types types={types} /></span>
-      <span class="lv">{m.level ? `Lv ${m.level}` : ''}</span>
+      <span class="lv" title={m.level ? undefined : `Level not listed – stats assume Lv ${ASSUMED_NPC_LEVEL}`}>{m.level ? `Lv ${m.level}` : `Lv ${ASSUMED_NPC_LEVEL}?`}</span>
       <div class="full">{m.moves.map((id) => <MoveChip ds={ds} id={id} />)}</div>
       <div class="full small muted">
         {[ability && `${ability}`, item && `@ ${item}`, m.nature, evs && `EV ${evs}`].filter(Boolean).join(' · ')}
       </div>
+      {stats && (
+        <div class="full small muted statline" title="HP / Atk / Def / SpA / SpD / Spe at this level">
+          Stats {stats.hp} / {stats.atk} / {stats.def} / {stats.spa} / {stats.spd} / {stats.spe}
+        </div>
+      )}
     </div>
   );
 }

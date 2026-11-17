@@ -12,7 +12,13 @@ Full plan: [docs/PLAN.md](docs/PLAN.md) · Mockup: [docs/ui-mockup.html](docs/ui
 - **Team tab**: MeowDex picks a team from your box, scores every matchup, suggests a lead, and excludes Pokémon over the level cap. Rematches have no cap.
 - **Settings**: sync wiki data, export/import your box as JSON, light/dark theme.
 
-Phase 1 only uses the game's **type chart** plus known abilities. Damage calc is Phase 2; in-battle tips are Phase 3.
+**Phase 2 – damage calc** (current):
+- Every matchup uses real damage from `@smogon/calc` (Gen 9). The inputs are real stats, moves, abilities and items, with species stats and move power taken from the game's own data. The stat formula was checked against the game: a synced Lv 16 Timburr gives exactly the stats the game shows.
+- Each matrix cell is a 1v1 estimate: both sides use their best move each turn, and speed and priority decide who hits first. Tap a cell to see the damage ranges and the result.
+- **Move advice** suggests the best 4 damaging moves for a fight, from moves the Pokémon knows, level-up moves at its level, and TMs.
+- NPC Pokémon show their real stats. Frontier Brain sets have no level in the wiki, so Lv 50 is assumed.
+
+In-battle tips are Phase 3.
 
 ## Install in Chrome (load unpacked)
 ```bash
@@ -47,7 +53,7 @@ This checks a full downloaded wiki data file; run it after each game update. `np
 ```
 src/background/   service worker (opens the side panel when the icon is clicked)
 src/data/         literalParser (acorn), normalize (one adapter per NPC source), sync (wiki data), boxSync (your box), db (IndexedDB)
-src/engine/       typeChart, analysis, teamSuggest – plain TypeScript, with tests
+src/engine/       typeChart, analysis, damage (@smogon/calc wrapper + 1v1 duel), moveset, teamSuggest – plain TypeScript, with tests
 src/ui/           side panel (Preact + signals): App (tab registry), tabs/, components/, theme.css
 public/           manifest.json, icons
 ```
