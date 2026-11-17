@@ -3,6 +3,7 @@ import { effectiveness } from './typeChart';
 import { monAbilities, monTypes } from './analysis';
 import { boxToCalc, duel, makeField, npcToCalc, type Duel } from './damage';
 import type { Pokemon as CalcPokemon } from '@smogon/calc';
+import { abilityVsNpc, type BattleRules } from './rules';
 
 /**
  * Team suggestion. Two scorers, both 0–100 per (your Pokémon, NPC Pokémon) pair:
@@ -16,9 +17,9 @@ export interface AttackOption {
   moveName?: string;
 }
 
-export function attackOptions(ds: Dataset, b: BoxMon): AttackOption[] {
+export function attackOptions(ds: Dataset, b: BoxMon, rules?: BattleRules): AttackOption[] {
   const types = ds.species[b.species]?.types ?? [];
-  const damaging = b.moves.map((id) => ds.moves[id]).filter((m) => m && m.category !== 'Status');
+  const damaging = b.moves.filter((id) => !rules?.bannedMoves.has(id)).map((id) => ds.moves[id]).filter((m) => m && m.category !== 'Status');
   const opts: AttackOption[] = damaging.map((m) => ({ type: m!.type, stab: types.includes(m!.type), moveName: m!.name }));
   // Fewer than 4 moves entered → assume it can still use its own types (STAB).
   if (b.moves.length < 4) for (const t of types) if (!opts.some((o) => o.type === t)) opts.push({ type: t, stab: true });
@@ -45,14 +46,14 @@ export interface PairResult {
   duel?: Duel;
 }
 
-export function scorePair(ds: Dataset, b: BoxMon, npc: NpcMon): PairResult {
+export function scorePair(ds: Dataset, b: BoxMon, npc: NpcMon, rules?: BattleRules): PairResult {
   const myTypes = ds.species[b.species]?.types ?? [];
   const npcTypes = monTypes(ds, npc);
   const npcAbilities = monAbilities(npc);
 
   let best: PairResult['bestHit'] = { mult: 0 };
   let bestEff = -1;
-  for (const o of attackOptions(ds, b)) {
+  for (const o of attackOptions(ds, b, rules)) {
     const mult = effectiveness(ds.types, o.type, npcTypes, npcAbilities);
     const eff = mult * (o.stab ? 1.5 : 1);
     if (eff > bestEff) {
@@ -63,11 +64,12 @@ export function scorePair(ds: Dataset, b: BoxMon, npc: NpcMon): PairResult {
 
   let worst: PairResult['worstTaken'] = { mult: 0 };
   let hasDamaging = false;
+  const myAbility = abilityVsNpc(b.ability, rules);
   for (const id of npc.moves) {
     const mv = ds.moves[id];
-    if (!mv || mv.category === 'Status') continue;
+    if (!mv || mv.category === 'Status' || rules?.bannedMoves.has(id)) continue;
     hasDamaging = true;
-    const mult = effectiveness(ds.types, mv.type, myTypes, b.ability ? [b.ability] : undefined);
+    const mult = effectiveness(ds.types, mv.type, myTypes, myAbility ? [myAbility] : undefined);
     if (mult > worst.mult || worst.moveName === undefined) worst = { mult, moveName: mv.name };
   }
   if (!hasDamaging) worst = { mult: 0 };
@@ -80,6 +82,8 @@ export function scorePair(ds: Dataset, b: BoxMon, npc: NpcMon): PairResult {
 export interface Candidate {
   mon: BoxMon;
   eligible: boolean;
+  /** You pinned it to the team. */
+  locked?: boolean;
   reason?: string;
   pairs: PairResult[]; // vs each NPC mon
   avg: number;
@@ -105,18 +109,24 @@ export interface SuggestOptions {
   levelCap?: number;
   size?: number;
   mode?: 'damage' | 'type';
+  /** Challenge rule modifiers (see rules.ts). */
+  rules?: BattleRules;
+  /** uids you pinned: always on the team (if eligible), before the greedy picks. */
+  locked?: readonly string[];
+  /** uids you never want suggested. */
+  excluded?: readonly string[];
 }
 
 /** Scores one of your Pokémon against every NPC Pokémon of a team variant. */
 export function scoreAgainstTeam(ds: Dataset, mon: BoxMon, v: NpcTeamVariant, opts: SuggestOptions = {}, npcCalc?: CalcPokemon[]): PairResult[] {
-  if (opts.mode === 'type') return v.team.map((n) => scorePair(ds, mon, n));
+  if (opts.mode === 'type') return v.team.map((n) => scorePair(ds, mon, n, opts.rules));
   const field = makeField(v.format);
   const me = boxToCalc(ds, mon, opts.levelCap ?? 50);
   const myMoves = movesForBox(ds, mon);
   const foes = npcCalc ?? v.team.map((n) => npcToCalc(ds, n));
   return v.team.map((n, j) => {
-    const typeView = scorePair(ds, mon, n);
-    const d = duel(ds, me, myMoves, foes[j], n.moves, field);
+    const typeView = scorePair(ds, mon, n, opts.rules);
+    const d = duel(ds, me, myMoves, foes[j], n.moves, field, opts.rules);
     return { ...typeView, score: d.score, duel: d };
   });
 }
@@ -124,13 +134,17 @@ export function scoreAgainstTeam(ds: Dataset, mon: BoxMon, v: NpcTeamVariant, op
 export function suggestTeam(ds: Dataset, box: BoxMon[], v: NpcTeamVariant, opts: SuggestOptions = {}): Suggestion {
   const size = opts.size ?? 6;
   const npcCalc = opts.mode === 'type' ? undefined : v.team.map((n) => npcToCalc(ds, n));
+  const excluded = new Set(opts.excluded ?? []);
+  const locked = new Set(opts.locked ?? []);
   const ranked: Candidate[] = box.map((mon) => {
     const pairs = scoreAgainstTeam(ds, mon, v, opts, npcCalc);
     const tooHigh = opts.levelCap !== undefined && mon.level !== undefined && mon.level > opts.levelCap;
+    const out = excluded.has(mon.uid);
     return {
       mon,
-      eligible: !tooHigh,
-      reason: tooHigh ? `Over level cap ${opts.levelCap}` : undefined,
+      eligible: !tooHigh && !out,
+      locked: locked.has(mon.uid) && !out,
+      reason: tooHigh ? `Over level cap ${opts.levelCap}` : out ? 'Excluded by you' : undefined,
       pairs,
       avg: pairs.length ? Math.round(pairs.reduce((s, p) => s + p.score, 0) / pairs.length) : 0,
     };
@@ -140,6 +154,12 @@ export function suggestTeam(ds: Dataset, box: BoxMon[], v: NpcTeamVariant, opts:
   const pool = ranked.filter((c) => c.eligible);
   const team: Candidate[] = [];
   const bestPer = v.team.map(() => 0);
+  // Pinned members go in first (highest average first), then the greedy picks fill the rest.
+  for (const c of pool.filter((c) => c.locked).slice(0, size)) {
+    pool.splice(pool.indexOf(c), 1);
+    team.push(c);
+    c.pairs.forEach((p, j) => (bestPer[j] = Math.max(bestPer[j], p.score)));
+  }
   while (team.length < size && pool.length) {
     let pick = 0;
     let gain = -1;

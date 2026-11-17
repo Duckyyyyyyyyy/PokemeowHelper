@@ -3,6 +3,7 @@ import type { BoxMon, Dataset, NpcTeamVariant } from '../../shared/types';
 import type { Duel } from '../../engine/damage';
 import { suggestMoveset } from '../../engine/moveset';
 import { TypeBadge } from './common';
+import type { BattleRules } from '../../engine/rules';
 
 const pct = (a: number, b: number) => `${Math.round(a)}–${Math.round(b)}%`;
 
@@ -38,8 +39,8 @@ export function DuelDetail({ ds, you, foeName, d }: { ds: Dataset; you: BoxMon; 
 const SOURCE_LABEL = { known: 'Known', level: 'Lv', tm: 'TM', egg: 'Egg' } as const;
 
 /** Best 4 damaging moves for this fight, from what the Pokémon knows or can learn. */
-export function MovesetPanel({ ds, mon, v }: { ds: Dataset; mon: BoxMon; v: NpcTeamVariant }) {
-  const s = useMemo(() => suggestMoveset(ds, mon, v, { levelCap: v.levelCap }), [ds, mon, v]);
+export function MovesetPanel({ ds, mon, v, rules }: { ds: Dataset; mon: BoxMon; v: NpcTeamVariant; rules?: BattleRules }) {
+  const s = useMemo(() => suggestMoveset(ds, mon, v, { levelCap: v.levelCap, rules }), [ds, mon, v, rules]);
   if (!s.moves.length) return <div class="small muted">No damaging moves available.</div>;
   const same = s.moves.every((m) => m.source === 'known');
   return (

@@ -17,6 +17,8 @@ Full plan: [docs/PLAN.md](docs/PLAN.md) · Mockup: [docs/ui-mockup.html](docs/ui
 - Each matrix cell is a 1v1 estimate: both sides use their best move each turn, and speed and priority decide who hits first. Tap a cell to see the damage ranges and the result.
 - **Move advice** suggests the best 4 damaging moves for a fight, from moves the Pokémon knows, level-up moves at its level, and TMs.
 - NPC Pokémon show their real stats. Frontier Brain sets have no level in the wiki, so Lv 50 is assumed.
+- **Challenge rules** (Gym, Elite Four, Champion): OHKO moves, Destiny Bond, Perish Song, Endeavor and Pain Split are ignored, and the NPC's attacks hit through Wonder Guard.
+- **Team controls**: 🔓 lock a Pokémon onto the team, ✕ exclude one, tap a bench name to lock it in, and **Copy team** puts the team on the clipboard as Showdown-style text.
 
 In-battle tips are Phase 3.
 
@@ -53,7 +55,7 @@ This checks a full downloaded wiki data file; run it after each game update. `np
 ```
 src/background/   service worker (opens the side panel when the icon is clicked)
 src/data/         literalParser (acorn), normalize (one adapter per NPC source), sync (wiki data), boxSync (your box), db (IndexedDB)
-src/engine/       typeChart, analysis, damage (@smogon/calc wrapper + 1v1 duel), moveset, teamSuggest – plain TypeScript, with tests
+src/engine/       typeChart, analysis, damage (@smogon/calc wrapper + 1v1 duel), rules (challenge rules), moveset, teamSuggest – plain TypeScript, with tests
 src/ui/           side panel (Preact + signals): App (tab registry), tabs/, components/, theme.css
 public/           manifest.json, icons
 ```

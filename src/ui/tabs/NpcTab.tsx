@@ -3,6 +3,7 @@ import type { Dataset, Npc, NpcMon } from '../../shared/types';
 import { activeTab, dataset, selectedNpc, selectedNpcId, selectedVariant } from '../store';
 import { Avatar, Empty, MoveChip, Tip, TypeBadge, Types } from '../components/common';
 import { bestAttackTypes, bestDefensiveTypes, monTypes, teamNotes } from '../../engine/analysis';
+import { RULES_TEXT, rulesFor } from '../../engine/rules';
 import { NoData } from './shared';
 import { ASSUMED_NPC_LEVEL, npcToCalc } from '../../engine/damage';
 
@@ -189,10 +190,11 @@ function NpcDetail({ ds, npc }: { ds: Dataset; npc: Npc }) {
         </Tip>
       )}
 
+      {rulesFor(npc.category).npcIgnoresWonderGuard && <Tip kind="info"><b>Challenge rules:</b> {RULES_TEXT}</Tip>}
       <div class="btns">
         <button class="btn primary" onClick={() => (activeTab.value = 'team')}>Suggest team →</button>
       </div>
-      <div class="foot">Uses the game's type chart and known abilities. Stats/damage not included yet (Phase 2).</div>
+      <div class="foot">Types use the game's type chart and known abilities. Damage numbers are in the Team tab.</div>
     </>
   );
 }
