@@ -220,3 +220,38 @@ describe('live markup: stat-change badge next to the name (Juan, 2026-11-18)', (
     expect(readBattle(document, 1)!.boosts.player).toEqual(fromLog);
   });
 });
+
+describe('fainted active Pokémon / forced switch (live bug: Drake, turn 12, Charizard at 0 HP)', () => {
+  // Reconstruction from the Brock fixture: the FNT badge and the prompt's markup were only seen in a
+  // screenshot, so the reader matches them as text. Each variant keeps one signal only.
+  const zeroHp = html.replace('<span class="battle-hp-numbers">45/45 HP</span>', '<span class="battle-hp-numbers">0/45 HP</span>');
+  const normal = readBattle(load(html), 1)!;
+
+  it('a normal turn is not a forced switch', () => {
+    expect(normal.forcedSwitch).toBeUndefined();
+  });
+
+  it('0 HP on screen', () => {
+    const s = readBattle(load(zeroHp), 1)!;
+    expect(s.player?.hp).toBe(0);
+    expect(s.forcedSwitch).toBe(true);
+  });
+
+  it('the FNT badge next to the level', () => {
+    const s = readBattle(load(html.replace('Lv. 19<button', 'Lv. 19<span class="battle-fainted-badge">FNT</span><button')), 1)!;
+    expect(s.forcedSwitch).toBe(true);
+  });
+
+  it('the active switch card marked fainted', () => {
+    const s = readBattle(load(html.replace('data-has-item="true" data-fainted="false"', 'data-has-item="true" data-fainted="true"')), 1)!;
+    expect(s.forcedSwitch).toBe(true);
+  });
+
+  it('the "Choose your next Pokémon." prompt, but not the same words in the battle log', () => {
+    const prompt = html.replace('<div class="battle-choices">', '<div class="battle-choices"><p>Choose your next Pokémon.</p>');
+    expect(readBattle(load(prompt), 1)!.forcedSwitch).toBe(true);
+    const inLog = html.replace(/(<li>Opponent’s <span class="battle-log-pokemon">)/, '<li>Choose your next Pokémon.</li>$1');
+    expect(inLog).not.toBe(html);
+    expect(readBattle(load(inLog), 1)!.forcedSwitch).toBeUndefined();
+  });
+});

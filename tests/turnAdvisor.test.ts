@@ -209,3 +209,72 @@ describe('battle items (battle screen: "Choose an item, then its target. Uses on
     expect(rev.score!).toBeLessThan(a.actions[0].score!);
   });
 });
+
+describe('fainted active Pokémon (live bug: Drake, Charizard at 0 HP still got moves, a Super Potion and a Revive)', () => {
+  const box: BoxMon[] = [
+    { uid: 'game:1', gameId: '1', source: 'game', species: 546, level: 18, moves: ['fairywind', 'stunspore', 'megadrain', 'razorleaf'], nature: 'Modest', ivs: iv(20), evs: zero },
+    { uid: 'game:2', gameId: '2', source: 'game', species: 387, level: 14, moves: ['razorleaf'], nature: 'Hardy', ivs: iv(20), evs: zero },
+  ];
+  const items = new Map([['superpotion', 14], ['revive', 10], ['fullheal', 3]]);
+  // Moves are still on screen (the game keeps the move grid), the bench has a fainted Turtwig.
+  const bench = snap.bench.map((r) => (r.active ? { ...r, hp: 0, fainted: true } : r.name === 'Turtwig' ? { ...r, hp: 0, fainted: true } : r));
+  const down: typeof snap = { ...snap, player: { ...snap.player!, hp: 0, status: 'par' }, bench, forcedSwitch: true };
+  const a = adviseTurn(ds, down, box, { items });
+
+  it('only ranks living bench Pokémon as switch-ins', () => {
+    expect(a.forcedSwitch).toBe(true);
+    expect(a.actions.every((x) => x.kind === 'switch')).toBe(true);
+    expect(a.actions.map((x) => x.label).sort()).toEqual(['Send in Flapple', 'Send in Pancham', 'Send in Timburr']);
+  });
+
+  it('no moves, no potion, no cure, no Revive (not on the fainted one, not on the bench)', () => {
+    expect(a.actions.some((x) => x.kind === 'move' || x.kind === 'item')).toBe(false);
+  });
+
+  it('no "KOs you" line and no move guess for the fainted Pokémon; each switch-in shows their best hit on it', () => {
+    expect(a.threat).toBeUndefined();
+    expect(a.prediction).toBeUndefined();
+    expect(a.npcSwitch).toBeUndefined();
+    for (const x of a.actions) {
+      expect(x.threat?.name).toBeTruthy();
+      expect(x.reason).toMatch(/^Their .+ does \d+–\d+% to it/);
+    }
+  });
+
+  it('a replacement comes in free: no switch-in hit, so it scores at least as well as a mid-turn switch', () => {
+    const normal = adviseTurn(ds, snap, box);
+    for (const x of a.actions) {
+      const mid = normal.actions.find((y) => y.label === x.label.replace('Send in', 'Switch to'))!;
+      expect(x.score!).toBeGreaterThanOrEqual(mid.score!);
+      expect(x.reason).not.toMatch(/switching in/);
+    }
+  });
+
+  it('older snapshots without the flag: 0 HP alone is enough', () => {
+    const old = adviseTurn(ds, { ...snap, player: { ...snap.player!, hp: 0 } }, box, { items });
+    expect(old.forcedSwitch).toBe(true);
+    expect(old.actions.some((x) => x.kind !== 'switch')).toBe(false);
+  });
+
+  it('the fainted switch card alone (screen HP not updated yet) is enough', () => {
+    const lag = adviseTurn(ds, { ...snap, bench: snap.bench.map((r) => (r.active ? { ...r, fainted: true } : r)) }, box, { items });
+    expect(lag.forcedSwitch).toBe(true);
+  });
+
+  it('unknown HP is not treated as fainted, and a normal turn is unchanged', () => {
+    const unknown = adviseTurn(ds, { ...snap, player: { ...snap.player!, hp: undefined } }, box);
+    expect(unknown.forcedSwitch).toBeUndefined();
+    const normal = adviseTurn(ds, snap, box);
+    expect(normal.forcedSwitch).toBeUndefined();
+    expect(normal.actions.some((x) => x.kind === 'move')).toBe(true);
+    expect(normal.threat).toBeDefined();
+  });
+
+  it('a normal turn never offers Revive on the active Pokémon', () => {
+    // Defensive: a card marked active and at 0 HP that does not match the Pokémon on screen.
+    const odd = snap.bench.map((r) => (r.name === 'Turtwig' ? { ...r, hp: 0, fainted: true, active: true } : r));
+    const n = adviseTurn(ds, { ...snap, bench: odd }, box, { items });
+    expect(n.forcedSwitch).toBeUndefined();
+    expect(n.actions.some((x) => x.label === 'Revive on Turtwig')).toBe(false);
+  });
+});
