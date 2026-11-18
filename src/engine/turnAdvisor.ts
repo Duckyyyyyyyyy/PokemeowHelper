@@ -1,5 +1,5 @@
 import type { Pokemon as CalcPokemon } from '@smogon/calc';
-import type { BattleMon, BattleSnapshot, Boosts, RosterMon } from '../shared/battle';
+import { activeFainted, type BattleMon, type BattleSnapshot, type Boosts, type RosterMon } from '../shared/battle';
 import type { BoxMon, Dataset, Npc, NpcMon, NpcTeamVariant } from '../shared/types';
 import { ASSUMED_NPC_LEVEL, SELF_KO_MOVES, bestMove, boxToCalc, defenderVsNpc, makeField, moveDamage, npcToCalc, repeatable, type MoveDamage } from './damage';
 import { rulesFor, type BattleRules } from './rules';
@@ -27,6 +27,8 @@ export interface ActionAdvice {
   minPct?: number;
   maxPct?: number;
   ko?: 'sure' | 'chance';
+  /** Switch-ins only: their best hit on this Pokémon once it is in. */
+  threat?: ThreatInfo;
 }
 
 export interface ThreatInfo {
@@ -53,6 +55,8 @@ export interface TurnAdvice {
   /** Moves of their active Pokémon seen in earlier battles (battle-observed data). */
   seenBefore?: string[];
   notes: string[];
+  /** Your active Pokémon fainted: actions are only switch-ins (no moves, no items, no top-level threat). */
+  forcedSwitch?: boolean;
 }
 
 export interface AdviseOptions {
@@ -217,11 +221,9 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
   }
 
   const foe = foeSet(ds, idx, match?.variant, snap.opponent);
-  const me = mySet(idx, box, snap.player, snap.moves.map((m) => m.name));
   out.foe = foe;
-  out.me = me;
-  if (!foe || !me) {
-    notes.push(`Unknown Pokémon: ${!foe ? snap.opponent.name : snap.player.name}.`);
+  if (!foe) {
+    notes.push(`Unknown Pokémon: ${snap.opponent.name}.`);
     return out;
   }
   // Moves this opponent Pokémon has used in this battle (from the log).
@@ -245,11 +247,31 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
     extra = seen.filter((id) => !foe.mon.moves.includes(id));
     if (extra.length) notes.push(`${foe.mon.name} was seen using ${extra.map((id) => ds.moves[id]?.name ?? id).join(', ')}, which is not in the wiki set. Counted as a possible threat.`);
   }
+  const foeCalc = applyState(npcToCalc(ds, foe.mon), snap.opponent, snap.boosts.opponent);
+  const foeMoves = [...foe.mon.moves, ...extra]; // the rules only ban YOUR moves
+
+  // Your active Pokémon fainted ("Choose your next Pokémon."): the only choice is who comes in.
+  // No moves, no items (not even a Revive on it), no "KOs you" line for a Pokémon already down.
+  if (activeFainted(snap)) {
+    out.forcedSwitch = true;
+    for (const r of snap.bench) {
+      if (r.active || r.fainted || (r.hp ?? 1) <= 0) continue; // a same-species teammate (two Aggrons) still counts
+      out.actions.push(switchAdvice(ds, idx, box, r, foeCalc, foeMoves, rules, field, true));
+    }
+    if (!out.actions.length) notes.push('No healthy Pokémon left to send in.');
+    out.actions.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+    return out;
+  }
+
+  const me = mySet(idx, box, snap.player, snap.moves.map((m) => m.name));
+  out.me = me;
+  if (!me) {
+    notes.push(`Unknown Pokémon: ${snap.player.name}.`);
+    return out;
+  }
   if (!me.known) notes.push(`${snap.player.name} is not in your box: using average IVs. Sync your box for exact numbers.`);
 
   const myCalc = applyState(boxToCalc(ds, me.mon), snap.player, snap.boosts.player);
-  const foeCalc = applyState(npcToCalc(ds, foe.mon), snap.opponent, snap.boosts.opponent);
-  const foeMoves = [...foe.mon.moves, ...extra]; // the rules only ban YOUR moves
   // Your accuracy vs their evasion (e.g. Kingdra at Evasion +1): lowers expected damage for ranking only.
   const accMul = accuracyStageMul((snap.boosts.player.accuracy ?? 0) - (snap.boosts.opponent.evasion ?? 0));
   const myHp = curPct(myCalc);
@@ -390,13 +412,20 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
   return out;
 }
 
-function switchAdvice(ds: Dataset, idx: Idx, box: BoxMon[], r: RosterMon, foeCalc: CalcPokemon, foeMoves: string[], rules: BattleRules, field: ReturnType<typeof makeField>): ActionAdvice {
-  const label = `Switch to ${r.name}`;
+/**
+ * One switch option. `free`: a replacement after your Pokémon fainted comes in without taking a
+ * hit (mainline rule; the game's log agrees: "Brock sent out Onix!" right after Geodude fainted closed
+ * that turn with no hit), so no free hit and no "gives up a turn" penalty; the reason then leads
+ * with their best hit on it.
+ */
+function switchAdvice(ds: Dataset, idx: Idx, box: BoxMon[], r: RosterMon, foeCalc: CalcPokemon, foeMoves: string[], rules: BattleRules, field: ReturnType<typeof makeField>, free = false): ActionAdvice {
+  const label = free ? `Send in ${r.name}` : `Switch to ${r.name}`;
   const mine = mySet(idx, box, r, (r.moves ?? []).map((m) => m.name));
   if (!mine) return { kind: 'switch', label, score: null, reason: 'Unknown Pokémon.' };
   const p = applyState(boxToCalc(ds, mine.mon), r);
   const moves = movesForBox(ds, mine.mon);
   const incoming = bestMove(ds, foeCalc, defenderVsNpc(p, rules), foeMoves, field);
+  if (free) return freeSwitchAdvice(ds, label, mine.known, p, moves, incoming, foeCalc, rules, field);
   const hpAfter = curPct(p) - avg(incoming);
   if (hpAfter <= 0) return { kind: 'switch', label, score: 0, reason: `Would faint switching in (${incoming ? `${incoming.name} ${pctTxt(incoming)}` : ''}).` };
   const mineBest = bestMove(ds, p, foeCalc, repeatable(moves.filter((id) => !rules.bannedMoves.has(id))), field);
@@ -408,6 +437,28 @@ function switchAdvice(ds: Dataset, idx: Idx, box: BoxMon[], r: RosterMon, foeCal
   return {
     kind: 'switch', label, score,
     reason: `Takes ~${Math.round(avg(incoming))}% switching in, then ${mineBest.name} ${pctTxt(mineBest)}: ${proj.win ? 'wins' : 'loses'} the 1v1.${mine.known ? '' : ' (Not in your box: average IVs.)'}`,
+  };
+}
+
+function freeSwitchAdvice(
+  ds: Dataset, label: string, known: boolean, p: CalcPokemon, moves: string[], incoming: MoveDamage | null,
+  foeCalc: CalcPokemon, rules: BattleRules, field: ReturnType<typeof makeField>,
+): ActionAdvice {
+  const hp = curPct(p);
+  const mineBest = bestMove(ds, p, foeCalc, repeatable(moves.filter((id) => !rules.bannedMoves.has(id))), field);
+  const first = order(p, foeCalc, mineBest?.priority ?? 0, incoming?.priority ?? 0);
+  const threat: ThreatInfo | undefined = incoming
+    ? { name: incoming.name, minPct: incoming.minPct, maxPct: incoming.maxPct, ko: incoming.minPct >= hp ? 'sure' : incoming.maxPct >= hp ? 'chance' : undefined, youFirst: first }
+    : undefined;
+  const hit = threat ? `Their ${threat.name} does ${pctTxt(threat)} to it${threat.ko === 'sure' ? ' (KOs it)' : threat.ko ? ' (can KO it)' : ''}. ` : '';
+  const note = known ? '' : ' (Not in your box: average IVs.)';
+  if (!mineBest) return { kind: 'switch', label, score: 5, threat, reason: `${hit}No known damaging move.${note}` };
+  const proj = project(mineBest.expectedPct, avg(incoming), hp, curPct(foeCalc), first);
+  const speed = first === null ? 'speed tie' : first ? 'it moves first' : 'they move first';
+  return {
+    kind: 'switch', label, threat,
+    score: Math.round(Math.max(0, Math.min(100, proj.score))),
+    reason: `${hit}${mineBest.name} ${pctTxt(mineBest)}, ${speed}: ${proj.win ? 'wins' : 'loses'} the 1v1.${note}`,
   };
 }
 
@@ -463,7 +514,8 @@ function itemAdvice(
   if (rev.length) {
     let best: ActionAdvice | null = null;
     for (const r of snap.bench) {
-      if (!r.fainted && (r.hp ?? 1) > 0) continue;
+      // Not the active Pokémon: when it is down the advice is a forced switch, never a Revive on it.
+      if (r.active || (!r.fainted && (r.hp ?? 1) > 0)) continue;
       const mine = mySet(idx, box, r, (r.moves ?? []).map((m) => m.name));
       if (!mine) continue;
       const [id, name, frac] = rev[0];

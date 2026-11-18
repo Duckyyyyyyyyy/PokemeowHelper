@@ -54,6 +54,11 @@ function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
         <Tip kind="info">Battle state: {snap.status}. Advice shows while the battle is active.</Tip>
       ) : advice && (
         <>
+          {advice.forcedSwitch && (
+            <Tip kind="warn">
+              <b>{snap.player?.name ?? 'Your Pokémon'}</b> {snap.player?.hp === 0 ? 'fainted' : 'is out'}. Pick who to send in next{snap.opponent ? <> against <b>{snap.opponent.name}</b></> : ''}: it comes in without taking a hit.
+            </Tip>
+          )}
           {advice.threat && (
             <Tip kind={advice.threat.ko === 'sure' ? 'danger' : advice.threat.ko ? 'warn' : 'info'}>
               Their best hit: <b>{advice.threat.name}</b> {Math.round(advice.threat.minPct)}–{Math.round(advice.threat.maxPct)}% of your max HP
@@ -73,7 +78,7 @@ function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
             </div>
           )}
           <div class="card">
-            <p class="title">Best options</p>
+            <p class="title">{advice.forcedSwitch ? 'Best switch-in' : 'Best options'}</p>
             {ranked.map((a, i) => <Action a={a} top={i === 0} />)}
             {!ranked.length && <div class="small muted">Nothing to score yet.</div>}
             {unscored.length > 0 && (
@@ -135,6 +140,7 @@ function Action({ a, top }: { a: ActionAdvice; top: boolean }) {
         <b>{a.kind === 'switch' ? '⇄ ' : a.kind === 'item' ? '🎒 ' : ''}{a.label}</b>
         {a.minPct !== undefined && <span class="muted"> · {Math.round(a.minPct)}–{Math.round(a.maxPct!)}%</span>}
         {a.ko === 'sure' && <span class="chip on" style={{ padding: '0 7px', marginLeft: '4px' }}>KO</span>}
+        {a.threat?.ko && <span class="chip" style={{ padding: '0 7px', marginLeft: '4px' }}>{a.threat.ko === 'sure' ? 'They KO it' : 'They can KO it'}</span>}
         <div class="small muted">{a.reason}</div>
       </div>
     </div>

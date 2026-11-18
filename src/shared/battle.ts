@@ -86,4 +86,24 @@ export interface BattleSnapshot {
   log: string[];
   /** Move uses parsed from the whole log (v2+; missing in v1 snapshots). */
   events?: BattleEvent[];
+  /**
+   * Your active Pokémon fainted and the game wants the next one ("Choose your next Pokémon."):
+   * only a switch-in can be picked. Missing in older snapshots: use activeFainted().
+   */
+  forcedSwitch?: boolean;
+}
+
+/**
+ * True when your active Pokémon is down: the reader's flag, 0 HP on screen, a "fnt" status, or
+ * its own switch card marked fainted. Unknown HP never counts as fainted (a false positive would
+ * hide all move advice).
+ */
+export function activeFainted(snap: BattleSnapshot): boolean {
+  if (snap.forcedSwitch) return true;
+  const p = snap.player;
+  if (!p) return false;
+  if (p.hp !== undefined && p.hp <= 0) return true;
+  if (p.status === 'fnt') return true;
+  const lc = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return snap.bench.some((r) => r.active && lc(r.name) === lc(p.name) && (r.fainted || (r.hp !== undefined && r.hp <= 0)));
 }

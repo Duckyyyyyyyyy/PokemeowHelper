@@ -1,4 +1,4 @@
-import type { BattleEvent, BattleMon, BattleMove, BattleSnapshot, BoostKey, Boosts, RosterMon } from '../shared/battle';
+import { activeFainted, type BattleEvent, type BattleMon, type BattleMove, type BattleSnapshot, type BoostKey, type Boosts, type RosterMon } from '../shared/battle';
 
 /**
  * Reads the PokeMeowRPG battle screen into a BattleSnapshot. Pure and read-only:
@@ -27,7 +27,21 @@ export const SEL = {
   logTurn: '.battle-log-turn',
   /** On-screen stat stages next to the name, e.g. <span class="battle-status battle-stat-changes" title="Evasion +1">. */
   statChanges: '.battle-stat-changes',
+  log: '.battle-log',
 } as const;
+
+/** Seen live (Drake, 2026-11-18) after your Pokémon fainted. Matched as text: its markup is not known yet. */
+const NEXT_PROMPT = /choose your next pok[eé]mon/i;
+/** Badge next to a fainted Pokémon's level ("FNT"), matched as text for the same reason (an element reading just "FNT"). */
+const hasFntBadge = (root: Element | null) => !!root && [...root.querySelectorAll('*')].some((e) => clean(e.textContent) === 'FNT');
+
+/** The "Choose your next Pokémon" prompt anywhere in the arena except the battle log. Read-only: works on a detached copy. */
+export function hasNextPrompt(arena: Element): boolean {
+  if (!NEXT_PROMPT.test(arena.textContent ?? '')) return false;
+  const copy = arena.cloneNode(true) as Element;
+  copy.querySelectorAll(SEL.log).forEach((l) => l.remove());
+  return NEXT_PROMPT.test(copy.textContent ?? '');
+}
 
 const num = (s?: string | null) => {
   const n = s ? parseInt(s, 10) : NaN;
@@ -333,6 +347,12 @@ export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | 
   const log = readLog(arena, clean(arena.querySelector(SEL.opponentName)?.textContent) || undefined);
   const player = readCombatant(arena.querySelector(SEL.playerStats));
   const opponent = readCombatant(arena.querySelector(SEL.opponentStats));
+  const bench = readBench(arena);
+  const playerRoot = arena.querySelector(SEL.playerStats);
+  // Your active Pokémon is down and the game asks for the next one: only switch-ins make sense.
+  const forcedSwitch = (!!player && hasFntBadge(playerRoot))
+    || hasNextPrompt(arena)
+    || activeFainted({ player, bench } as BattleSnapshot);
   return {
     v: 2,
     at: now,
@@ -344,11 +364,12 @@ export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | 
     player,
     opponent,
     moves: readMoves(arena),
-    bench: readBench(arena),
+    bench,
     opponentTeam: readOpponentTeam(arena),
     // The screen shows stages next to the name when any are active ("Evasion +1"); trust that over the log.
     boosts: { player: player?.stages ?? log.boosts.player, opponent: opponent?.stages ?? log.boosts.opponent },
     log: log.lines,
     events: log.events,
+    ...(forcedSwitch ? { forcedSwitch: true } : {}),
   };
 }
