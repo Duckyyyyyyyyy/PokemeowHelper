@@ -85,7 +85,7 @@ describe('plan A (attack now) vs plan B (support move, then attack)', () => {
   });
 
   it('status: a burn halves a physical attacker', () => {
-    const r = rate(ctx(mine('Machamp', 54, ['willowisp', 'brickbreak']), wiki('Relicanth', 54)), 'willowisp');
+    const r = rate(ctx(mine('Machamp', 56, ['willowisp', 'brickbreak']), wiki('Quagsire', 56)), 'willowisp');
     expect(r.better).toBe(true);
     expect(r.reason).toMatch(/^Burn: you win the 1v1/);
   });
@@ -120,6 +120,28 @@ describe('plan A (attack now) vs plan B (support move, then attack)', () => {
     expect(r.reason).toMatch(/^Reflect:/);
   });
 
+  it('screen: Light Screen against a special attacker', () => {
+    const r = rate(ctx(mine('Machamp', 39, ['lightscreen', 'brickbreak']), wiki('Muk', 39)), 'lightscreen');
+    expect(r.better).toBe(true);
+    expect(r.reason).toMatch(/^Light Screen: you win the 1v1 instead of losing/);
+  });
+
+  it('a support move that gains nothing stays clearly below attacking (out of the win band)', () => {
+    const r = rate(ctx(mine('Mr. Mime', 40, ['reflect', 'psychic']), npc('Alakazam', 40, ['psychic'])), 'reflect');
+    expect(r.better).toBe(false);
+    expect(r.score!).toBeLessThanOrEqual(Math.min(50, r.planA - 10));
+  });
+
+  it('Tailwind: its turns left help the Pokémon you send in next', () => {
+    const golem = wiki('Golem', 55);
+    const rhydon = { name: 'Rhydon', calc: boxToCalc(ds, mine('Rhydon', 55, ['earthquake'])), moves: ['earthquake'] };
+    const c = ctx(mine('Pidgeot', 55, ['tailwind', 'wingattack']), golem);
+    const r = rate({ ...c, bench: [rhydon] }, 'tailwind');
+    expect(r.reason).toMatch(/lets Rhydon win its 1v1/);
+    expect(r.score!).toBeGreaterThan(r.planA);
+    expect(rate({ ...c, bench: [rhydon], field: { mine: { tailwind: 2 }, theirs: {} } }, 'tailwind').reason).toMatch(/already up/);
+  });
+
   it('weather: Rain Dance weakens their Fire moves', () => {
     const r = rate(ctx(mine('Scyther', 42, ['raindance', 'xscissor']), wiki('Growlithe', 42)), 'raindance');
     expect(r.better).toBe(true);
@@ -128,7 +150,7 @@ describe('plan A (attack now) vs plan B (support move, then attack)', () => {
 
   it('hazards: Stealth Rock counts the Pokémon still to come', () => {
     const c = ctx(mine('Golem', 40, ['stealthrock', 'rockslide']), npc('Snorlax', 40, ['bodyslam']));
-    const zard = { name: 'Charizard', calc: npcToCalc(ds, npc('Charizard', 40, ['flamethrower'])) };
+    const zard = { name: 'Charizard', calc: npcToCalc(ds, npc('Charizard', 40, ['flamethrower'])), moves: ['flamethrower'] };
     const r = rate({ ...c, foesLeft: [zard] }, 'stealthrock');
     expect(r.score).not.toBeNull();
     expect(r.reason).toMatch(/50% to Charizard when they come in/);
@@ -143,7 +165,7 @@ describe('plan A (attack now) vs plan B (support move, then attack)', () => {
   it('a sure KO now beats any setup', () => {
     const r = rate(ctx(mine('Machamp', 60, ['swordsdance', 'brickbreak']), npc('Snorlax', 20, ['bodyslam'])), 'swordsdance');
     expect(r.better).toBe(false);
-    expect(r.score!).toBeLessThan(r.planA);
+    expect(r.score!).toBeLessThanOrEqual(Math.min(50, r.planA - 10));
     expect(r.reason).toMatch(/you can KO it now/);
   });
 });
@@ -231,11 +253,16 @@ describe('credit for your later Pokémon', () => {
     expect(rate({ ...hyp, bench: [machamp] }, 'hypnosis').score).toBe(rate(hyp, 'hypnosis').score);
   });
 
-  it('boosts do carry on against their next Pokémon while you stay in', () => {
-    const c = ctx(mine('Machamp', 56, ['swordsdance', 'brickbreak']), wiki('Quagsire', 56));
-    const next = { ...c, foesLeft: [{ name: 'Lapras', calc: npcToCalc(ds, wiki('Lapras', 56)) }] };
-    const r = rate(next, 'swordsdance');
-    expect(r.score!).toBeGreaterThanOrEqual(rate(c, 'swordsdance').score!);
+  it('boosts do carry on against their next Pokémon while you stay in, judged with ITS moves', () => {
+    const lapras = wiki('Lapras', 54);
+    const team = ds.npcs.flatMap((n) => n.variants).find((v) => v.team.includes(lapras))!.team.filter((m) => m !== lapras);
+    const c = ctx(mine('Gengar', 54, ['nastyplot', 'shadowball']), lapras);
+    const left = (own: boolean) => team.map((m) => ({ name: m.name, calc: npcToCalc(ds, m), moves: own ? m.moves : ['splash'] }));
+    const real = rate({ ...c, foesLeft: left(true) }, 'nastyplot');
+    expect(real.reason).toMatch(/then beats 3 of their 4 other Pokémon instead of 0/);
+    expect(real.score!).toBeGreaterThan(rate(c, 'nastyplot').score!);
+    // Same Pokémon with harmless moves: every one of them is beaten.
+    expect(rate({ ...c, foesLeft: left(false) }, 'nastyplot').reason).toMatch(/then beats 4 of their 4 other Pokémon/);
   });
 });
 
@@ -268,6 +295,26 @@ describe('Battle tab, Team tab and Explore', () => {
     expect(supportLead(ds, mine('Machamp', 56, ['brickbreak']), v)).toBeUndefined();
     expect(supportLead(ds, mine('Machamp', 56, ['screech', 'brickbreak']), v)?.title).toBe('Debuff lead');
     expect(supportLead(ds, mine('Machamp', 56, ['swordsdance', 'brickbreak']), { ...v, format: 'doubles' })).toBeUndefined();
+  });
+
+  it('Team tab: no lead mark when the plan still loses the lead matchup', () => {
+    const v: NpcTeamVariant = { label: 'Test', format: 'singles', team: [wiki('Rhyhorn', 45)], medicines: [] };
+    expect(supportLead(ds, mine('Snorlax', 45, ['growl', 'bodyslam']), v)).toBeUndefined();
+  });
+
+  it('challenge rules: a banned status move still scores 0, other support moves are scored', () => {
+    const boss = ds.npcs.find((n) => n.category === 'boss')!;
+    const a = adviseTurn(ds, {
+      ...snap, kind: 'world-boss', opponentName: boss.name, opponentTeam: [], events: [], boosts: { player: {}, opponent: {} },
+      opponent: { name: boss.variants[0].team[0].name, level: 100 },
+      player: { name: 'Bulbasaur', level: 60, hp: 100, maxHp: 100 },
+      moves: [{ name: 'Destiny Bond', disabled: false }, { name: 'Swords Dance', disabled: false }, { name: 'Sludge Bomb', disabled: false }],
+    }, []);
+    expect(a.npc?.category).toBe('boss');
+    const db = a.actions.find((x) => x.label === 'Destiny Bond')!;
+    expect(db).toMatchObject({ score: 0 });
+    expect(db.tag).toBeUndefined();
+    expect(a.actions.find((x) => x.label === 'Swords Dance')!.tag).toBe('setup');
   });
 
   it('Explore Defeat mode lists attacks only, never setup moves', () => {

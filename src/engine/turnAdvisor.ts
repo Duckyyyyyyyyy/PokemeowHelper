@@ -283,7 +283,7 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
     .filter((r) => !r.active && !r.fainted && (r.hp ?? 1) > 0 && lc(r.name) !== lc(snap.opponent!.name))
     .map((r) => {
       const s = foeSet(ds, idx, match?.variant, r);
-      return s && { name: r.name, calc: applyState(npcToCalc(ds, s.mon), r) };
+      return s && { name: r.name, calc: applyState(npcToCalc(ds, s.mon), r), moves: s.mon.moves };
     })
     .filter((x): x is NonNullable<typeof x> => !!x);
   if (npcBench.length) out.npcSwitch = guessNpcSwitch(ds, foeCalc, defenderVsNpc(myCalc, rules), myMoveIds, foeMoves, npcBench, field);
@@ -417,14 +417,14 @@ function benchFor(ds: Dataset, idx: Idx, box: BoxMon[], snap: BattleSnapshot, ru
 }
 
 /** NPC Pokémon still to come: seen on its team bar, plus wiki team members not seen yet (hazards). */
-function foesLeft(ds: Dataset, idx: Idx, v: NpcTeamVariant | undefined, snap: BattleSnapshot, seen: { name: string; calc: CalcPokemon }[]) {
+function foesLeft(ds: Dataset, idx: Idx, v: NpcTeamVariant | undefined, snap: BattleSnapshot, seen: { name: string; calc: CalcPokemon; moves: string[] }[]) {
   const out = [...seen];
   const shown = new Set([...snap.opponentTeam.map((r) => lc(r.name)), lc(snap.opponent?.name ?? '')]);
   for (const m of v?.team ?? []) {
     if (shown.has(lc(m.name))) continue;
     shown.add(lc(m.name));
     const s = foeSet(ds, idx, v, { name: m.name, level: m.level });
-    if (s) out.push({ name: m.name, calc: npcToCalc(ds, s.mon) });
+    if (s) out.push({ name: m.name, calc: npcToCalc(ds, s.mon), moves: s.mon.moves });
   }
   return out;
 }

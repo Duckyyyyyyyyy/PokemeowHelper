@@ -206,11 +206,12 @@ export function supportLead(ds: Dataset, mon: BoxMon, v: NpcTeamVariant, opts: S
   const me = boxToCalc(ds, mon, opts.levelCap ?? 50);
   const foe = npcToCalc(ds, lead);
   const attacks = repeatable(movesForBox(ds, mon).filter((id) => ds.moves[id] && ds.moves[id].category !== 'Status' && !rules.bannedMoves.has(id)));
-  const foesLeft = v.team.slice(1).map((n) => ({ name: n.name, calc: npcToCalc(ds, n) }));
+  const foesLeft = v.team.slice(1).map((n) => ({ name: n.name, calc: npcToCalc(ds, n), moves: n.moves }));
   let best: SupportLead | undefined;
   for (const id of own) {
     const r = rateSupport({ ds, rules, me, myMoves: attacks, foe, foeName: lead.name, foeMoves: lead.moves, foesLeft }, id);
-    if (!r || r.score === null || !r.better) continue;
+    // Only a plan that wins the lead matchup (a lost 1v1 that loses a bit less is no lead).
+    if (!r || r.score === null || !r.better || !r.wins) continue;
     const gain = r.score - r.planA;
     if (gain < 5 || (best && best.gain >= gain)) continue;
     const title = r.effect.kind === 'boost' ? 'Setup lead' : r.effect.kind === 'debuff' || r.effect.kind === 'status' ? 'Debuff lead' : 'Support lead';

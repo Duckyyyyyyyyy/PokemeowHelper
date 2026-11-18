@@ -195,8 +195,8 @@ export interface SupportContext {
   foeMoves: string[];
   /** Your other healthy Pokémon (later-Pokémon credit for effects that stay on the enemy). */
   bench?: BenchMon[];
-  /** NPC Pokémon still to come (hazards). */
-  foesLeft?: { name: string; calc: CalcPokemon }[];
+  /** NPC Pokémon still to come, with their moves (hazards, boosts kept against them). */
+  foesLeft?: { name: string; calc: CalcPokemon; moves: string[] }[];
   /** The NPC is likely to switch out: stage drops on it would be lost. */
   npcMaySwitch?: boolean;
   field?: FieldState;
@@ -211,6 +211,8 @@ export interface SupportRating {
   label: string;
   /** Plan B beats attacking now (by score). */
   better: boolean;
+  /** You win this 1v1 with plan B. */
+  wins: boolean;
   /** Plan A score (attack now). */
   planA: number;
 }
@@ -515,10 +517,12 @@ function sweepCredit(ctx: SupportContext, stB: State, hpB: number, hpA: number):
   let diff = 0;
   for (const f of left) {
     const fx: Fx = { mine: {}, theirs: {} };
-    const plain = baseState(ctx, ctx.me, f.calc, fx, ctx.myBoosts);
-    const boosted: State = { ...baseState(ctx, stB.me, f.calc, fx), myAcc: stB.myAcc, myEva: stB.myEva };
-    const a = hpA > 0 ? fight(ctx, plain, hpA, curPct(f.calc)) : { score: 0, win: false };
-    const b = fight(ctx, boosted, hpB, curPct(f.calc));
+    // Their next Pokémon with ITS moves and no stages.
+    const fc: SupportContext = { ...ctx, foe: f.calc, foeName: f.name, foeMoves: f.moves, foeBoosts: undefined };
+    const plain = baseState(fc, ctx.me, f.calc, fx, ctx.myBoosts);
+    const boosted: State = { ...baseState(fc, stB.me, f.calc, fx), myAcc: stB.myAcc, myEva: stB.myEva };
+    const a = hpA > 0 ? fight(fc, plain, hpA, curPct(f.calc)) : { score: 0, win: false };
+    const b = fight(fc, boosted, hpB, curPct(f.calc));
     winsA += a.win ? 1 : 0;
     winsB += b.win ? 1 : 0;
     diff += b.score - a.score;
@@ -562,7 +566,7 @@ export function rateSupport(ctx: SupportContext, moveId: string): SupportRating 
   const myHp = curPct(ctx.me);
   const foeHp = curPct(ctx.foe);
   const A = fight(ctx, st0, myHp, foeHp);
-  const out = (score: number | null, reason: string, better = false): SupportRating => ({ score, reason, effect: e, label, better, planA: Math.round(A.score) });
+  const out = (score: number | null, reason: string, better = false, wins = false): SupportRating => ({ score, reason, effect: e, label, better, wins, planA: Math.round(A.score) });
 
   const why = blocked(ctx, moveId, e, foeTypes);
   if (why) return out(null, `${label}: ${why}`);
@@ -573,6 +577,7 @@ export function rateSupport(ctx: SupportContext, moveId: string): SupportRating 
   const h0 = hits(ctx, st0);
   const prio = mv.priority ?? 0;
   const first = order(ctx.me, ctx.foe, prio, h0.theirs?.priority ?? 0, st0.mySpeedMul);
+  const slower = first !== true; // a speed tie counts against you, as in project()
   const self = mv.target === 'self' || mv.target === 'allySide' || mv.target === 'all' || mv.target === 'foeSide' || mv.target === 'allies';
   const acc = self || mv.accuracy === true ? 1 : Math.min(1, (mv.accuracy as number) / 100 * accuracyStageMul(st0.myAcc - st0.foeEva));
   // The hit branch: full average damage (a miss is the `acc` weighting below).
@@ -580,15 +585,15 @@ export function rateSupport(ctx: SupportContext, moveId: string): SupportRating 
   if (d && d.minPct >= foeHp) return null; // it simply KOs: the attack ranking covers it
 
   // Their hit this turn before you move (you are slower).
-  if (first === false && h0.theirHit >= myHp) return out(null, `${label}: they KO you before you can use it.`);
+  if (slower && h0.theirHit >= myHp) return out(null, `${label}: they KO you before you can use it.`);
 
   const { st: stB } = applyEffect(st0, e, fx, 1);
   // You move first: the effect already changes their hit this turn (Charm, burn, Reflect, sleep).
   const hB = hits(ctx, stB);
-  const theirTurn1 = first === false ? h0.theirHit : stB.foeSleep > 0 && !stB.sleepDelay ? 0 : hB.theirHit;
+  const theirTurn1 = slower ? h0.theirHit : stB.foeSleep > 0 && !stB.sleepDelay ? 0 : hB.theirHit;
   const myHp1 = myHp - theirTurn1;
   const foeHp1 = foeHp - dmg1;
-  const sleepSt = stB.foeSleep > 0 && !stB.sleepDelay && first !== false ? { ...stB, foeSleep: stB.foeSleep - 1 } : stB;
+  const sleepSt = stB.foeSleep > 0 && !stB.sleepDelay && !slower ? { ...stB, foeSleep: stB.foeSleep - 1 } : stB;
 
   // A miss (or the turn of a move that doesn't land): you took their hit for nothing.
   const missHp = myHp - h0.theirHit;
@@ -611,7 +616,7 @@ export function rateSupport(ctx: SupportContext, moveId: string): SupportRating 
     const bonus = later.bonus + hazardBonus;
     if (bonus <= 0) return out(null, `${label}: they KO you right after, before it helps.`);
     const score = Math.round(Math.max(0, Math.min(100, acc * (20 + bonus))));
-    return out(score, `${label}: you go down right after, but it ${later.text ?? hazardText}.`);
+    return out(score, `${label}: you go down right after, but it ${later.text ?? `deals ${hazardText}`}.`);
   }
 
   const B = fight(ctx, sleepSt, myHp1, foeHp1);
@@ -619,8 +624,10 @@ export function rateSupport(ctx: SupportContext, moveId: string): SupportRating 
   // Losing this 1v1 anyway, the turn costs little: no setup penalty then.
   let score = acc * B.score + (1 - acc) * F.score - (A.win ? SETUP_PENALTY : 0) + later.bonus + hazardBonus + acc * sweep.bonus;
   // Attacking KOs this turn before they move: nothing to set up for.
-  const koNow = h0.mine && h0.mine.minPct >= foeHp && h0.first !== false;
-  if (koNow) score = Math.min(score, A.score - 15);
+  const koNow = h0.mine && h0.mine.minPct >= foeHp && h0.first === true;
+  const better = !koNow && score > Math.round(A.score);
+  // No better than attacking now: keep it clearly below the attack and out of the win band.
+  if (!better) score = Math.min(score, A.score - 10, 50);
   score = Math.round(Math.max(0, Math.min(100, score)));
 
   const foe = ctx.foeName;
@@ -638,6 +645,5 @@ export function rateSupport(ctx: SupportContext, moveId: string): SupportRating 
   if (e.kind === 'status' && e.status === 'slp') parts.push(`sleep length is a guess (${SLEEP_TURNS} turns)`);
   let reason = `${label}: ${parts.join('; ')}.`;
   if (acc < 1) reason += ` ${Math.round(acc * 100)}% to hit.`;
-  const better = !koNow && score > Math.round(A.score);
-  return out(score, reason, better);
+  return out(score, reason, better, B.win);
 }
