@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { BoxMon, Dataset, Species } from '../../shared/types';
 import { activeTab, box, dataset, selectedNpc, selectedVariant, setBox } from '../store';
 import { Empty, MoveChip, Tip, Types, scoreClass } from '../components/common';
-import { suggestTeam, type Candidate } from '../../engine/teamSuggest';
+import { suggestTeam, supportLead, type Candidate } from '../../engine/teamSuggest';
 import { formatMult } from '../../engine/typeChart';
 import { NoData } from './shared';
 import { BoxSyncCard } from '../components/BoxSync';
@@ -44,6 +44,11 @@ function Suggestion({ ds }: { ds: Dataset }) {
     const per = res.team.map((c) => ({ uid: c.mon.uid, tips: suggestHeldItems(ds, c.mon, v, owned, { levelCap: v.levelCap, rules }) }));
     return assignHeldItems(per, owned);
   }, [ds, res, v, owned]);
+  // Phase 4a: support moves worth using against the NPC's lead (team members only, singles).
+  const leads = useMemo(() => {
+    if (!res || !v) return null;
+    return new Map(res.team.map((c) => [c.mon.uid, supportLead(ds, c.mon, v, { levelCap: v.levelCap, rules })]));
+  }, [ds, res, v]);
   const [copied, setCopied] = useState<string | null>(null);
   useEffect(() => setCopied(null), [res]); // the copied text belongs to the old team
   const bench = res ? res.ranked.filter((c) => c.eligible && !res.team.includes(c)) : [];
@@ -101,6 +106,14 @@ function Suggestion({ ds }: { ds: Dataset }) {
                     {c.mon.level ? `Lv ${c.mon.level} · ` : ''}Wins {wins}/{v.team.length} 1v1
                     {best ? ` · Best: ${best.name} ${Math.round(best.minPct)}–${Math.round(best.maxPct)}% on ${v.team[bi]?.name}` : ' · No damaging move'}
                   </div>
+                  {leads?.get(c.mon.uid) && (() => {
+                    const l = leads.get(c.mon.uid)!;
+                    return (
+                      <div class="full small" title={l.reason}>
+                        <span class="chip" style={{ padding: '0 7px' }}>{l.title}</span> <b>{l.moveName}</b> vs {v.team[0]?.name}: <span class="muted">{l.reason}</span>
+                      </div>
+                    );
+                  })()}
                   {held && (
                     <div class="full small">
                       {held.get(c.mon.uid) ? (
