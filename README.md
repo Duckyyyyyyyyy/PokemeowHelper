@@ -26,7 +26,10 @@ Full plan: [docs/PLAN.md](docs/PLAN.md) · Mockup: [docs/ui-mockup.html](docs/ui
 - How it reads the battle: a content script watches the battle screen and only reads it. It never clicks, types, changes the page or calls the game's API. After installing or updating MeowDex, reload the game tab once.
 - **Likely next move** (a guess): the NPC's moves with a probability each, and how often the guess was right this battle. The KO warning still uses their strongest hit.
 - **Calc check**: each hit in the battle log ("It dealt 12 damage") is compared with the calc's range for that hit, when both Pokémon's exact sets are known.
-- Not yet: Doubles, NPC switch prediction, crits and move side effects, remembering NPC moves across battles.
+- **Seen in battle**: moves NPC Pokémon actually used are remembered across battles (on this computer only, separate from the wiki data). The NPC tab marks moves the wiki doesn't list, and the Battle tab counts them as possible threats. ⚙ → Seen in battle → Forget clears them. Only battles watched with the panel open are recorded.
+- Accuracy and evasion changes (e.g. Double Team) lower the expected damage of your moves in the ranking.
+- **May switch** (a guess): shown when the NPC's Pokémon can't win the 1v1 and a teammate takes your best hit much better.
+- Not yet: Doubles, crits and move side effects, multi-turn planning.
 
 ## Install in Chrome (load unpacked)
 ```bash

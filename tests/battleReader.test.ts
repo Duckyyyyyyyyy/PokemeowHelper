@@ -152,6 +152,32 @@ describe('log events (real lines from two Brock battles, 2026-11-18)', () => {
     expect(r.events[0]).toMatchObject({ side: 'opponent', mon: 'Onix', move: 'Rock Throw', damage: 20, unusual: true });
   });
 
+  it('new log wording (seen live, Lt. Surge battle 2): trainer’s name for theirs, no prefix for yours', () => {
+    const lines = [
+      'Go, Gloom!', 'Lt. Surge sent out Voltorb!',
+      'Lt. Surge’s Voltorb used Screech!', "Gloom's Defense fell harshly!",
+      'Gloom used Giga Drain! It dealt 51 damage.',
+      'Lt. Surge used Super Potion on opponent’s Voltorb!',
+      'Lt. Surge’s Voltorb used Tackle! It dealt 10 damage.',
+      "Lt. Surge’s Voltorb's attack missed.",
+      'Gloom used Giga Drain! It dealt 3 damage.', 'Lt. Surge’s Voltorb fainted.',
+      'Lt. Surge sent out Raichu!', "Lt. Surge’s Raichu's Evasion rose!",
+    ].map((text, i) => ({ text, turn: 1 + Math.floor(i / 3) }));
+    const r = parseLog(lines, 'Lt. Surge');
+    expect(r.events.map((e) => [e.side, e.mon, e.move, e.damage ?? null])).toEqual([
+      ['opponent', 'Voltorb', 'Screech', null],
+      ['player', 'Gloom', 'Giga Drain', 51],
+      ['opponent', 'Voltorb', 'Tackle', 10],
+      ['player', 'Gloom', 'Giga Drain', 3],
+    ]);
+    expect(r.events[1].stages.attacker).toEqual({ def: -2 }); // Screech landed before Giga Drain
+    expect(r.events[2].missed).toBe(true);
+    expect(r.events[3].targetFainted).toBe(true);
+    expect(r.boosts).toEqual({ player: { def: -2 }, opponent: { evasion: 1 } });
+    // Without the trainer's name the opponent's lines are not misread as yours.
+    expect(parseLog(lines).events.every((e) => e.side === 'player' ? e.mon === 'Gloom' : true)).toBe(true);
+  });
+
   it('switch-in names', () => {
     expect(switchedIn('Go, Turtwig!')).toBe('Turtwig');
     expect(switchedIn('Brock sent out Onix!')).toBe('Onix');
@@ -179,5 +205,18 @@ describe('live markup: stat-change badge next to the name (Juan, 2026-11-18)', (
     expect(parseStatChanges('Evasion +1')).toEqual({ evasion: 1 });
     expect(parseStatChanges('Attack +2, Speed −1')).toEqual({ atk: 2, spe: -1 });
     expect(parseStatChanges('Sp. Atk -2')).toEqual({ spa: -2 });
+    // Short badge seen live (Lt. Surge, Voltorb's Screech on Gloom): "Def -2" was read as no change.
+    expect(parseStatChanges('Def -2')).toEqual({ def: -2 });
+    expect(parseStatChanges('Atk +1, SpA -1, SpD +2, Spe -1, Acc -1, Eva +1')).toEqual({ atk: 1, spa: -1, spd: 2, spe: -1, accuracy: -1, evasion: 1 });
+    expect(parseStatChanges('Something +1')).toEqual({});
+  });
+
+  it('a badge it cannot parse falls back to the stages rebuilt from the log (not "no change")', () => {
+    document.body.innerHTML = html;
+    const fromLog = readBattle(document, 1)!.boosts.player;
+    expect(Object.keys(fromLog).length).toBeGreaterThan(0);
+    const name = document.querySelector('.battle-player-stats .battle-combatant-name')!;
+    name.insertAdjacentHTML('beforeend', '<span class="battle-status battle-stat-changes" title="Mystery +1">Mystery +1</span>');
+    expect(readBattle(document, 1)!.boosts.player).toEqual(fromLog);
   });
 });

@@ -3,6 +3,7 @@ import { box, dataset, isExtension, loadDevFixture, resetDataset, runSync, setBo
 import { Tip } from '../components/common';
 import { BoxSyncCard } from '../components/BoxSync';
 import type { BoxMon } from '../../shared/types';
+import { clearObserved, observed } from '../battleStore';
 
 type Theme = 'auto' | 'light' | 'dark';
 
@@ -99,6 +100,14 @@ export function SettingsTab() {
           </label>
         </div>
         {msg && <div class="small muted" style={{ marginTop: '6px' }}>{msg}</div>}
+      </div>
+
+      <div class="card">
+        <p class="title">Seen in battle<span class="r">{Object.keys(observed.value).length} Pokémon</span></p>
+        <div class="small muted">Moves NPC Pokémon actually used in your battles, remembered across battles and shown in the NPC and Battle tabs. Stored on this computer only; a wiki sync does not touch it.</div>
+        <div class="btns" style={{ marginTop: '6px' }}>
+          <button class="btn" disabled={!Object.keys(observed.value).length} onClick={() => confirm('Forget all moves seen in battle?') && clearObserved()}>Forget</button>
+        </div>
       </div>
 
       <div class="card">
