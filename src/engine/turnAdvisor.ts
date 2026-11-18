@@ -41,7 +41,7 @@ export interface ThreatInfo {
 export interface TurnAdvice {
   npc?: Npc;
   variant?: NpcTeamVariant;
-  /** Their active Pokémon as MeowDex knows it (wiki set) and whether it was found in the NPC's team. */
+  /** Their active Pokémon as MeowHelper knows it (wiki set) and whether it was found in the NPC's team. */
   foe?: { mon: NpcMon; known: boolean };
   me?: { mon: BoxMon; known: boolean };
   actions: ActionAdvice[];

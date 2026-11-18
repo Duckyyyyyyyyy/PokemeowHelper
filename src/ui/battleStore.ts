@@ -9,7 +9,7 @@ import { box, dataset, isExtension } from './store';
 export const battle = signal<BattleSnapshot | null>(null);
 /** Calc checks for hits seen since the panel started following this battle. */
 export const damageChecks = signal<DamageCheck[]>([]);
-/** How often the NPC's actual move was MeowDex's top guess, this battle. */
+/** How often the NPC's actual move was MeowHelper's top guess, this battle. */
 export const guessScore = signal<{ hit: number; total: number }>({ hit: 0, total: 0 });
 const KEY = 'mdBattle';
 /** Moves NPC Pokémon were seen using, across battles (chrome.storage.local key "mdObserved"). */

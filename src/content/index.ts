@@ -1,7 +1,7 @@
 import { readBattle } from './battleReader';
 
 /**
- * MeowDex content script (pokemeowrpg.com). READ-ONLY by design (game rule: "Play yourself"):
+ * MeowHelper content script (pokemeowrpg.com). READ-ONLY by design (game rule: "Play yourself"):
  * it watches the page, reads the battle screen when one is open, and stores a snapshot for
  * the side panel. It never clicks, types, changes the page, or calls the game's API.
  */

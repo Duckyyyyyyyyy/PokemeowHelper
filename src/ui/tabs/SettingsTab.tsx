@@ -7,6 +7,8 @@ import { clearObserved, observed } from '../battleStore';
 
 type Theme = 'auto' | 'light' | 'dark';
 
+const APP_VERSION = isExtension ? chrome.runtime.getManifest().version : 'dev';
+
 export function applyTheme(t: Theme) {
   if (t === 'auto') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', t);
@@ -39,7 +41,7 @@ export function SettingsTab() {
     const blob = new Blob([JSON.stringify({ meowdex: 1, box: box.value }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'meowdex-box.json';
+    a.download = 'meowhelper-box.json';
     a.click();
     URL.revokeObjectURL(a.href);
   }
@@ -118,7 +120,7 @@ export function SettingsTab() {
           ))}
         </div>
       </div>
-      <div class="foot">MeowDex 0.1 · fan-made tool, not affiliated with PokeMeowRPG. Advice only – you play.</div>
+      <div class="foot">MeowHelper {APP_VERSION} · fan-made tool, not affiliated with PokeMeowRPG. Advice only – you play.</div>
     </>
   );
 }

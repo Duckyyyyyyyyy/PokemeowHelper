@@ -40,7 +40,7 @@ export async function discoverDataUrl(fetcher: typeof fetch = fetch): Promise<st
     }
     queue = next;
   }
-  throw new SyncError('Wiki data file not found – the game may have changed its layout. Please report it so MeowDex can be updated.');
+  throw new SyncError('Wiki data file not found – the game may have changed its layout. Please report it so MeowHelper can be updated.');
 }
 
 export interface SyncProgress {
