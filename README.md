@@ -23,6 +23,7 @@ You need a `MeowHelper-x.y.z.zip` file (from a friend, or from the [Releases](..
 4. Pin MeowHelper from the puzzle-piece menu, then click its icon to open the side panel.
 5. Log in to pokemeowrpg.com. In MeowHelper's ⚙ tab click **Sync data** (the game's wiki data, about 8 MB, once), then **Sync box from game** (your Pokémon).
 6. Reload any open game tab once, so the Battle tab can see battles.
+7. Open the game's **Bag** page once, so MeowHelper knows your TMs and items. Open it again after buying or using items.
 
 **Updating:** unzip the new version over the same folder, then click the ↻ reload button on MeowHelper in `chrome://extensions` and reload the game tab. Your synced data and settings are kept.
 
@@ -42,7 +43,9 @@ Don't send a `.crx` file: Chrome on Windows blocks `.crx` files that don't come 
 
 **NPC tab** – 460 NPCs (Gym, Elite Four, Champion, Tower, Frontier, Mega Chamber, Rival, Rocket, World Boss) with search and filters. Each shows its team, moves, ability, item, nature, EVs and Rematch/Silver/Gold versions, plus the best attacking/defensive types, priority and setup moves, the medicine it carries and challenge requirements. Moves an NPC was seen using in battle that the wiki doesn't list are marked.
 
-**Team tab** – picks a team from your box with real damage numbers (`@smogon/calc`, Gen 9, using the game's own stats and move data), scores every matchup, suggests a lead and leaves out Pokémon over the level cap. Tap a matrix cell for damage ranges. Lock 🔓 or exclude ✕ Pokémon, get move advice (best 4 moves from what it knows, level-up moves and TMs), and **Copy team** as Showdown text. Challenge rules are applied (no OHKO, Destiny Bond, Perish Song, Endeavor or Pain Split; NPC attacks hit through Wonder Guard).
+**Team tab** – picks a team from your box with real damage numbers (`@smogon/calc`, Gen 9, using the game's own stats and move data), scores every matchup, suggests a lead and leaves out Pokémon over the level cap. Tap a matrix cell for damage ranges. Lock 🔓 or exclude ✕ Pokémon, and **Copy team** as Showdown text.
+- **Move advice** in steps: *Ready now* (moves it knows + level-up moves at its level), *By the level cap* (level-up moves it learns before the cap), *With TMs in your bag*.
+- **Held items** 🎒: one item per Pokémon from your bag. Gems and type boosters are scored with the calc (a Gem only counts for the first hit); other items use rules of thumb (status-curing berries vs the NPC's status moves, Wide Lens for inaccurate moves, Light Clay with screens…). Challenge rules are applied (no OHKO, Destiny Bond, Perish Song, Endeavor or Pain Split; NPC attacks hit through Wonder Guard).
 
 **Battle tab** (singles) – follows the battle live: both Pokémon with exact HP, status and stat changes.
 - Ranks each of your moves and switches with damage %, KO chance and a short reason; accuracy/evasion changes lower a move's expected damage.
@@ -51,8 +54,10 @@ Don't send a `.crx` file: Chrome on Windows blocks `.crx` files that don't come 
 - **Calc check**: every "It dealt N damage" in the log is compared with the calc's range.
 - **Seen in battle**: moves NPC Pokémon actually used are remembered across battles.
 - **May switch** (a guess): when the NPC's Pokémon can't win and a teammate takes your hit much better.
+- **Items** 🎒 (from your bag): a Potion when HP is under 75% (the smallest one that fills most of the gap), a cure when your Pokémon has a status, and Revive/Max Revive for the fainted team member that would do best. Using an item takes your turn, so each is scored after the NPC's free hit. HP amounts are the main-game ones.
+- **Destiny Bond**: if the NPC moves first and your move would KO, it warns you and suggests baiting it for a turn (a move that doesn't KO, or a switch).
 
-**Settings** – sync wiki data and box, export/import your box as JSON, forget seen moves, light/dark theme.
+**Settings** – sync wiki data and box, see when your bag was last read, export/import your box as JSON, forget seen moves or bag, light/dark theme.
 
 Not yet: Double battles, scoring support moves (stat boosts, debuffs, screens) for the next Pokémon, crits and move side effects, multi-turn planning. See [docs/PLAN.md](docs/PLAN.md).
 
@@ -61,7 +66,7 @@ Not yet: Double battles, scoring support moves (stat boosts, debuffs, screens) f
 Everything stays in your own Chrome:
 - **Wiki data**: read from the game's `/wiki/` page with your login and parsed as plain data (no game code runs). Stored in IndexedDB; downloaded again only after a game update.
 - **Your box**: read with the same read-only request the game's team picker uses, 30 Pokémon per page about 1 s apart, stopping if the game asks it to wait.
-- **Battles**: a content script reads the battle screen. It never clicks, types, changes the page or calls the game's API.
+- **Battles and bag**: a content script reads the battle screen and the Bag page as they are shown. It never clicks, types, changes the page or calls the game's API. From the bag it keeps item ids and counts only.
 
 Nothing is sent anywhere else. There are no analytics.
 
@@ -94,9 +99,9 @@ public/           manifest.json, icons (copied into dist/)
 sidepanel.html    side panel entry page
 src/
   background/     service worker (opens the side panel)
-  content/        read-only content script: battleReader (selectors + log parser)
+  content/        read-only content script: battleReader (selectors + log parser), bagReader (Bag page)
   data/           wiki sync, box sync, data parsing, IndexedDB
-  engine/         damage calc, team picker, turn advisor, NPC move guess, seen-in-battle store
+  engine/         damage calc, team picker, move and held-item advice, turn advisor, NPC move guess, seen-in-battle store
   shared/         types shared by the panel and the content script
   ui/             Preact side panel: App (tab list), tabs/, components/, theme.css
 tests/            unit tests and fixtures (a small trimmed wiki sample, a rebuilt battle page)

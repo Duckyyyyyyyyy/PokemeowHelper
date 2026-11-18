@@ -1,4 +1,5 @@
 import { useMemo } from 'preact/hooks';
+import { ownedItems } from '../bagStore';
 import type { BattleMon, BattleSnapshot, Boosts } from '../../shared/battle';
 import type { Dataset } from '../../shared/types';
 import { Empty, Tip, Types, scoreClass } from '../components/common';
@@ -31,7 +32,7 @@ export function BattleTab() {
 }
 
 function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
-  const advice = useMemo(() => (snap.status === 'active' ? adviseTurn(ds, snap, box.value, { observed: observed.value }) : null), [ds, snap, box.value, observed.value]);
+  const advice = useMemo(() => (snap.status === 'active' ? adviseTurn(ds, snap, box.value, { observed: observed.value, items: ownedItems.value }) : null), [ds, snap, box.value, observed.value, ownedItems.value]);
   const ended = snap.status === 'won' || snap.status === 'lost';
   const ranked = advice?.actions.filter((a) => a.score !== null) ?? [];
   const unscored = advice?.actions.filter((a) => a.score === null) ?? [];
@@ -131,7 +132,7 @@ function Action({ a, top }: { a: ActionAdvice; top: boolean }) {
     <div class={`act${top ? ' top' : ''}`}>
       <span class={`score ${scoreClass(a.score ?? 0)}`}>{a.score}</span>
       <div class="grow">
-        <b>{a.kind === 'switch' ? '⇄ ' : ''}{a.label}</b>
+        <b>{a.kind === 'switch' ? '⇄ ' : a.kind === 'item' ? '🎒 ' : ''}{a.label}</b>
         {a.minPct !== undefined && <span class="muted"> · {Math.round(a.minPct)}–{Math.round(a.maxPct!)}%</span>}
         {a.ko === 'sure' && <span class="chip on" style={{ padding: '0 7px', marginLeft: '4px' }}>KO</span>}
         <div class="small muted">{a.reason}</div>

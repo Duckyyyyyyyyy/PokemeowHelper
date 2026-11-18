@@ -85,6 +85,17 @@ describe('moveset suggestion', () => {
     for (const m of s.moves) if (m.source === 'level') expect(m.level!).toBeLessThanOrEqual(10);
     expect(s.moves.every((m) => m.source !== 'tm')).toBe(true);
   });
+  it('can also plan level-up moves it learns before the level cap (friend: "Lv 25 with a Lv 60 cap")', () => {
+    const brock = npc('challenge:brock').variants[0];
+    const now = suggestMoveset(ds, mon('Bulbasaur', 10), brock, { allowTM: false });
+    const atCap = suggestMoveset(ds, mon('Bulbasaur', 10), brock, { allowTM: false, untilLevel: 35 });
+    const later = atCap.moves.filter((m) => m.later);
+    expect(later.length).toBeGreaterThan(0); // e.g. Seed Bomb (Lv 18), Power Whip (Lv 33)
+    for (const m of later) expect(m.level!).toBeGreaterThan(10);
+    for (const m of atCap.moves) if (m.source === 'level') expect(m.level!).toBeLessThanOrEqual(35);
+    expect(atCap.coverage).toBeGreaterThan(now.coverage);
+    expect(now.moves.some((m) => m.later)).toBe(false);
+  });
 });
 
 describe('self-KO moves (live bug: "Self-Destruct … wins the 1v1")', () => {

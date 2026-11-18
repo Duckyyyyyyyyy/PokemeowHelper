@@ -18,7 +18,7 @@ import { npcKey, observedMoves, type ObservedStore } from './observed';
  */
 
 export interface ActionAdvice {
-  kind: 'move' | 'switch';
+  kind: 'move' | 'switch' | 'item';
   label: string;
   /** null = not scored (status move, unknown move). */
   score: number | null;
@@ -58,7 +58,25 @@ export interface TurnAdvice {
 export interface AdviseOptions {
   /** Moves NPC Pokémon used in earlier battles (see observed.ts). */
   observed?: ObservedStore;
+  /** Items in your bag (id → count), from the game's Bag page. Enables item advice. */
+  items?: ReadonlyMap<string, number>;
 }
+
+/**
+ * Battle items. Seen live 2026-11-18 (Gym battle): the battle screen has an Items tab, "Choose an
+ * item, then its target. Uses one turn." HP amounts are the main-game ones (Gen 7+), not yet
+ * checked in this game.
+ */
+const HEAL_ITEMS: [id: string, name: string, hp: number][] = [
+  ['potion', 'Potion', 20], ['superpotion', 'Super Potion', 60], ['hyperpotion', 'Hyper Potion', 120],
+  ['maxpotion', 'Max Potion', Infinity], ['fullrestore', 'Full Restore', Infinity],
+];
+const CURE_ITEMS: [id: string, name: string, cures: string[]][] = [
+  ['fullheal', 'Full Heal', ['par', 'brn', 'psn', 'tox', 'slp', 'frz']], ['fullrestore', 'Full Restore', ['par', 'brn', 'psn', 'tox', 'slp', 'frz']],
+  ['paralyzeheal', 'Paralyze Heal', ['par']], ['burnheal', 'Burn Heal', ['brn']], ['antidote', 'Antidote', ['psn', 'tox']],
+  ['awakening', 'Awakening', ['slp']], ['iceheal', 'Ice Heal', ['frz']],
+];
+const REVIVE_ITEMS: [id: string, name: string, frac: number][] = [['revive', 'Revive', 0.5], ['maxrevive', 'Max Revive', 1]];
 
 /** Gen 5+ accuracy/evasion stage multiplier for a net stage n (attacker accuracy − target evasion). */
 export function accuracyStageMul(n: number): number {
@@ -232,13 +250,26 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
   const foeMoves = [...foe.mon.moves, ...extra].filter((id) => !rules.bannedMoves.has(id));
   // Your accuracy vs their evasion (e.g. Kingdra at Evasion +1): lowers expected damage for ranking only.
   const accMul = accuracyStageMul((snap.boosts.player.accuracy ?? 0) - (snap.boosts.opponent.evasion ?? 0));
+  const myHp = curPct(myCalc);
+  const foeHp = curPct(foeCalc);
+  const myMoveIds = repeatable(snap.moves.filter((m) => !m.disabled).map((m) => idx.moves.get(lc(m.name))?.id).filter((x): x is string => !!x && !rules.bannedMoves.has(x)));
+  const myBestHit = bestMove(ds, myCalc, foeCalc, myMoveIds, field);
+
+  // Destiny Bond (disabled in League challenges, so already filtered out there). Mainline rules,
+  // not yet checked in this game: it lasts until the user's next move and fails if used twice in a row.
+  // A friend saw an NPC use it exactly when their next hit would KO it.
+  const hasDB = foeMoves.includes('destinybond');
+  const lastFoe = [...(snap.events ?? [])].reverse().find((e) => e.side === 'opponent');
+  const dbJustUsed = !!lastFoe && lc(lastFoe.mon) === lc(foe.mon.name) && idx.moves.get(lc(lastFoe.move))?.id === 'destinybond';
+  if (hasDB || dbJustUsed) notes.push(`${foe.mon.name} knows Destiny Bond: if it faints while Destiny Bond is active, your Pokémon faints too. It wears off when it moves again and (in the main games) fails if used twice in a row.`);
+
   out.prediction = predictNpcMove(ds, foeCalc, defenderVsNpc(myCalc, rules), foeMoves, {
     field, myStatus: snap.player.status, myBoosts: snap.boosts.player, foeBoosts: snap.boosts.opponent, usedThisBattle,
     // It has not moved yet this battle (approximation: a Pokémon switched back in counts as having moved).
     firstMove: usedThisBattle.length === 0,
+    facingKo: !!myBestHit && myBestHit.maxPct >= foeHp,
+    lastMove: lastFoe && lc(lastFoe.mon) === lc(foe.mon.name) ? idx.moves.get(lc(lastFoe.move))?.id : undefined,
   });
-  const myHp = curPct(myCalc);
-  const foeHp = curPct(foeCalc);
 
   const threat = bestMove(ds, foeCalc, defenderVsNpc(myCalc, rules), foeMoves, field);
   const theirHit = avg(threat);
@@ -312,8 +343,27 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
         reason = `${name} faints after using it (${pctTxt(d)} to them). Last resort only.`;
       }
     }
+    if (ko && (hasDB || dbJustUsed)) {
+      const name = snap.player.name;
+      // Destiny Bond has priority 0: compare against it, not against their best attack.
+      const vsDb = order(myCalc, foeCalc, d.priority, 0);
+      if (dbJustUsed && vsDb !== false) {
+        score = Math.min(score, 30);
+        reason += ` Destiny Bond is active: ${name} faints too if this KOs. Use a move that doesn't KO, or switch, this turn.`;
+      } else if (dbJustUsed) {
+        reason += ' Its Destiny Bond ends when it moves, and a second one in a row fails: should be safe to KO.';
+      } else if (vsDb !== true) {
+        score = Math.min(score, 45);
+        reason += ` Risk: it moves first and knows Destiny Bond, so it may use it now and take ${name} down too. Bait it: use a move that doesn't KO, or switch, this turn.`;
+      } else {
+        reason += ' You hit before it can use Destiny Bond.';
+      }
+    }
     out.actions.push({ kind: 'move', label: m.name, moveId: g.id, minPct: d.minPct, maxPct: d.maxPct, ko, score, reason });
   }
+
+  // Items from your bag
+  if (opts.items?.size) out.actions.push(...itemAdvice(ds, idx, box, snap, me.mon, myCalc, foeCalc, myMoveIds, foeMoves, rules, field, opts.items));
 
   // Switches
   for (const r of snap.bench) {
@@ -322,7 +372,6 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
   }
 
   // Might the NPC switch out? (Display only.)
-  const myMoveIds = repeatable(snap.moves.filter((m) => !m.disabled).map((m) => idx.moves.get(lc(m.name))?.id).filter((x): x is string => !!x && !rules.bannedMoves.has(x)));
   const npcBench = snap.opponentTeam
     .filter((r) => !r.active && !r.fainted && (r.hp ?? 1) > 0 && lc(r.name) !== lc(snap.opponent!.name))
     .map((r) => {
@@ -356,4 +405,77 @@ function switchAdvice(ds: Dataset, idx: Idx, box: BoxMon[], r: RosterMon, foeCal
     kind: 'switch', label, score,
     reason: `Takes ~${Math.round(avg(incoming))}% switching in, then ${mineBest.name} ${pctTxt(mineBest)}: ${proj.win ? 'wins' : 'loses'} the 1v1.${mine.known ? '' : ' (Not in your box: average IVs.)'}`,
   };
+}
+
+/** Healing, curing and reviving: each "uses one turn", so the NPC gets a free hit first. */
+function itemAdvice(
+  ds: Dataset, idx: Idx, box: BoxMon[], snap: BattleSnapshot, myMon: BoxMon, myCalc: CalcPokemon, foeCalc: CalcPokemon,
+  myMoveIds: string[], foeMoves: string[], rules: BattleRules, field: ReturnType<typeof makeField>, items: ReadonlyMap<string, number>,
+): ActionAdvice[] {
+  const out: ActionAdvice[] = [];
+  const has = (id: string) => (items.get(id) ?? 0) > 0;
+  const left = (id: string) => `${items.get(id)} in bag`;
+  const foeHp = curPct(foeCalc);
+  /** Score of "use an item on your active Pokémon, take their hit, then fight" from the given state. */
+  const afterItem = (me: CalcPokemon, hpPct: number) => {
+    const incoming = bestMove(ds, foeCalc, defenderVsNpc(me, rules), foeMoves, field);
+    const hpAfter = Math.min(100, hpPct) - avg(incoming);
+    const mine = bestMove(ds, me, foeCalc, myMoveIds, field);
+    if (hpAfter <= 0) return { score: 0, text: `but ${incoming?.name ?? 'their hit'} still KOs you` };
+    if (!mine) return { score: 5, text: 'no damaging move after' };
+    const p = project(mine.expectedPct, avg(incoming), hpAfter, foeHp, order(me, foeCalc, mine.priority, incoming?.priority ?? 0));
+    return { score: Math.round(Math.max(0, Math.min(100, p.score - 8))), text: `takes ~${Math.round(avg(incoming))}%, then ${mine.name}: ${p.win ? 'wins' : 'loses'} the 1v1` };
+  };
+
+  // Heal: the smallest potion that fills most of the missing HP, only when HP is below 75%.
+  const maxHp = myCalc.maxHP();
+  const missing = maxHp - myCalc.curHP();
+  if (curPct(myCalc) < 75 && missing > 0) {
+    const owned = HEAL_ITEMS.filter(([id]) => has(id));
+    const pick = owned.find(([, , hp]) => hp >= missing * 0.8) ?? owned[owned.length - 1];
+    if (pick) {
+      const [id, name, hp] = pick;
+      const healed = Math.min(hp, missing);
+      const r = afterItem(myCalc, (100 * (myCalc.curHP() + healed)) / maxHp);
+      out.push({ kind: 'item', label: `${name} on ${snap.player!.name}`, score: r.score, reason: `+${healed} HP (${left(id)}), ${r.text}.` });
+    }
+  }
+
+  // Cure a status.
+  const st = snap.player!.status;
+  if (st) {
+    const cure = CURE_ITEMS.find(([id, , cures]) => has(id) && cures.includes(st) && id !== 'fullrestore') ?? CURE_ITEMS.find(([id, , cures]) => has(id) && cures.includes(st));
+    if (cure) {
+      const [id, name] = cure;
+      const cured = applyState(boxToCalc(ds, myMon), { ...snap.player!, status: undefined }, snap.boosts.player);
+      const r = afterItem(cured, curPct(cured));
+      const what = st === 'par' ? 'paralysis (half Speed, may not move)' : st === 'brn' ? 'the burn (half Attack, chip damage)' : st === 'slp' ? 'sleep' : st === 'frz' ? 'the freeze' : 'the poison';
+      out.push({ kind: 'item', label: `${name} on ${snap.player!.name}`, score: r.score, reason: `Cures ${what} (${left(id)}), ${r.text}.` });
+    }
+  }
+
+  // Revive the fainted team member that would do best here (you still need a turn to switch it in).
+  const rev = REVIVE_ITEMS.filter(([id]) => has(id));
+  if (rev.length) {
+    let best: ActionAdvice | null = null;
+    for (const r of snap.bench) {
+      if (!r.fainted && (r.hp ?? 1) > 0) continue;
+      const mine = mySet(idx, box, r, (r.moves ?? []).map((m) => m.name));
+      if (!mine) continue;
+      const [id, name, frac] = rev[0];
+      const p = boxToCalc(ds, mine.mon);
+      p.originalCurHP = Math.max(1, Math.floor(p.maxHP() * frac));
+      const mineBest = bestMove(ds, p, foeCalc, repeatable(movesForBox(ds, mine.mon).filter((m) => !rules.bannedMoves.has(m))), field);
+      const incoming = bestMove(ds, foeCalc, defenderVsNpc(p, rules), foeMoves, field);
+      if (!mineBest) continue;
+      const proj = project(mineBest.expectedPct, avg(incoming), curPct(p) - avg(incoming), foeHp, order(p, foeCalc, mineBest.priority, incoming?.priority ?? 0));
+      // Two turns before it acts (revive, then switch in): a clear penalty.
+      const score = Math.round(Math.max(0, Math.min(100, proj.score - 25)));
+      if (!best || score > (best.score ?? 0)) {
+        best = { kind: 'item', label: `${name} on ${r.name}`, score, reason: `Brings ${r.name} back at ${frac === 1 ? 'full' : 'half'} HP (${left(id)}). Switched in later, it ${proj.win ? 'wins' : 'loses'} the 1v1 with ${mineBest.name}.` };
+      }
+    }
+    if (best) out.push(best);
+  }
+  return out;
 }

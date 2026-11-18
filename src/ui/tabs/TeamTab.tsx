@@ -9,6 +9,8 @@ import { BoxSyncCard } from '../components/BoxSync';
 import { DuelDetail, MovesetPanel, duelSummary } from '../components/DamageViews';
 import { rulesFor } from '../../engine/rules';
 import { excludedUids, lockedUids, resetTeamPrefs, teamToText, toggleExclude, toggleLock } from '../teamPrefs';
+import { assignHeldItems, suggestHeldItems } from '../../engine/heldItems';
+import { bag, ownedItems } from '../bagStore';
 
 export function TeamTab() {
   const ds = dataset.value;
@@ -34,6 +36,13 @@ function Suggestion({ ds }: { ds: Dataset }) {
     () => (v ? suggestTeam(ds, box.value, v, { levelCap: v.levelCap, rules, locked, excluded }) : null),
     [ds, v, box.value, npc, locked, excluded],
   );
+  const owned = ownedItems.value;
+  // One held item per team member from your bag (needs the Bag page read once).
+  const held = useMemo(() => {
+    if (!res || !v || !bag.value) return null;
+    const per = res.team.map((c) => ({ uid: c.mon.uid, tips: suggestHeldItems(ds, c.mon, v, owned, { levelCap: v.levelCap, rules }) }));
+    return assignHeldItems(per, owned);
+  }, [ds, res, v, owned]);
   const [copied, setCopied] = useState<string | null>(null);
   useEffect(() => setCopied(null), [res]); // the copied text belongs to the old team
   const bench = res ? res.ranked.filter((c) => c.eligible && !res.team.includes(c)) : [];
@@ -91,6 +100,13 @@ function Suggestion({ ds }: { ds: Dataset }) {
                     {c.mon.level ? `Lv ${c.mon.level} · ` : ''}Wins {wins}/{v.team.length} 1v1
                     {best ? ` · Best: ${best.name} ${Math.round(best.minPct)}–${Math.round(best.maxPct)}% on ${v.team[bi]?.name}` : ' · No damaging move'}
                   </div>
+                  {held && (
+                    <div class="full small">
+                      {held.get(c.mon.uid) ? (
+                        <>🎒 Hold <b>{held.get(c.mon.uid)!.name}</b>: <span class="muted">{held.get(c.mon.uid)!.why}{c.mon.item && c.mon.item !== held.get(c.mon.uid)!.name ? ` (now holds ${c.mon.item})` : ''}</span></>
+                      ) : <span class="muted">🎒 No item in your bag helps much here{c.mon.item ? ` (keep ${c.mon.item})` : ''}.</span>}
+                    </div>
+                  )}
                   <div class="full">
                     <button class="link small" onClick={() => setMovesFor(movesFor === c.mon.uid ? null : c.mon.uid)} aria-expanded={movesFor === c.mon.uid}>
                       {movesFor === c.mon.uid ? 'Hide move advice' : 'Best moves for this fight →'}
@@ -113,6 +129,7 @@ function Suggestion({ ds }: { ds: Dataset }) {
               <textarea class="input" style={{ width: '100%', height: '120px', marginTop: '6px' }} readOnly value={copied} aria-label="Team text to copy" />
             ) : <div class="small muted" role="status" style={{ marginTop: '4px' }}>{copied}</div>)}
             <div class="small muted" style={{ marginTop: '4px' }}>🔓 lock a Pokémon to keep it on the team · ✕ never suggest it · tap a bench name to lock it in.</div>
+            <div class="small muted">{held ? '🎒 Held items: from your bag, one each. Damage items use the calc; the rest are rules of thumb.' : '🎒 Open your Bag page in the game once to get held item advice from what you own.'}</div>
           </div>
           {lockedOut.length > 0 && (
             <Tip kind="warn">Locked but not on the team: {lockedOut.map((c) => `${name(c)} (${c.reason ?? 'team is full'})`).join(', ')}</Tip>
