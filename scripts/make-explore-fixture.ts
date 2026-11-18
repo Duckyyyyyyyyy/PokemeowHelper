@@ -27,7 +27,7 @@ const species = raw.species
 const items = raw.items
   .filter((i: any) => i.category === 'balls' || (i.wildSources ?? []).some((w: any) => used.has(w.species)))
   .map((i: any) => ({
-    id: i.id, name: i.name, category: i.category, description: i.description, itemEffect: i.itemEffect, heldEffect: i.heldEffect, notes: i.notes,
+    id: i.id, name: i.name, category: i.category, description: i.description, sprite: i.sprite, itemEffect: i.itemEffect, heldEffect: i.heldEffect, notes: i.notes,
     universalWildSource: i.universalWildSource, wildSources: (i.wildSources ?? []).filter((w: any) => used.has(w.species)),
   }));
 

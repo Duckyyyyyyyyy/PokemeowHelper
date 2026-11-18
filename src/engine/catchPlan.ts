@@ -205,3 +205,37 @@ function dedupe<T extends { uid: string; moveId: string }>(list: T[]): T[] {
     return true;
   });
 }
+
+export interface AfterPlan {
+  /** HP left after the weaken step (0–1). */
+  hpFrac: number;
+  status?: string;
+  /** "weaken + sleep", "False Swipe", … ; empty when the plan changes nothing. */
+  label: string;
+}
+
+/**
+ * Where the plan leaves the wild Pokémon, for the "43% now → 100% after weaken + sleep" line:
+ * False Swipe/Hold Back → 1 HP (~1%); otherwise one hit of the best sized move (its MIN roll,
+ * so the line never promises more than the hit surely does); then the top status move.
+ */
+export function afterPlan(plan: CatchPlan, now: { hpPct: number; status?: string }): AfterPlan {
+  const parts: string[] = [];
+  let hp = now.hpPct / 100;
+  const swipe = plan.weaken.find((w) => w.safe);
+  const hit = plan.weaken.find((w) => !w.safe && !w.guessed) ?? plan.weaken.find((w) => !w.safe);
+  if (swipe) {
+    hp = 0.01;
+    parts.push(swipe.moveName);
+  } else if (hit && hit.minPct > 0) {
+    hp = Math.max(0.01, (now.hpPct - hit.minPct) / 100);
+    parts.push('weaken');
+  }
+  let status = now.status || undefined;
+  const st = plan.status[0];
+  if (!status && st) {
+    status = st.status;
+    parts.push(STATUS_LABEL[st.status].toLowerCase());
+  }
+  return { hpFrac: hp, status, label: parts.join(' + ') };
+}

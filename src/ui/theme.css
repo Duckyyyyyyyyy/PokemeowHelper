@@ -163,3 +163,29 @@ button.cell.sel { box-shadow: inset 0 0 0 2px var(--text); }
 details.card > summary { list-style: none; }
 details.card > summary::-webkit-details-marker { display: none; }
 .ok-t { color: var(--green); } .bad-t { color: var(--red); }
+
+/* Explore: sticky wild-encounter header (ball pick next to the Pokémon) */
+.enc-head { position: sticky; z-index: 4; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px; }
+.enc-id { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.enc-name { font-size: 16px; font-weight: 900; }
+.enc-chip { margin-left: 6px; padding: 1px 8px; font-size: 11px; }
+.enc-verdict { font-weight: 900; font-size: 12.5px; letter-spacing: .5px; padding: 3px 10px; border-radius: 999px; flex: none; }
+.enc-verdict.catch { background: var(--green); color: #fff; }
+.enc-verdict.fight { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+.enc-hp { gap: 6px; }
+.enc-hp .hpbar { margin: 0; min-width: 40px; }
+.enc-status { font-size: 10.5px; font-weight: 900; padding: 1px 6px; border-radius: 6px; color: #fff; background: var(--muted); }
+.enc-status.st-slp { background: #7a6fb0; } .enc-status.st-par { background: #c9a000; } .enc-status.st-frz { background: #3aa0d0; }
+.enc-status.st-brn { background: var(--red); } .enc-status.st-psn, .enc-status.st-tox { background: #8a4fb0; }
+.enc-ball { gap: 10px; background: var(--surface-2); border-radius: 10px; padding: 6px 10px; }
+.enc-pct { font-size: 22px; font-weight: 900; color: var(--blue); flex: none; }
+.enc-alt { gap: 6px; padding: 0 2px; }
+.enc-outlook { padding: 0 2px; }
+.enc-foot { gap: 8px; }
+.enc-reason { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bico { flex: none; image-rendering: pixelated; border-width: 1.5px; }
+.enc-step { display: flex; align-items: center; gap: 6px; margin: 4px 0 2px; }
+.enc-n { width: 18px; height: 18px; border-radius: 50%; background: var(--blue); color: #fff; font-size: 11px; font-weight: 900; display: grid; place-items: center; flex: none; }
+.enc-opt { padding: 2px 0 2px 24px; display: block; }
+.enc-more summary { cursor: pointer; }
+.enc-more p { margin: 6px 0 0; }
