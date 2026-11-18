@@ -3,7 +3,7 @@ import type { BoxMon, Dataset } from '../shared/types';
 import { clearDataset, loadBox, loadDataset, saveBox, saveDataset } from '../data/db';
 import { syncDataset } from '../data/sync';
 
-export type TabId = 'npc' | 'team' | 'battle' | 'settings';
+export type TabId = 'npc' | 'team' | 'battle' | 'explore' | 'settings';
 
 export const dataset = signal<Dataset | null>(null);
 export const box = signal<BoxMon[]>([]);
@@ -50,6 +50,7 @@ export async function loadDevFixture() {
   if (import.meta.env.DEV) {
     const mod = await import('../../tests/fixtures/wiki-mini.json');
     const ds = { ...(mod.default as unknown as Dataset), version: 'dev-fixture', syncedAt: Date.now() };
+    await addDevExplore(ds);
     await saveDataset(ds);
     dataset.value = ds;
   }
@@ -70,4 +71,15 @@ export function openNpc(id: string) {
   selectedNpcId.value = id;
   selectedVariant.value = 0;
   activeTab.value = 'npc';
+}
+
+/** Dev harness only: adds the explore-map subset (tests/fixtures/wiki-explore-raw.json). */
+async function addDevExplore(ds: Dataset) {
+  const [{ default: raw }, { fromWild, itemExtras, wildSpeciesFields }] = await Promise.all([
+    import('../../tests/fixtures/wiki-explore-raw.json') as Promise<{ default: any }>,
+    import('../data/normalize'),
+  ]);
+  for (const s of raw.species) if (ds.species[s.id]) Object.assign(ds.species[s.id], wildSpeciesFields(s));
+  for (const i of raw.items) ds.items[i.id] = { id: i.id, name: i.name, effect: i.heldEffect ?? i.itemEffect ?? i.description ?? '', ...itemExtras(i) };
+  ds.wild = fromWild(raw);
 }

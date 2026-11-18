@@ -349,6 +349,12 @@ Wiki có format `doubles` (vd. Tate & Liza, một số Gym/E4). Hiện tab Battl
 5. **Tab Team**: chọn cặp lead và đánh giá theo cặp (không chỉ 1v1).
 - Triples: để sau.
 
+#### 4c — Tab Explore: map, bắt Pokémon, chọn bóng ✅ (code + test 2026-11-18; chưa chạy thử trong Chrome thật)
+- **Dữ liệu (wiki data, SCHEMA_VERSION 4 → cần Sync lại)**: `maps` (23 map, encounter theo cách gặp walking/surf/rod, cấp, độ hiếm, tỉ lệ ngày/đêm theo từng khu nhỏ), `catchRate`/`rarity`/`availability`/`spawnRequirement` của loài, item `balls` (mô tả hệ số bằng chữ), `wildSources` (item hoang dã cầm, % theo map), `evolutionMethods` (Moon Stone). Dòng encounter chồng lên nhau theo section → gộp theo loài + cách gặp, lấy tỉ lệ **cao nhất** (không cộng).
+- **Luật bắt (trang wiki "Catching Wild Pokémon")**: ngủ/đóng băng ×2.5, tê/bỏng/độc ×1.5, thưởng cấp < 13 ((36 − 2·Lv)/10), critical capture theo số loài trong Pokédex (Catching Charm ×2), luật bỏ chạy sau lần ném hỏng. Phần HP và công thức lắc theo game gốc (Gen 6+) → UI ghi là **ước tính**.
+- **Engine**: `explore.ts` (lọc/tìm map, "tìm X ở đâu", loài đáng bắt vs NPC đang chọn theo hệ của dạng bắt được, FIGHT/CATCH), `catching.ts` (tỉ lệ bắt, bảng luật từng bóng viết tay theo mô tả wiki, xếp hạng bóng, ưu tiên bóng trong túi, bóng rẻ thắng khi gần bằng, giữ Master Ball), `catchPlan.ts` (False Swipe/Hold Back, đòn yếu đo bằng damage calc vs bản yếu nhất IV 0 để không KO, chiêu trạng thái ngủ > tê > bỏng/độc, miễn nhiễm theo hệ/ability).
+- **Thiếu dữ liệu**: không có cân nặng (Heavy Ball không tính được); Pokédex thật không đọc được → dùng box thay (Repeat Ball, critical capture); IV của Pokémon hoang dã không hiện → người dùng tự đánh dấu; tự nhận trận hoang dã từ battle reader **chưa xác minh** (chỉ gợi ý "Use it", luôn chọn tay được).
+
 ---
 
 ## 6. Rủi ro & cách giảm thiểu
