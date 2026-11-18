@@ -1,5 +1,5 @@
 import type {
-  Ability, Dataset, Item, Move, Npc, NpcMon, NpcTeamVariant, Species, StatTable, TypeInfo,
+  Ability, Dataset, ExploreMap, Item, Move, Npc, NpcMon, NpcTeamVariant, Species, StatTable, TypeInfo, WildData, WildEncounter,
 } from '../shared/types';
 
 /* Raw shapes from the game's wiki data (only the fields we read). */
@@ -181,6 +181,7 @@ export function normalizeDataset(raw: Raw, version: string, syncedAt = Date.now(
       levelMoves: (s.naturalMoves ?? []).map((m: Raw) => [m.id, m.level ?? 1] as [string, number]),
       machineMoves: s.machineMoves ?? [],
       eggMoves: s.eggMoves ?? [],
+      ...wildSpeciesFields(s),
     };
   }
 
@@ -204,7 +205,7 @@ export function normalizeDataset(raw: Raw, version: string, syncedAt = Date.now(
   for (const a of raw.abilities ?? []) abilities[a.id] = { id: a.id, name: a.name, summary: a.summary ?? a.description ?? '' };
 
   const items: Record<string, Item> = {};
-  for (const i of raw.items ?? []) items[i.id] = { id: i.id, name: i.name, effect: i.heldEffect ?? i.itemEffect ?? i.description ?? '' };
+  for (const i of raw.items ?? []) items[i.id] = { id: i.id, name: i.name, effect: i.heldEffect ?? i.itemEffect ?? i.description ?? '', ...itemExtras(i) };
 
   const npcs: Npc[] = [
     ...fromChallenges(raw.challenges ?? []),
@@ -216,5 +217,89 @@ export function normalizeDataset(raw: Raw, version: string, syncedAt = Date.now(
     ...fromWorldBosses(raw.worldBosses ?? []),
   ];
 
-  return { version, syncedAt, types, species, moves, abilities, items, npcs };
+  return { version, syncedAt, types, species, moves, abilities, items, npcs, wild: fromWild(raw) };
+}
+
+/* ---------- explore maps and wild data (schema 4) ---------- */
+
+export function wildSpeciesFields(s: Raw): Partial<Species> {
+  const out: Partial<Species> = {};
+  if (typeof s.catchRate === 'number') out.catchRate = s.catchRate;
+  if (s.rarity !== undefined) out.rarity = s.rarity;
+  if (typeof s.availability === 'string') out.availability = s.availability;
+  if (s.spawnRequirement) out.spawnRequirement = String(s.spawnRequirement);
+  return out;
+}
+
+export function itemExtras(i: Raw): Partial<Item> {
+  const out: Partial<Item> = {};
+  if (i.category) out.category = i.category;
+  if (i.description) out.description = i.description;
+  if (Array.isArray(i.wildSources) && i.wildSources.length) {
+    out.wildSources = i.wildSources.map((w: Raw) => ({ species: w.species, chance: w.chance, mapIds: w.mapIds ?? [] }));
+  }
+  if (i.universalWildSource) out.wildRule = String(i.universalWildSource);
+  if (Array.isArray(i.notes) && i.notes.length) out.notes = i.notes;
+  return out;
+}
+
+/**
+ * Wiki encounter rows are per labelled sub-area and overlap by section, so their
+ * odds are never summed: rows of one species + method are merged keeping the BEST
+ * day/night chance (one spot), the level span, and every label/section.
+ */
+export function mergeEncounters(rows: Raw[]): WildEncounter[] {
+  const byKey = new Map<string, WildEncounter>();
+  for (const r of rows) {
+    if (typeof r?.species !== 'number') continue;
+    const key = `${r.species}|${r.method}`;
+    const lv: [number, number] = Array.isArray(r.levels) ? [r.levels[0], r.levels[1] ?? r.levels[0]] : [0, 0];
+    const label: string | undefined = r.label ?? r.summaryLabel ?? r.method;
+    const cur = byKey.get(key);
+    if (!cur) {
+      byKey.set(key, {
+        species: r.species,
+        rarity: r.rarity ?? 'common',
+        method: r.method ?? 'walking',
+        levels: lv,
+        day: r.day ?? 0,
+        night: r.night ?? 0,
+        labels: label ? [label] : [],
+        sections: [...(r.sections ?? [])],
+      });
+      continue;
+    }
+    cur.levels = [Math.min(cur.levels[0], lv[0]), Math.max(cur.levels[1], lv[1])];
+    cur.day = Math.max(cur.day, r.day ?? 0);
+    cur.night = Math.max(cur.night, r.night ?? 0);
+    if (label && !cur.labels.includes(label)) cur.labels.push(label);
+    for (const sec of r.sections ?? []) if (!cur.sections.includes(sec)) cur.sections.push(sec);
+  }
+  return [...byKey.values()];
+}
+
+export function fromWild(raw: Raw): WildData | undefined {
+  if (!Array.isArray(raw.maps)) return undefined;
+  const maps: ExploreMap[] = raw.maps.map((m: Raw) => ({
+    id: m.id,
+    name: m.name,
+    theme: m.theme ?? '',
+    levels: Array.isArray(m.levels) ? [m.levels[0], m.levels[1]] : [0, 0],
+    description: m.description ?? '',
+    encounters: mergeEncounters(m.encounters ?? []),
+  }));
+  const moonStone = new Set<number>();
+  for (const e of raw.evolutionMethods ?? []) {
+    if ((e.methods ?? []).some((x: unknown) => typeof x === 'string' && /moon stone/i.test(x))) moonStone.add(e.from);
+  }
+  for (const s of raw.species ?? []) {
+    for (const e of s.evolutions ?? []) {
+      if (e.from === s.id && (e.methods ?? []).some((x: unknown) => typeof x === 'string' && /moon stone/i.test(x))) moonStone.add(s.id);
+    }
+  }
+  return {
+    maps,
+    moonStone: [...moonStone].sort((a, b) => a - b),
+    encounterChance: typeof raw.mechanics?.encounterChance === 'number' ? raw.mechanics.encounterChance : undefined,
+  };
 }

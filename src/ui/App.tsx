@@ -4,6 +4,7 @@ import { NpcTab } from './tabs/NpcTab';
 import { TeamTab } from './tabs/TeamTab';
 import { BattleTab } from './tabs/BattleTab';
 import { SettingsTab } from './tabs/SettingsTab';
+import { ExploreTab } from './tabs/ExploreTab';
 
 /** Tab registry: add a tab here to extend the panel. */
 export interface TabDef {
@@ -17,6 +18,7 @@ export const TABS: TabDef[] = [
   { id: 'npc', label: 'NPC', component: NpcTab },
   { id: 'team', label: 'Team', component: TeamTab },
   { id: 'battle', label: 'Battle', component: BattleTab },
+  { id: 'explore', label: 'Explore', component: ExploreTab },
   { id: 'settings', label: '⚙', aria: 'Settings', component: SettingsTab },
 ];
 
