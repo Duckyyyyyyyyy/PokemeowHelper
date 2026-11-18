@@ -1,16 +1,20 @@
 import { readBattle } from './battleReader';
 import { mergeBag, readBag } from './bagReader';
+import { readWild } from './wildReader';
 
 /**
  * MeowHelper content script (pokemeowrpg.com). READ-ONLY by design (game rule: "Play yourself"):
- * it watches the page, reads the battle screen or the Bag page when one is open, and stores a
+ * it watches the page, reads the battle screen, the Bag page or the Explore encounter card when one is open, and stores a
  * snapshot for the side panel. It never clicks, types, changes the page, or calls the game's API.
  */
 const KEY = 'mdBattle';
 const BAG_KEY = 'mdBag';
+const WILD_KEY = 'mdWild';
 // Starts as 'none' so a game tab without a battle never wipes a battle another tab is showing.
 let last = 'none';
 let lastBag = '';
+// Same rule as battles: a tab that never showed an encounter never clears one.
+let lastWild = 'none';
 let timer: number | undefined;
 
 function publishBag() {
@@ -25,10 +29,21 @@ function publishBag() {
     .catch(() => observer.disconnect());
 }
 
+/** The wild encounter card on the Explore page (read-only). */
+function publishWild() {
+  const snap = readWild(document);
+  const { at: _at, ...rest } = snap ?? ({ at: 0 } as { at: number });
+  const sig = snap ? JSON.stringify(rest) : 'none';
+  if (sig === lastWild) return;
+  lastWild = sig;
+  chrome.storage.local.set({ [WILD_KEY]: snap }).catch(() => observer.disconnect());
+}
+
 function publish() {
   timer = undefined;
   try {
     publishBag();
+    publishWild();
   } catch {
     observer.disconnect();
     return;
@@ -49,5 +64,5 @@ function publish() {
 const observer = new MutationObserver(() => {
   if (timer === undefined) timer = window.setTimeout(publish, 300);
 });
-observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['data-status', 'data-fainted', 'data-active', 'disabled', 'aria-label'] });
+observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['data-view', 'style', 'data-status', 'data-fainted', 'data-active', 'disabled', 'aria-label'] });
 publish();

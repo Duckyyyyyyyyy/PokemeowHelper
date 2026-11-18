@@ -1,13 +1,15 @@
-import { signal } from '@preact/signals';
+import { effect, signal } from '@preact/signals';
 import { useMemo, useState } from 'preact/hooks';
 import type { Dataset } from '../../shared/types';
 import { Empty, Tip, Types } from '../components/common';
 import { NoData } from './shared';
 import { box, dataset, selectedNpc, selectedVariant } from '../store';
 import { battle } from '../battleStore';
+import { loadSampleWild, wild } from '../wildStore';
+import type { WildSnapshot } from '../../shared/wild';
 import { ownedItems, bag } from '../bagStore';
 import {
-  fightOrCatch, filterEncounters, isFishing, METHOD_LABEL, ownedSpecies, RARITY_LABEL, wantedSpecies, whereToFind, wildHeldItems,
+  fightOrCatch, filterEncounters, isFishing, mapForCard, speciesByCardName, METHOD_LABEL, ownedSpecies, RARITY_LABEL, wantedSpecies, whereToFind, wildHeldItems,
   type EncounterRow,
 } from '../../engine/explore';
 import { ballItems, BALL_RULES, catchChance, isUltraBeast, NOT_AWARDED, rankBalls, type BallOption } from '../../engine/catching';
@@ -31,8 +33,63 @@ interface Target {
   hpPct: number;
   turn: number;
   throws: number;
+  /** Filled from the game's encounter card (live). */
+  inBox?: number;
+  registered?: boolean;
+  myLevel?: number;
+  /** Quick-catch ball counts shown on the card, by item id. */
+  cardBalls?: [string, number][];
+  /** Encounter identity when it came from the card (name|level|map). */
+  liveKey?: string;
 }
 const target = signal<Target | null>(null);
+
+/* ---------- live encounter from the game's Explore page ---------- */
+
+export function targetFromWild(ds: Dataset, snap: WildSnapshot, prev: Target | null): Target | null {
+  const s = speciesByCardName(ds, snap.name);
+  if (!s) return null;
+  const key = `${snap.name}|${snap.level ?? ''}|${snap.map ?? ''}`;
+  const same = prev?.liveKey === key;
+  const m = same ? undefined : mapForCard(ds, snap.map, s.id);
+  const hpPct = snap.hp !== undefined && snap.maxHp ? Math.max(1, Math.round((snap.hp / snap.maxHp) * 100)) : snap.hpPct !== undefined ? Math.max(1, Math.round(snap.hpPct)) : 100;
+  const cardBalls: [string, number][] = [];
+  for (const b of snap.balls) {
+    const it = Object.values(ds.items).find((i) => lc(i.name) === lc(b.name));
+    if (it) cardBalls.push([it.id, b.count]);
+  }
+  const base: Target = same && prev ? prev : {
+    species: s.id, level: snap.level ?? m?.top ?? 20, mapId: m?.mapId ?? '', method: m?.method ?? 'walking',
+    item: '', shiny: false, goodIvs: false, status: '', hpPct: 100, turn: 1, throws: 0,
+  };
+  return {
+    ...base,
+    species: s.id,
+    level: snap.level ?? base.level,
+    item: snap.item ?? base.item,
+    shiny: snap.shiny || base.shiny,
+    status: snap.status ?? (same ? base.status : ''),
+    hpPct,
+    inBox: snap.inBox,
+    registered: snap.registered,
+    myLevel: snap.lead?.level,
+    cardBalls,
+    liveKey: key,
+  };
+}
+
+let lastWildAt = 0;
+effect(() => {
+  const snap = wild.value;
+  const ds = dataset.value;
+  if (!snap || !ds?.wild || snap.at === lastWildAt) return;
+  lastWildAt = snap.at;
+  const prev = target.peek();
+  const next = targetFromWild(ds, snap, prev);
+  if (!next) return;
+  if (prev?.liveKey !== next.liveKey) view.value = 'encounter';
+  target.value = next;
+});
 const charm = signal(false);
 
 const pct = (x: number) => (x >= 0.0995 ? `${Math.round(x * 100)}%` : x >= 0.001 ? `${(x * 100).toFixed(1)}%` : x > 0 ? '<0.1%' : '–');
@@ -204,7 +261,17 @@ function Encounter({ ds }: { ds: Dataset }) {
 
   return (
     <>
-      {live && (
+      {wild.value && t?.liveKey && (
+        <Tip kind="ok" icon="◉">
+          Live from the game: <b>{wild.value.name}</b>{wild.value.level ? ` Lv ${wild.value.level}` : ''}{wild.value.map ? ` · ${wild.value.map}` : ''}
+          {wild.value.rarity ? ` · ${wild.value.rarity}` : ''} · in box: {wild.value.inBox ?? '?'}
+          {wild.value.registered === false ? ' · not in your Pokédex' : wild.value.registered ? ' · registered' : ''}
+          {wild.value.lead ? ` · your lead ${wild.value.lead.name}${wild.value.lead.level ? ` Lv ${wild.value.lead.level}` : ''}` : ''}
+          {wild.value.view !== 'intro' ? ' · in battle' : ''}
+        </Tip>
+      )}
+      {wild.value && !speciesByCardName(ds, wild.value.name) && <Tip kind="warn">The game shows a wild {wild.value.name}, but it is not in the synced wiki data. Sync the data again in ⚙ Settings.</Tip>}
+      {live && !wild.value && (
         <Tip kind="info">
           The battle screen shows a possible wild <b>{ds.species[live.species]?.name}</b>{live.level ? ` Lv ${live.level}` : ''}.{' '}
           <button class="link" onClick={useLive}>Use it</button> (live wild detection is untested – check it matches).
@@ -217,7 +284,8 @@ function Encounter({ ds }: { ds: Dataset }) {
         <datalist id="md-wild-species">{speciesList.map((s) => <option value={s.name} />)}</datalist>
         <button class="btn" style={{ flex: '0 0 auto' }} onClick={() => pickSpecies(pickName)}>Set</button>
       </div>
-      {t ? <EncounterDetail ds={ds} t={t} myLevel={live?.myLevel} /> : <div class="small muted">Pick the species you met (or tap a row in Maps). MeowHelper never acts in the game: you throw and attack yourself.</div>}
+      {import.meta.env.DEV && !wild.value && <button class="btn" style={{ width: '100%' }} onClick={loadSampleWild}>Load sample wild encounter (dev)</button>}
+      {t ? <EncounterDetail ds={ds} t={t} myLevel={t.myLevel ?? live?.myLevel} /> : <div class="small muted">Pick the species you met (or tap a row in Maps). MeowHelper never acts in the game: you throw and attack yourself.</div>}
     </>
   );
 }
@@ -228,15 +296,21 @@ function EncounterDetail({ ds, t, myLevel }: { ds: Dataset; t: Target; myLevel?:
   const wanted = useWanted(ds);
   const map = ds.wild!.maps.find((m) => m.id === t.mapId);
   const night = nightNow();
-  const decision = useMemo(() => fightOrCatch(ds, { species: t.species, level: t.level, item: t.item || null, shiny: t.shiny, goodIvs: t.goodIvs }, box.value, wanted.ids), [ds, t, box.value, wanted]);
+  const decision = useMemo(() => fightOrCatch(ds, { species: t.species, level: t.level, item: t.item || null, shiny: t.shiny, goodIvs: t.goodIvs, inBox: t.inBox, registered: t.registered }, box.value, wanted.ids), [ds, t, box.value, wanted]);
   const held = useMemo(() => wildHeldItems(ds, t.species, t.mapId || undefined), [ds, t.species, t.mapId]);
   const plan = useMemo(() => planCatch(ds, box.value, { species: t.species, level: t.level }, { hpPct: t.hpPct }), [ds, box.value, t.species, t.level, t.hpPct]);
   const dexCount = ownedSpecies(box.value).size;
-  const owned = bag.value ? ownedItems.value : null;
+  // Ball counts on the game's quick-catch row are fresher than the last Bag read.
+  const owned = useMemo(() => {
+    if (!bag.value && !t.cardBalls?.length) return null;
+    const m = new Map(bag.value ? ownedItems.value : []);
+    for (const [id, n] of t.cardBalls ?? []) m.set(id, n);
+    return m as ReadonlyMap<string, number>;
+  }, [bag.value, ownedItems.value, t.cardBalls]);
   const advice = useMemo(() => rankBalls(ds, {
     speciesId: t.species, types: s?.types ?? [], catchRate: s?.catchRate ?? 45, level: t.level, baseSpeed: s?.baseStats.spe ?? 0,
     mapId: t.mapId, mapTheme: map?.theme, fishing: isFishing(t.method), night, turn: t.turn, throwsSoFar: t.throws, myLevel,
-    registered: ownedSpecies(box.value).has(t.species), status: t.status, moonStone: ds.wild!.moonStone.includes(t.species),
+    registered: t.registered ?? ownedSpecies(box.value).has(t.species), status: t.status, moonStone: ds.wild!.moonStone.includes(t.species),
   }, { hpFrac: t.hpPct / 100, dexCount, charm: charm.value, owned, precious: t.shiny || s?.rarity === 'legendary' }), [ds, t, map, night, myLevel, box.value, owned, charm.value]);
   if (!s) return null;
   const base = catchChance({ catchRate: s.catchRate ?? 45, hpFrac: t.hpPct / 100, level: t.level, status: t.status, ballMul: 1, dexCount, charm: charm.value });

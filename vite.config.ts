@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = dirname(fileURLToPath(import.meta.url));
 
-// Builds the side panel page, the background service worker and the read-only content script.
+// Builds the side panel page and the background service worker (the content script: vite.content.config.ts).
 // public/ (manifest.json, icons) is copied as-is into dist/.
 export default defineConfig({
   plugins: [preact()],
@@ -18,11 +18,10 @@ export default defineConfig({
       input: {
         sidepanel: resolve(root, 'sidepanel.html'),
         background: resolve(root, 'src/background/index.ts'),
-        // Classic (non-module) content script: it must import nothing shared with the panel.
-        content: resolve(root, 'src/content/index.ts'),
+        // The content script is built separately as one classic script: vite.content.config.ts.
       },
       output: {
-        entryFileNames: (chunk) => (chunk.name === 'background' || chunk.name === 'content' ? `${chunk.name}.js` : 'assets/[name]-[hash].js'),
+        entryFileNames: (chunk) => (chunk.name === 'background' ? `${chunk.name}.js` : 'assets/[name]-[hash].js'),
       },
     },
   },
