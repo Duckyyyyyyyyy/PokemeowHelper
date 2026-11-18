@@ -95,3 +95,17 @@ describe('damage seen in the real battle fits the calc', () => {
     expect(12).toBeLessThanOrEqual(Math.ceil(hi));
   });
 });
+
+describe('moves that need sleep (live bug: Snore scored 81 on an awake Snorlax)', () => {
+  const box: BoxMon[] = [{ uid: 'game:1', gameId: '1', source: 'game', species: 546, level: 19, moves: ['fairywind', 'snore'], nature: 'Hardy', ivs: iv(20), evs: zero }];
+  const withSnore = { ...snap, moves: [...snap.moves, { name: 'Snore', type: 'Normal', category: 'Special' as const, power: 50, accuracy: 100, pp: 15, maxPp: 15, disabled: false }] };
+  it('Snore fails while awake', () => {
+    const a = adviseTurn(ds, withSnore, box).actions.find((x) => x.label === 'Snore')!;
+    expect(a.score).toBe(0);
+    expect(a.reason).toMatch(/must be asleep/);
+  });
+  it('Snore is scored normally while asleep', () => {
+    const a = adviseTurn(ds, { ...withSnore, player: { ...withSnore.player!, status: 'slp' } }, box).actions.find((x) => x.label === 'Snore')!;
+    expect(a.score).toBeGreaterThan(0);
+  });
+});

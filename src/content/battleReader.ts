@@ -25,6 +25,8 @@ export const SEL = {
   rosterHealth: '.battle-opponent-row-health',
   logLine: '.battle-log > li',
   logTurn: '.battle-log-turn',
+  /** On-screen stat stages next to the name, e.g. <span class="battle-status battle-stat-changes" title="Evasion +1">. */
+  statChanges: '.battle-stat-changes',
 } as const;
 
 const num = (s?: string | null) => {
@@ -54,9 +56,13 @@ export function monName(el: Element | null): string {
     }
     if (n.nodeType !== 1) return;
     const e = n as Element;
-    if (e.matches('button, [aria-hidden="true"], [role="img"], svg')) return;
+    // Skip buttons/icons and the badges next to the name: level, status, stat changes ("Evasion +1").
+    if (e.matches(`button, [aria-hidden="true"], [role="img"], svg, ${SEL.level}, ${SEL.statChanges}, .battle-status`)) return;
     e.childNodes.forEach(walk);
   };
+  // Live markup: <strong title="Kingdra">Kingdra…</strong> holds the name.
+  const titled = el.querySelector('strong[title]')?.getAttribute('title')?.trim();
+  if (titled) return titled;
   el.childNodes.forEach(walk);
   return clean(parts.join(' '))
     .replace(/\bLv\.?\s*\d+/gi, ' ')
@@ -72,13 +78,25 @@ function readCombatant(root: Element | null): BattleMon | undefined {
   const statusEl = root.querySelector(SEL.status);
   const itemLabel = root.querySelector(SEL.item)?.getAttribute('aria-label') ?? '';
   const item = itemLabel.match(/Held item:\s*([^.]+)/i)?.[1]?.trim();
+  const changes = root.querySelector(SEL.statChanges);
   return {
     name,
     level: num(root.querySelector(SEL.level)?.textContent?.match(/(\d+)/)?.[1]),
     ...parseHp(root.querySelector(SEL.hp)?.textContent ?? ''),
     status: statusEl?.getAttribute('data-status') || undefined,
     item,
+    stages: changes ? parseStatChanges(changes.getAttribute('title') || changes.textContent || '') : undefined,
   };
+}
+
+/** "Evasion +1" (seen live), also "Attack +2, Speed -1" style lists. */
+export function parseStatChanges(text: string): Boosts {
+  const out: Boosts = {};
+  for (const m of text.matchAll(/([A-Za-z. ]+?)\s*([+\-−]\s*\d)/g)) {
+    const key = STAT_WORDS.find(([re]) => re.test(m[1]))?.[1];
+    if (key) out[key] = parseInt(m[2].replace('−', '-').replace(/\s/g, ''), 10);
+  }
+  return out;
 }
 
 /** "Fairy Wind · Fairy · Special · Power 40 · Accuracy 100% · 30/30 PP. No additional effect." */
@@ -255,6 +273,8 @@ export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | 
   const arena = doc.querySelector(SEL.arena);
   if (!arena) return null;
   const log = readLog(arena);
+  const player = readCombatant(arena.querySelector(SEL.playerStats));
+  const opponent = readCombatant(arena.querySelector(SEL.opponentStats));
   return {
     v: 2,
     at: now,
@@ -263,12 +283,13 @@ export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | 
     format: arena.getAttribute('data-format') ?? undefined,
     opponentName: clean(arena.querySelector(SEL.opponentName)?.textContent) || undefined,
     turn: num(arena.querySelector(SEL.turn)?.textContent?.match(/Turn (\d+)/i)?.[1]),
-    player: readCombatant(arena.querySelector(SEL.playerStats)),
-    opponent: readCombatant(arena.querySelector(SEL.opponentStats)),
+    player,
+    opponent,
     moves: readMoves(arena),
     bench: readBench(arena),
     opponentTeam: readOpponentTeam(arena),
-    boosts: log.boosts,
+    // The screen shows stages next to the name when any are active ("Evasion +1"); trust that over the log.
+    boosts: { player: player?.stages ?? log.boosts.player, opponent: opponent?.stages ?? log.boosts.opponent },
     log: log.lines,
     events: log.events,
   };

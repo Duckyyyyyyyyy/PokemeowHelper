@@ -1,6 +1,6 @@
 import type { Field } from '@smogon/calc';
 import type { BoxMon, Dataset, NpcTeamVariant } from '../shared/types';
-import { SELF_KO_MOVES, boxToCalc, makeField, moveDamage, npcToCalc } from './damage';
+import { SELF_KO_MOVES, SLEEP_ONLY_MOVES, boxToCalc, makeField, moveDamage, npcToCalc } from './damage';
 import type { BattleRules } from './rules';
 
 export type MoveSource = 'known' | 'level' | 'tm' | 'egg';
@@ -36,7 +36,7 @@ export function suggestMoveset(ds: Dataset, b: BoxMon, v: NpcTeamVariant, opts: 
   for (const [id, l] of s?.levelMoves ?? []) if (l <= level && !sources.has(id)) sources.set(id, { source: 'level', level: l });
   if (opts.allowTM !== false) for (const id of s?.machineMoves ?? []) if (!sources.has(id)) sources.set(id, { source: 'tm' });
 
-  const candidates = [...sources.keys()].filter((id) => ds.moves[id] && ds.moves[id].category !== 'Status' && !opts.rules?.bannedMoves.has(id) && !SELF_KO_MOVES.has(id));
+  const candidates = [...sources.keys()].filter((id) => ds.moves[id] && ds.moves[id].category !== 'Status' && !opts.rules?.bannedMoves.has(id) && !SELF_KO_MOVES.has(id) && !SLEEP_ONLY_MOVES.has(id));
   const me = boxToCalc(ds, b, level);
   const foes = v.team.map((n) => npcToCalc(ds, n));
   const field: Field = makeField(v.format);

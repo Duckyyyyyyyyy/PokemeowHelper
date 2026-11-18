@@ -238,6 +238,15 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[]): Tu
       out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: null, reason: 'Status move – not scored. Use it if the effect helps.' });
       continue;
     }
+    // Moves that fail unless someone is asleep (Snore scored 81 on an awake Snorlax, seen live).
+    if (g.id === 'snore' && snap.player.status !== 'slp') {
+      out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: 0, reason: `Fails: ${snap.player.name} must be asleep to use it.` });
+      continue;
+    }
+    if (g.id === 'dreameater' && snap.opponent.status !== 'slp') {
+      out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: 0, reason: 'Fails: the target must be asleep.' });
+      continue;
+    }
     const d = moveDamage(ds, myCalc, foeCalc, g.id, field);
     if (!d || d.maxPct <= 0) {
       out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: 0, reason: 'No effect on this target.' });
