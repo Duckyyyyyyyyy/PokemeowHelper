@@ -235,6 +235,7 @@ export function itemExtras(i: Raw): Partial<Item> {
   const out: Partial<Item> = {};
   if (i.category) out.category = i.category;
   if (i.description) out.description = i.description;
+  if (typeof i.sprite === 'string' && i.sprite.startsWith('/')) out.sprite = i.sprite;
   if (Array.isArray(i.wildSources) && i.wildSources.length) {
     out.wildSources = i.wildSources.map((w: Raw) => ({ species: w.species, chance: w.chance, mapIds: w.mapIds ?? [] }));
   }

@@ -5,7 +5,7 @@ import type { BoxMon, Dataset } from '../src/shared/types';
 import { fromWild, itemExtras, mergeEncounters, wildSpeciesFields } from '../src/data/normalize';
 import { filterEncounters, findableSpecies, fightOrCatch, mapForCard, speciesByCardName, isFindable, wantedSpecies, whereToFind, wildHeldItems } from '../src/engine/explore';
 import { BALL_RULES, ballItems, catchChance, criticalStrength, levelBonus, rankBalls, statusBonus, type BallContext } from '../src/engine/catching';
-import { planCatch, statusImmunity } from '../src/engine/catchPlan';
+import { afterPlan, planCatch, statusImmunity } from '../src/engine/catchPlan';
 import { boxToCalc, moveDamage, npcToCalc } from '../src/engine/damage';
 
 /** wiki-mini + the explore subset, as normalize() would build it. */
@@ -259,5 +259,22 @@ describe('matching the game encounter card', () => {
     const m = mapForCard(ds, 'Grasslands 3', sp('Doduo'));
     expect(m?.mapId).toBe('verdant-trail');
     expect(mapForCard(ds, 'Power Plant 2', sp('Pikachu'))?.mapId).toBe('power-plant');
+  });
+});
+
+describe('after the plan', () => {
+  it('False Swipe + sleep leaves 1 HP asleep', () => {
+    const plan = planCatch(ds, [mon('Scyther', ['falseswipe'], 40), mon('Parasect', ['spore'], 40)], { species: sp('Rattata'), level: 20 });
+    expect(afterPlan(plan, { hpPct: 100 })).toEqual({ hpFrac: 0.01, status: 'slp', label: 'False Swipe + sleep' });
+  });
+  it('a sized hit counts only its minimum roll, and an existing status is kept', () => {
+    const plan = planCatch(ds, [mon('Pidgey', ['tackle', 'gust'], 12)], { species: sp('Onix'), level: 30 });
+    const a = afterPlan(plan, { hpPct: 100, status: 'par' });
+    expect(a.hpFrac).toBeCloseTo(1 - plan.weaken[0].minPct / 100);
+    expect(a.status).toBe('par');
+    expect(a.label).toBe('weaken');
+  });
+  it('changes nothing with an empty plan', () => {
+    expect(afterPlan({ weaken: [], status: [], notes: [] }, { hpPct: 60 })).toEqual({ hpFrac: 0.6, status: undefined, label: '' });
   });
 });

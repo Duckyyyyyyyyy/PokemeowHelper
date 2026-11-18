@@ -1,5 +1,5 @@
 import { effect, signal } from '@preact/signals';
-import { useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { Dataset } from '../../shared/types';
 import { Empty, Tip, Types } from '../components/common';
 import { NoData } from './shared';
@@ -12,8 +12,11 @@ import {
   fightOrCatch, filterEncounters, isFishing, mapForCard, speciesByCardName, METHOD_LABEL, ownedSpecies, RARITY_LABEL, wantedSpecies, whereToFind, wildHeldItems,
   type EncounterRow,
 } from '../../engine/explore';
-import { ballItems, BALL_RULES, catchChance, isUltraBeast, NOT_AWARDED, rankBalls, type BallOption } from '../../engine/catching';
-import { planCatch, STATUS_LABEL } from '../../engine/catchPlan';
+import { ballItems, BALL_RULES, isUltraBeast, NOT_AWARDED, rankBalls, type BallAdvice, type BallOption } from '../../engine/catching';
+import { afterPlan, planCatch, STATUS_LABEL } from '../../engine/catchPlan';
+import { defeatPlan } from '../../engine/wildDefeat';
+import { Action } from './BattleTab';
+import type { BoxMon } from '../../shared/types';
 import { matchNpc, lc } from '../../engine/turnAdvisor';
 import { ALL_TYPES } from '../../engine/typeChart';
 
@@ -237,6 +240,7 @@ function liveWild(ds: Dataset) {
 function Encounter({ ds }: { ds: Dataset }) {
   const t = target.value;
   const live = liveWild(ds);
+  const isLive = !!(wild.value && t?.liveKey);
   const [pickName, setPickName] = useState('');
   const speciesList = useMemo(() => Object.values(ds.species).filter((s) => whereToFind(ds, s.id).length).sort((a, b) => a.name.localeCompare(b.name)), [ds]);
 
@@ -261,41 +265,58 @@ function Encounter({ ds }: { ds: Dataset }) {
 
   return (
     <>
-      {wild.value && t?.liveKey && (
-        <Tip kind="ok" icon="◉">
-          Live from the game: <b>{wild.value.name}</b>{wild.value.level ? ` Lv ${wild.value.level}` : ''}{wild.value.map ? ` · ${wild.value.map}` : ''}
-          {wild.value.rarity ? ` · ${wild.value.rarity}` : ''} · in box: {wild.value.inBox ?? '?'}
-          {wild.value.registered === false ? ' · not in your Pokédex' : wild.value.registered ? ' · registered' : ''}
-          {wild.value.lead ? ` · your lead ${wild.value.lead.name}${wild.value.lead.level ? ` Lv ${wild.value.lead.level}` : ''}` : ''}
-          {wild.value.view !== 'intro' ? ' · in battle' : ''}
-        </Tip>
-      )}
       {wild.value && !speciesByCardName(ds, wild.value.name) && <Tip kind="warn">The game shows a wild {wild.value.name}, but it is not in the synced wiki data. Sync the data again in ⚙ Settings.</Tip>}
-      {live && !wild.value && (
-        <Tip kind="info">
-          The battle screen shows a possible wild <b>{ds.species[live.species]?.name}</b>{live.level ? ` Lv ${live.level}` : ''}.{' '}
-          <button class="link" onClick={useLive}>Use it</button> (live wild detection is untested – check it matches).
-        </Tip>
+      {!isLive && (
+        <>
+          {live && (
+            <Tip kind="info">
+              The battle screen shows a possible wild <b>{ds.species[live.species]?.name}</b>{live.level ? ` Lv ${live.level}` : ''}.{' '}
+              <button class="link" onClick={useLive}>Use it</button> (check it matches).
+            </Tip>
+          )}
+          <div class="row">
+            <input class="input grow" list="md-wild-species" placeholder="Wild Pokémon you met…" value={pickName}
+              onInput={(e) => setPickName((e.target as HTMLInputElement).value)}
+              onChange={(e) => pickSpecies((e.target as HTMLInputElement).value)} />
+            <datalist id="md-wild-species">{speciesList.map((s) => <option value={s.name} />)}</datalist>
+            <button class="btn" style={{ flex: '0 0 auto' }} onClick={() => pickSpecies(pickName)}>Set</button>
+          </div>
+          {import.meta.env.DEV && !wild.value && <button class="btn" style={{ width: '100%' }} onClick={loadSampleWild}>Load sample wild encounter (dev)</button>}
+          {!t && <div class="small muted">Meet a wild Pokémon on the game's Explore page and it shows up here by itself, or pick it above (or tap a row in Maps). MeowHelper never acts in the game.</div>}
+        </>
       )}
-      <div class="row">
-        <input class="input grow" list="md-wild-species" placeholder="Wild Pokémon you met…" value={pickName}
-          onInput={(e) => setPickName((e.target as HTMLInputElement).value)}
-          onChange={(e) => pickSpecies((e.target as HTMLInputElement).value)} />
-        <datalist id="md-wild-species">{speciesList.map((s) => <option value={s.name} />)}</datalist>
-        <button class="btn" style={{ flex: '0 0 auto' }} onClick={() => pickSpecies(pickName)}>Set</button>
-      </div>
-      {import.meta.env.DEV && !wild.value && <button class="btn" style={{ width: '100%' }} onClick={loadSampleWild}>Load sample wild encounter (dev)</button>}
-      {t ? <EncounterDetail ds={ds} t={t} myLevel={t.myLevel ?? live?.myLevel} /> : <div class="small muted">Pick the species you met (or tap a row in Maps). MeowHelper never acts in the game: you throw and attack yourself.</div>}
+      {t && <EncounterDetail ds={ds} t={t} myLevel={t.myLevel ?? live?.myLevel} isLive={isLive} />}
     </>
   );
 }
 
-function EncounterDetail({ ds, t, myLevel }: { ds: Dataset; t: Target; myLevel?: number }) {
+const usable = (o: BallOption) => !o.unavailable && !o.saveIt && !o.effect.unknown;
+
+/** The ball to throw, plus a runner-up worth knowing about (best overall, or a cheaper one that is close). */
+function headlineBalls(adv: BallAdvice): { main: BallOption | null; alt: BallOption | null; altLabel: string } {
+  const main = adv.bestOwned ?? adv.best;
+  if (!main) return { main: null, alt: null, altLabel: '' };
+  if (adv.bestOwned && adv.best && adv.best.id !== adv.bestOwned.id && adv.best.chance > adv.bestOwned.chance + 0.005) return { main, alt: adv.best, altLabel: 'Best overall' };
+  const owned = adv.ranked.filter((o) => usable(o) && o.id !== main.id && (o.count === undefined || o.count > 0));
+  const close = owned.find((o) => o.chance >= main.chance - 0.1);
+  if (close) return { main, alt: close, altLabel: close.chance >= main.chance ? 'Also' : 'Close' };
+  return { main, alt: owned[0] ?? null, altLabel: 'Next' };
+}
+
+const STATUS_SHORT: Record<string, string> = { slp: 'SLP', frz: 'FRZ', par: 'PAR', brn: 'BRN', psn: 'PSN', tox: 'TOX' };
+
+function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; myLevel?: number; isLive: boolean }) {
   const s = ds.species[t.species];
   const set = (patch: Partial<Target>) => (target.value = { ...t, ...patch });
+  const [adjust, setAdjust] = useState(false);
+  const [modePick, setModePick] = useState<{ key: string; mode: 'catch' | 'defeat' } | null>(null);
+  const [moreWeaken, setMoreWeaken] = useState(false);
+  const [moreStatus, setMoreStatus] = useState(false);
+  const headTop = useHeadHeight();
   const wanted = useWanted(ds);
   const map = ds.wild!.maps.find((m) => m.id === t.mapId);
   const night = nightNow();
+  const snap = isLive ? wild.value : null;
   const decision = useMemo(() => fightOrCatch(ds, { species: t.species, level: t.level, item: t.item || null, shiny: t.shiny, goodIvs: t.goodIvs, inBox: t.inBox, registered: t.registered }, box.value, wanted.ids), [ds, t, box.value, wanted]);
   const held = useMemo(() => wildHeldItems(ds, t.species, t.mapId || undefined), [ds, t.species, t.mapId]);
   const plan = useMemo(() => planCatch(ds, box.value, { species: t.species, level: t.level }, { hpPct: t.hpPct }), [ds, box.value, t.species, t.level, t.hpPct]);
@@ -307,123 +328,260 @@ function EncounterDetail({ ds, t, myLevel }: { ds: Dataset; t: Target; myLevel?:
     for (const [id, n] of t.cardBalls ?? []) m.set(id, n);
     return m as ReadonlyMap<string, number>;
   }, [bag.value, ownedItems.value, t.cardBalls]);
-  const advice = useMemo(() => rankBalls(ds, {
+  const ctx = useMemo(() => ({
     speciesId: t.species, types: s?.types ?? [], catchRate: s?.catchRate ?? 45, level: t.level, baseSpeed: s?.baseStats.spe ?? 0,
     mapId: t.mapId, mapTheme: map?.theme, fishing: isFishing(t.method), night, turn: t.turn, throwsSoFar: t.throws, myLevel,
-    registered: t.registered ?? ownedSpecies(box.value).has(t.species), status: t.status, moonStone: ds.wild!.moonStone.includes(t.species),
-  }, { hpFrac: t.hpPct / 100, dexCount, charm: charm.value, owned, precious: t.shiny || s?.rarity === 'legendary' }), [ds, t, map, night, myLevel, box.value, owned, charm.value]);
+    registered: t.registered ?? ownedSpecies(box.value).has(t.species), moonStone: ds.wild!.moonStone.includes(t.species),
+  }), [ds, t, s, map, night, myLevel, box.value]);
+  const rankOpts = { dexCount, charm: charm.value, owned, precious: t.shiny || s?.rarity === 'legendary' };
+  const advice = useMemo(() => rankBalls(ds, { ...ctx, status: t.status }, { ...rankOpts, hpFrac: t.hpPct / 100 }), [ds, ctx, t.status, t.hpPct, owned, charm.value]);
+  const after = useMemo(() => afterPlan(plan, { hpPct: t.hpPct, status: t.status }), [plan, t.hpPct, t.status]);
+  // The plan takes a couple of turns (and throws come after it): Quick Ball no longer applies.
+  const afterAdvice = useMemo(() => rankBalls(ds, { ...ctx, status: after.status, turn: t.turn + 2 }, { ...rankOpts, hpFrac: after.hpFrac }), [ds, ctx, after, owned, charm.value]);
   if (!s) return null;
-  const base = catchChance({ catchRate: s.catchRate ?? 45, hpFrac: t.hpPct / 100, level: t.level, status: t.status, ballMul: 1, dexCount, charm: charm.value });
-  const lowSleep = catchChance({ catchRate: s.catchRate ?? 45, hpFrac: 0.05, level: t.level, status: 'slp', ballMul: 1, dexCount, charm: charm.value });
+  const { main, alt, altLabel } = headlineBalls(advice);
+  const afterMain = afterAdvice.bestOwned ?? afterAdvice.best;
+  // Catch / Defeat: follows the verdict for each new encounter until you pick one yourself.
+  const encKey = t.liveKey ?? `${t.species}|${t.level}`;
+  const mode = modePick?.key === encKey ? modePick.mode : decision.verdict === 'catch' ? 'catch' : 'defeat';
+  const catching = mode === 'catch';
+  const hpClass = t.hpPct > 50 ? 'g' : t.hpPct > 20 ? 'y' : 'r';
+  const gender = snap?.gender === 'F' ? '♀' : snap?.gender === 'M' ? '♂' : '';
+  const rarity = snap?.rarity ?? (s.rarity ? RARITY_LABEL[s.rarity] : undefined);
+  const weaken = plan.weaken.slice(0, moreWeaken ? 8 : 3);
+  const status = plan.status.slice(0, moreStatus ? 8 : 3);
 
   return (
     <>
-      <div class="card">
-        <p class="title" style={{ margin: 0 }}>
-          {s.name} <Types types={s.types} />
-          <span class="r">catch rate {s.catchRate ?? '?'}</span>
-        </p>
-        <div class="row wrap small" style={{ marginTop: '6px' }}>
-          <label>Lv <input class="input" type="number" min={1} max={100} style={{ width: '58px' }} value={t.level} onInput={(e) => set({ level: Math.max(1, Number((e.target as HTMLInputElement).value) || 1) })} /></label>
-          <select class="input" value={t.mapId} onChange={(e) => set({ mapId: (e.target as HTMLSelectElement).value })} aria-label="Map">
-            <option value="">Map?</option>
-            {ds.wild!.maps.filter((m) => m.encounters.length).map((m) => <option value={m.id}>{m.name}</option>)}
-          </select>
-          <select class="input" value={t.method} onChange={(e) => set({ method: (e.target as HTMLSelectElement).value })} aria-label="Method">
-            {Object.entries(METHOD_LABEL).map(([k, v]) => <option value={k}>{v}</option>)}
-          </select>
+      <section class="enc-head" style={{ top: `${headTop}px` }} aria-label="Wild encounter">
+        <div class="row">
+          <span class="grow enc-id">
+            {t.shiny && <span title="Shiny">✨</span>}<b class="enc-name">{s.name}</b>
+            {gender && <span class="muted"> {gender}</span>}
+            <span class="lv"> Lv {t.level}</span>
+            {rarity && <span class="chip enc-chip">{rarity}</span>}
+          </span>
+          <span class={`enc-verdict ${decision.verdict}`} title={decision.reasons.join(' ')}>{decision.summary}</span>
         </div>
-        <div class="row wrap small" style={{ marginTop: '6px' }}>
-          <input class="input grow" placeholder="Held item shown (optional)" value={t.item} onInput={(e) => set({ item: (e.target as HTMLInputElement).value })} />
-          <label><input type="checkbox" checked={t.shiny} onChange={(e) => set({ shiny: (e.target as HTMLInputElement).checked })} /> Shiny</label>
-          <label><input type="checkbox" checked={t.goodIvs} onChange={(e) => set({ goodIvs: (e.target as HTMLInputElement).checked })} /> Good IVs</label>
+        <div class="row enc-hp">
+          <Types types={s.types} />
+          <div class="hpbar grow" role="meter" aria-label={`${s.name} HP`} aria-valuenow={t.hpPct} aria-valuemax={100}><i class={hpClass} style={{ width: `${t.hpPct}%` }} /></div>
+          <span class="lv">{snap?.hp !== undefined && snap.maxHp ? `${snap.hp}/${snap.maxHp}` : `${t.hpPct}%`}</span>
+          {t.status && <span class={`enc-status st-${t.status}`}>{STATUS_SHORT[t.status] ?? t.status}</span>}
         </div>
-      </div>
+        {main ? (
+          <div class="row enc-ball">
+            <BallIcon ds={ds} id={main.id} size={30} />
+            <span class="grow">
+              <b>{main.name}</b>{main.count !== undefined && <span class="muted"> · {main.count ? `${main.count} in bag` : 'none in bag'}</span>}
+              <div class="small muted">{main.effect.why}</div>
+            </span>
+            <span class="enc-pct" title="Estimated chance per throw">{pct(main.chance)}</span>
+          </div>
+        ) : <div class="small muted">No usable ball found.</div>}
+        {alt && (
+          <div class="row small enc-alt">
+            <span class="muted">{altLabel}:</span>
+            <BallIcon ds={ds} id={alt.id} size={16} />
+            <span class="grow">{alt.name}{alt.count !== undefined && <span class="muted"> · {alt.count ? `${alt.count} in bag` : 'none in bag'}</span>}</span>
+            <b>{pct(alt.chance)}</b>
+          </div>
+        )}
+        {catching && main && afterMain && after.label && afterMain.chance > main.chance + 0.005 && (
+          <div class="small enc-outlook">
+            <b>{pct(main.chance)}</b> now → <b class="ok-t">{pct(afterMain.chance)}</b> after {after.label}
+            {afterMain.id !== main.id ? <> with {afterMain.name}</> : null}
+          </div>
+        )}
+        <div class="row small enc-foot">
+          <span class="grow muted enc-reason" title={decision.reasons.join(' ')}>{decision.reasons[0]}</span>
+          <button class="link" onClick={() => setAdjust(!adjust)} aria-expanded={adjust}>{adjust ? 'Done' : 'Adjust'}</button>
+        </div>
+        <div class="seg enc-mode" role="tablist" aria-label="Catch or defeat">
+          {(['catch', 'defeat'] as const).map((m) => (
+            <button class={mode === m ? 'on' : ''} role="tab" aria-selected={mode === m} onClick={() => setModePick({ key: encKey, mode: m })}>
+              {m === 'catch' ? '◓ Catch it' : '⚔ Defeat it (EXP)'}
+            </button>
+          ))}
+        </div>
+      </section>
 
-      <Tip kind={decision.verdict === 'catch' ? 'ok' : 'info'} icon={decision.verdict === 'catch' ? '◓' : '⚔'}>
-        <b>{decision.summary}</b> – {decision.reasons.join(' ')}
-      </Tip>
-
-      {held.length > 0 && (
-        <div class="small muted" style={{ padding: '0 4px' }}>
-          May hold: {held.map((h, i) => <>{i > 0 && ' · '}{h.name} {pct(h.chance)}</>)}
-          {t.mapId ? '' : ' (depends on the map)'}
+      {(adjust || !isLive) && (
+        <div class="card small">
+          {!isLive && <div class="muted" style={{ marginBottom: '4px' }}>No live encounter: set what you see.</div>}
+          <div class="row wrap">
+            <label>Lv <input class="input" type="number" min={1} max={100} style={{ width: '58px' }} value={t.level} onInput={(e) => set({ level: Math.max(1, Number((e.target as HTMLInputElement).value) || 1) })} /></label>
+            <select class="input" value={t.mapId} onChange={(e) => set({ mapId: (e.target as HTMLSelectElement).value })} aria-label="Map">
+              <option value="">Map?</option>
+              {ds.wild!.maps.filter((m) => m.encounters.length).map((m) => <option value={m.id}>{m.name}</option>)}
+            </select>
+            <select class="input" value={t.method} onChange={(e) => set({ method: (e.target as HTMLSelectElement).value })} aria-label="Method">
+              {Object.entries(METHOD_LABEL).map(([k, v]) => <option value={k}>{v}</option>)}
+            </select>
+          </div>
+          <div class="row wrap" style={{ marginTop: '6px' }}>
+            <label class="grow" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>HP <input class="grow" type="range" min={1} max={100} value={t.hpPct} onInput={(e) => set({ hpPct: Number((e.target as HTMLInputElement).value) })} /> {t.hpPct}%</label>
+            <select class="input" value={t.status} onChange={(e) => set({ status: (e.target as HTMLSelectElement).value })} aria-label="Its status">
+              <option value="">No status</option>
+              <option value="slp">Asleep</option><option value="frz">Frozen</option><option value="par">Paralyzed</option>
+              <option value="brn">Burned</option><option value="psn">Poisoned</option>
+            </select>
+          </div>
+          <div class="row wrap" style={{ marginTop: '6px' }}>
+            <label>Turn <input class="input" type="number" min={1} style={{ width: '50px' }} value={t.turn} onInput={(e) => set({ turn: Math.max(1, Number((e.target as HTMLInputElement).value) || 1) })} /></label>
+            <label>Throws <input class="input" type="number" min={0} style={{ width: '50px' }} value={t.throws} onInput={(e) => set({ throws: Math.max(0, Number((e.target as HTMLInputElement).value) || 0) })} /></label>
+            <input class="input grow" placeholder="Held item" value={t.item} onInput={(e) => set({ item: (e.target as HTMLInputElement).value })} />
+          </div>
+          <div class="row wrap" style={{ marginTop: '6px' }}>
+            <label><input type="checkbox" checked={t.shiny} onChange={(e) => set({ shiny: (e.target as HTMLInputElement).checked })} /> Shiny</label>
+            <label><input type="checkbox" checked={t.goodIvs} onChange={(e) => set({ goodIvs: (e.target as HTMLInputElement).checked })} /> Good IVs</label>
+          </div>
         </div>
       )}
-      {(s.rarity === 'legendary' || isUltraBeast(s.id)) && <div class="small muted" style={{ padding: '0 4px' }}>{s.spawnRequirement ?? ''}</div>}
 
-      {decision.verdict === 'catch' && (
-        <>
-          <div class="card">
-            <p class="title">1 · Weaken it (no KO)</p>
-            {plan.weaken.slice(0, 5).map((w) => (
-              <div class="small" style={{ padding: '3px 0' }}>
-                <b>{w.monName}</b>{w.level ? ` Lv ${w.level}` : ''}: {w.moveName}{' '}
-                {w.safe ? <span class="ok-t">never KOs</span> : <>{Math.round(w.minPct)}–{Math.round(w.maxPct)}%{w.critSafe ? '' : <span class="c-y"> (a crit could KO)</span>}</>}
-                {w.guessed && <span class="muted"> · move guessed from level-up list</span>}
-              </div>
-            ))}
-            {!plan.weaken.length && <div class="small muted">No safe hit found in your box. Sync your box (⚙) so MeowHelper knows your Pokémon's moves.</div>}
-            <div class="small muted" style={{ marginTop: '4px' }}>Sized against the weakest possible {s.name} at Lv {t.level} (IV 0, worst nature and ability) at {t.hpPct}% HP. Set its HP in the Ball box below after each hit.</div>
-          </div>
-          <div class="card">
-            <p class="title">2 · Status it</p>
-            {plan.status.slice(0, 5).map((o) => (
-              <div class="small" style={{ padding: '3px 0' }}>
-                <b>{STATUS_LABEL[o.status]}</b> ×{o.bonus}: {o.monName} – {o.moveName} ({o.accuracy}%)
-                {o.note ? ` · ${o.note}` : ''}{o.mayFail ? <span class="c-y"> · {o.mayFail}</span> : ''}
-                {o.guessed && <span class="muted"> · guessed</span>}
-              </div>
-            ))}
-            {!plan.status.length && <div class="small muted">No sleep / paralysis / burn / poison move that works on it in your box.</div>}
-            {plan.notes.map((n) => <div class="small muted">• {n}</div>)}
-          </div>
-        </>
-      )}
-
-      <div class="card">
-        <p class="title">{decision.verdict === 'catch' ? '3 · ' : ''}Ball</p>
-        <div class="row wrap small">
-          <label>HP <input type="range" min={1} max={100} value={t.hpPct} onInput={(e) => set({ hpPct: Number((e.target as HTMLInputElement).value) })} /> {t.hpPct}%</label>
-          <select class="input" value={t.status} onChange={(e) => set({ status: (e.target as HTMLSelectElement).value })} aria-label="Its status">
-            <option value="">No status</option>
-            <option value="slp">Asleep</option><option value="frz">Frozen</option><option value="par">Paralyzed</option>
-            <option value="brn">Burned</option><option value="psn">Poisoned</option>
-          </select>
-          <label>Turn <input class="input" type="number" min={1} style={{ width: '50px' }} value={t.turn} onInput={(e) => set({ turn: Math.max(1, Number((e.target as HTMLInputElement).value) || 1) })} /></label>
-          <label>Throws <input class="input" type="number" min={0} style={{ width: '50px' }} value={t.throws} onInput={(e) => set({ throws: Math.max(0, Number((e.target as HTMLInputElement).value) || 0) })} /></label>
-        </div>
-        {advice.bestOwned && <BallLine o={advice.bestOwned} label="Best in your bag" />}
-        {advice.best && (!advice.bestOwned || advice.best.id !== advice.bestOwned.id) && <BallLine o={advice.best} label={owned ? 'Best overall' : 'Best ball'} />}
-        {!owned && <div class="small muted">Open the game's Bag page once so MeowHelper can prefer balls you have.</div>}
-        {owned && !advice.bestOwned && <div class="small muted">Your last bag read has no usable balls.</div>}
-        <details class="small" style={{ marginTop: '4px' }}>
-          <summary>All balls for this encounter</summary>
-          {advice.ranked.filter((o) => !o.unavailable).map((o) => (
-            <div class="row" style={{ padding: '2px 0' }}>
-              <span class="grow">{o.name}{o.count !== undefined ? <span class="muted"> ×{o.count}</span> : ''} <span class="muted">{o.effect.why}{o.saveIt ? ' · save it for legendaries' : ''}</span></span>
-              <b>{o.effect.unknown ? '?' : pct(o.chance)}</b>
+      {catching && (
+        <div class="card">
+          <p class="title">Plan</p>
+          <div class="enc-step"><span class="enc-n">1</span><b>Weaken</b><span class="muted small"> without a KO</span></div>
+          {weaken.map((w) => (
+            <div class="small enc-opt">
+              <b>{w.monName}</b>{w.level ? <span class="muted"> Lv {w.level}</span> : ''} · {w.moveName}{' '}
+              {w.safe ? <span class="ok-t">never KOs</span> : <span>{Math.round(w.minPct)}–{Math.round(w.maxPct)}%{w.critSafe ? '' : <span class="c-y"> crit could KO</span>}</span>}
+              {w.guessed && <span class="muted"> · guessed</span>}
             </div>
           ))}
-        </details>
-        <div class="small muted" style={{ marginTop: '6px' }}>
-          Poké Ball now {pct(base)} per throw; at ~5% HP and asleep {pct(lowSleep)}. {night ? 'It is night (UTC): Dusk Ball ×3.' : 'Daytime (UTC).'}
-          {' '}Critical captures assume {dexCount} species registered (from your box).{' '}
-          <label><input type="checkbox" checked={charm.value} onChange={(e) => (charm.value = (e.target as HTMLInputElement).checked)} /> Catching Charm</label>
+          {plan.weaken.length > 3 && <button class="link small enc-opt" onClick={() => setMoreWeaken(!moreWeaken)}>{moreWeaken ? 'less' : `more (${plan.weaken.length - 3})`}</button>}
+          {!plan.weaken.length && <div class="small muted enc-opt">No safe hit in your box{plan.notes.some((n) => /Ghost/.test(n)) ? ' (Ghost: False Swipe does nothing)' : ''}. Sync your box (⚙) so MeowHelper knows your moves.</div>}
+
+          <div class="enc-step"><span class="enc-n">2</span><b>Status</b><span class="muted small"> sleep ×2.5 › paralysis ×1.5 › burn/poison</span></div>
+          {status.map((o) => (
+            <div class="small enc-opt">
+              <b>{o.monName}</b> · {o.moveName} <span class="muted">{STATUS_LABEL[o.status]} · {o.accuracy}%</span>
+              {o.note ? <span class="muted"> · {o.note}</span> : ''}{o.mayFail ? <span class="c-y"> · {o.mayFail}</span> : ''}
+              {o.guessed && <span class="muted"> · guessed</span>}
+            </div>
+          ))}
+          {plan.status.length > 3 && <button class="link small enc-opt" onClick={() => setMoreStatus(!moreStatus)}>{moreStatus ? 'less' : `more (${plan.status.length - 3})`}</button>}
+          {!plan.status.length && <div class="small muted enc-opt">No status move that works on it in your box.</div>}
+          {plan.notes.filter((n) => !/Ghost/.test(n)).map((n) => <div class="small muted enc-opt">• {n}</div>)}
         </div>
-        <div class="small muted">Estimate: ball, status and level bonuses are the wiki's; the HP and shake math is the mainline games'. A failed 2nd throw can let it flee (5%, then 10%, 20%).</div>
-      </div>
+      )}
+
+      {!catching && <DefeatView ds={ds} t={t} snap={snap} />}
+
+      {(held.length > 0 || ((s.rarity === 'legendary' || isUltraBeast(s.id)) && s.spawnRequirement)) && (
+        <div class="small muted" style={{ padding: '0 4px' }}>
+          {held.length > 0 && <>May hold: {held.map((h, i) => <>{i > 0 && ' · '}{h.name} {pct(h.chance)}</>)}{t.mapId ? '' : ' (depends on the map)'}</>}
+          {(s.rarity === 'legendary' || isUltraBeast(s.id)) && s.spawnRequirement ? <div>{s.spawnRequirement}</div> : null}
+        </div>
+      )}
+
+      <details class="card small enc-more">
+        <summary><b>All balls</b> <span class="muted">({advice.ranked.filter((o) => !o.unavailable).length})</span></summary>
+        {advice.ranked.filter((o) => !o.unavailable).map((o) => (
+          <div class="row" style={{ padding: '3px 0' }}>
+            <BallIcon ds={ds} id={o.id} size={16} />
+            <span class="grow">{o.name}{o.count !== undefined ? <span class="muted"> ×{o.count}</span> : ''} <span class="muted">{o.effect.why}{o.saveIt ? ' · save it for legendaries' : ''}</span></span>
+            <b>{o.effect.unknown ? '?' : pct(o.chance)}</b>
+          </div>
+        ))}
+        {!owned && <div class="muted">Open the game's Bag page once so MeowHelper can prefer balls you have.</div>}
+      </details>
+
+      <details class="card small enc-more">
+        <summary><span aria-hidden="true">ⓘ</span> <b>How these odds work</b></summary>
+        <p>Estimate: ball, status and level bonuses are the wiki's; the HP and shake math is the mainline games'. Weaken hits are sized against the weakest possible {s.name} (IV 0, worst nature and ability) at its current HP.</p>
+        <p>Critical captures assume {dexCount} species registered (counted from your box). <label><input type="checkbox" checked={charm.value} onChange={(e) => (charm.value = (e.target as HTMLInputElement).checked)} /> I have the Catching Charm</label></p>
+        <p>After a failed 2nd throw it can flee (5%, then 10%, 20%); sleep or freeze stops that. {night ? 'It is night (UTC): Dusk Ball ×3.' : 'Daytime (UTC).'}</p>
+      </details>
     </>
   );
 }
 
-function BallLine({ o, label }: { o: BallOption; label: string }) {
+/** No live card: the wild Pokémon from the manual fields, and your strongest box Pokémon as the team. */
+function manualWild(ds: Dataset, t: Target, boxMons: BoxMon[]): WildSnapshot {
+  const top = [...boxMons].filter((b) => b.level).sort((a, b) => (b.level ?? 0) - (a.level ?? 0)).slice(0, 6);
+  return {
+    v: 1, at: 0, view: 'manual', name: ds.species[t.species]?.name ?? '', level: t.level, shiny: t.shiny, balls: [],
+    hpPct: t.hpPct, status: t.status || undefined,
+    party: top.map((b, i) => ({ name: ds.species[b.species]?.name ?? '?', level: b.level, active: i === 0, fainted: false })),
+  };
+}
+
+/** "Defeat it": the Battle tab's move ranking for each healthy team member vs this wild Pokémon. */
+function DefeatView({ ds, t, snap }: { ds: Dataset; t: Target; snap: WildSnapshot | null }) {
+  const w = useMemo(() => (snap ? { ...snap, hpPct: snap.hp !== undefined ? undefined : t.hpPct, status: snap.status ?? (t.status || undefined), level: snap.level ?? t.level } : manualWild(ds, t, box.value)), [ds, snap, t, box.value]);
+  const plan = useMemo(() => defeatPlan(ds, box.value, w), [ds, box.value, w]);
+  const [all, setAll] = useState(false);
+  const shown = plan.options.slice(0, all ? 6 : 3);
   return (
-    <div class="row" style={{ padding: '4px 0' }}>
-      <span class="grow"><b>{label}: {o.name}</b>{o.count !== undefined ? <span class="muted"> ×{o.count}</span> : ''} <span class="small muted">{o.effect.why}</span></span>
-      <b>{pct(o.chance)}</b>
+    <div class="card">
+      <p class="title">Defeat it<span class="r small muted">{snap ? 'your team' : 'your strongest box Pokémon'}</span></p>
+      {shown.map((o, i) => (
+        <div class="enc-member">
+          <div class="row small">
+            <b class="grow">{o.member.name}{o.member.level ? <span class="muted"> Lv {o.member.level}</span> : ''}{o.member.active ? <span class="chip on enc-chip">active</span> : ''}{o.guessed && o.moves.length ? <span class="muted small"> · moves guessed (not in your box)</span> : ''}</b>
+            {o.member.hp !== undefined && o.member.maxHp ? <span class="lv">{o.member.hp}/{o.member.maxHp} HP</span> : null}
+          </div>
+          {o.moves.map((a, j) => (
+            <Action top={i === 0 && j === 0} a={{
+              ...a,
+              label: a.eff && a.eff !== '×1' ? `${a.label} ${a.eff}` : a.label,
+              // Way past its HP (a Lv 56 vs a Lv 6): the KO chip says it all.
+              ...((a.minPct ?? 0) >= 100 ? { minPct: undefined, maxPct: undefined } : {}),
+            }} />
+          ))}
+          {!o.moves.length && <div class="small muted">No known damaging moves{o.guessed ? ' (not found in your box: sync it in ⚙)' : ''}.</div>}
+          {o.threat && (
+            <div class={`small ${o.threat.ko ? 'c-y' : 'muted'}`}>
+              Its best hit: {o.threat.name} {Math.round(o.threat.minPct)}–{Math.round(o.threat.maxPct)}%{o.threat.ko === 'sure' ? ' – KOs it' : o.threat.ko ? ' – can KO it' : ''}
+              {o.threat.youFirst === null ? ' · speed tie' : o.threat.youFirst ? ' · you move first' : ' · it moves first'}
+            </div>
+          )}
+        </div>
+      ))}
+      {plan.options.length > 3 && <button class="link small" onClick={() => setAll(!all)}>{all ? 'less' : `more (${plan.options.length - 3})`}</button>}
+      {!plan.options.length && <div class="small muted">No healthy Pokémon to fight with.</div>}
+      {plan.notes.map((n) => <div class="small muted">• {n}</div>)}
     </div>
   );
+}
+
+/** Height of the panel's sticky header, so the encounter header sticks right below it. */
+function useHeadHeight(): number {
+  const [h, setH] = useState(0);
+  useEffect(() => {
+    const head = document.querySelector('.head') as HTMLElement | null;
+    if (!head) return;
+    const update = () => setH(head.offsetHeight);
+    update();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    ro?.observe(head);
+    return () => ro?.disconnect();
+  }, []);
+  return h;
+}
+
+/** Colours for the drawn ball when the game's icon can't be shown: [top, band]. */
+const BALL_COLORS: Record<string, [string, string]> = {
+  pokeball: ['#e3350d', '#1d2433'], premierball: ['#ffffff', '#e3350d'], greatball: ['#2a75bb', '#e3350d'], ultraball: ['#2b2b2b', '#ffcb05'],
+  masterball: ['#7a3fb0', '#e8559c'], safariball: ['#4f7a3a', '#c9b56a'], fastball: ['#f2a900', '#e3350d'], levelball: ['#c0392b', '#f2c200'],
+  lureball: ['#1f8fb4', '#e3350d'], heavyball: ['#6b7a8a', '#2b2b2b'], loveball: ['#f06aa6', '#ffffff'], friendball: ['#46a04a', '#e3350d'],
+  moonball: ['#2f4a7a', '#f2c200'], sportball: ['#e88a2a', '#c0392b'], netball: ['#21a6a0', '#1d2433'], diveball: ['#2a8fd6', '#9fd8f5'],
+  nestball: ['#9bbf3a', '#e8b84a'], repeatball: ['#e8752a', '#f2c200'], timerball: ['#e3350d', '#ffffff'], luxuryball: ['#1d2433', '#e3350d'],
+  duskball: ['#2f6b3a', '#1d2433'], healball: ['#f19ac4', '#ffffff'], quickball: ['#2a75bb', '#f2c200'], dreamball: ['#e8a0c8', '#8a5ab0'],
+  beastball: ['#3a56b0', '#a0c8f0'], cherishball: ['#c0392b', '#e3350d'],
+};
+
+/** The game's own ball icon (wiki item sprite), or a drawn ball in its colours. */
+function BallIcon({ ds, id, size }: { ds: Dataset; id: string; size: number }) {
+  const [broken, setBroken] = useState(false);
+  const sprite = ds.items[id]?.sprite;
+  if (sprite && !broken) {
+    return <img class="bico" src={`https://pokemeowrpg.com${sprite}`} width={size} height={size} alt="" loading="lazy" onError={() => setBroken(true)} />;
+  }
+  const [top, band] = BALL_COLORS[id] ?? (/hisuian|feather|wing|jet|leaden|gigaton|origin/.test(id) ? ['#8a6a4a', '#c9b08a'] : ['#e3350d', '#1d2433']);
+  return <span class="ball bico" aria-hidden="true" style={{ width: `${size - 4}px`, height: `${size - 4}px`, background: `linear-gradient(${top} 0 43%, ${band} 43% 57%, #fff 57%)` }} />;
 }
 
 /* ---------- Ball reference ---------- */

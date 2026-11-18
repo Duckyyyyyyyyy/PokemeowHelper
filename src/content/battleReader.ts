@@ -132,7 +132,7 @@ export function parseMoveLabel(label: string): Omit<BattleMove, 'disabled'> {
   };
 }
 
-function readMoves(doc: ParentNode): BattleMove[] {
+export function readMoves(doc: ParentNode): BattleMove[] {
   return [...doc.querySelectorAll(SEL.moveButton)].map((b) => {
     const parsed = parseMoveLabel(b.getAttribute('aria-label') ?? clean(b.textContent));
     const disabled = b.hasAttribute('disabled') || b.getAttribute('aria-disabled') === 'true' || b.closest('[data-no-pp="true"]') !== null || parsed.pp === 0;
@@ -140,7 +140,7 @@ function readMoves(doc: ParentNode): BattleMove[] {
   });
 }
 
-function readBench(doc: ParentNode): RosterMon[] {
+export function readBench(doc: ParentNode): RosterMon[] {
   return [...doc.querySelectorAll(SEL.switchCard)].map((card) => {
     const label = card.querySelector(SEL.switchButton)?.getAttribute('aria-label') ?? '';
     // "Active: Cottonee, level 19, 45 of 45 HP, …" / "Switch to Timburr, level 16, 51 of 51 HP"

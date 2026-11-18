@@ -101,6 +101,8 @@ export interface Item {
   wildSources?: { species: number; chance: number; mapIds: string[] }[];
   /** Prose rule for type/map-wide wild drops ("Fairy-type wild Pokémon … 5%"). */
   wildRule?: string;
+  /** Icon path on pokemeowrpg.com ("/items/balls/ultra-ball.png"). */
+  sprite?: string;
   /** Wiki notes (e.g. "not currently awarded"). */
   notes?: string[];
 }
