@@ -4,7 +4,8 @@ import type { BoxMon, Dataset, Npc, NpcMon, NpcTeamVariant } from '../shared/typ
 import { ASSUMED_NPC_LEVEL, SELF_KO_MOVES, bestMove, boxToCalc, defenderVsNpc, makeField, moveDamage, npcToCalc, repeatable, type MoveDamage } from './damage';
 import { rulesFor, type BattleRules } from './rules';
 import { movesForBox } from './teamSuggest';
-import { predictNpcMove, type NpcGuess } from './npcModel';
+import { guessNpcSwitch, predictNpcMove, type NpcGuess, type NpcSwitchGuess } from './npcModel';
+import { npcKey, observedMoves, type ObservedStore } from './observed';
 
 /**
  * Phase 3 turn advice for SINGLES, from a battle snapshot (content script) + game data + your box.
@@ -12,7 +13,8 @@ import { predictNpcMove, type NpcGuess } from './npcModel';
  * starts at the CURRENT HP, status and stat stages:
  *   - both sides keep using their best move; priority, then speed (stages, paralysis, Scarf) set the order;
  *   - a switch takes one free hit from the NPC's best move first.
- * It is a ranking aid, not a full simulator: no crits, no secondary effects, no NPC switching.
+ * Accuracy/evasion stages scale expected damage (ranking only). It is a ranking aid, not a full
+ * simulator: no crits, no secondary effects; NPC switching is only a displayed guess.
  */
 
 export interface ActionAdvice {
@@ -46,7 +48,22 @@ export interface TurnAdvice {
   threat?: ThreatInfo;
   /** Guess of the NPC's next move (see npcModel.ts). Display only: scores use the worst-case threat. */
   prediction?: NpcGuess[];
+  /** Guess that the NPC switches out this turn (display only). */
+  npcSwitch?: NpcSwitchGuess;
+  /** Moves of their active Pokémon seen in earlier battles (battle-observed data). */
+  seenBefore?: string[];
   notes: string[];
+}
+
+export interface AdviseOptions {
+  /** Moves NPC Pokémon used in earlier battles (see observed.ts). */
+  observed?: ObservedStore;
+}
+
+/** Gen 5+ accuracy/evasion stage multiplier for a net stage n (attacker accuracy − target evasion). */
+export function accuracyStageMul(n: number): number {
+  const s = Math.max(-6, Math.min(6, n));
+  return s >= 0 ? (3 + s) / 3 : 3 / (3 - s);
 }
 
 export const lc = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -163,7 +180,7 @@ function project(myHit: number, theirHit: number, myHp: number, foeHp: number, y
 const avg = (d: MoveDamage | null) => (d ? (d.minPct + d.maxPct) / 2 : 0);
 const pctTxt = (d: { minPct: number; maxPct: number }) => `${Math.round(d.minPct)}–${Math.round(d.maxPct)}%`;
 
-export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[]): TurnAdvice {
+export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts: AdviseOptions = {}): TurnAdvice {
   const notes: string[] = [];
   const idx = indexes(ds);
   const match = matchNpc(ds, snap);
@@ -192,18 +209,33 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[]): Tu
     .filter((e) => e.side === 'opponent' && lc(e.mon) === lc(foe.mon.name))
     .map((e) => idx.moves.get(lc(e.move))?.id)
     .filter((x): x is string => !!x);
+  // Moves it used in earlier battles against this trainer + team (battle-observed).
+  const seenBefore = opts.observed ? observedMoves(opts.observed, npcKey(match, snap), snap.opponent.name, snap.opponent.level) : [];
+  // The store also holds this battle's moves (recorded as they happen): show only the earlier ones.
+  const earlier = seenBefore.filter((id) => !usedThisBattle.includes(id));
+  if (earlier.length) out.seenBefore = earlier;
+  const seen = [...new Set([...usedThisBattle, ...seenBefore])];
+  let extra: string[] = [];
   if (!foe.known) {
-    // Guessed set: moves seen in the log are certain, fill the rest with the guess.
-    foe.mon.moves = [...new Set([...usedThisBattle, ...foe.mon.moves])].slice(0, 4);
-    notes.push(`${foe.mon.name}'s set is a guess (moves seen this battle + latest level-up moves, perfect IVs).`);
+    // Guessed set: moves seen in battle are certain, fill the rest with the guess.
+    foe.mon.moves = [...new Set([...seen, ...foe.mon.moves])].slice(0, 4);
+    notes.push(`${foe.mon.name}'s set is a guess (moves seen in battle + latest level-up moves, perfect IVs).`);
+  } else {
+    // Known wiki set: never overwritten, but a move it really used counts as a possible threat.
+    extra = seen.filter((id) => !foe.mon.moves.includes(id));
+    if (extra.length) notes.push(`${foe.mon.name} was seen using ${extra.map((id) => ds.moves[id]?.name ?? id).join(', ')}, which is not in the wiki set. Counted as a possible threat.`);
   }
   if (!me.known) notes.push(`${snap.player.name} is not in your box: using average IVs. Sync your box for exact numbers.`);
 
   const myCalc = applyState(boxToCalc(ds, me.mon), snap.player, snap.boosts.player);
   const foeCalc = applyState(npcToCalc(ds, foe.mon), snap.opponent, snap.boosts.opponent);
-  const foeMoves = foe.mon.moves.filter((id) => !rules.bannedMoves.has(id));
+  const foeMoves = [...foe.mon.moves, ...extra].filter((id) => !rules.bannedMoves.has(id));
+  // Your accuracy vs their evasion (e.g. Kingdra at Evasion +1): lowers expected damage for ranking only.
+  const accMul = accuracyStageMul((snap.boosts.player.accuracy ?? 0) - (snap.boosts.opponent.evasion ?? 0));
   out.prediction = predictNpcMove(ds, foeCalc, defenderVsNpc(myCalc, rules), foeMoves, {
     field, myStatus: snap.player.status, myBoosts: snap.boosts.player, foeBoosts: snap.boosts.opponent, usedThisBattle,
+    // It has not moved yet this battle (approximation: a Pokémon switched back in counts as having moved).
+    firstMove: usedThisBattle.length === 0,
   });
   const myHp = curPct(myCalc);
   const foeHp = curPct(foeCalc);
@@ -253,15 +285,21 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[]): Tu
       continue;
     }
     const first = order(myCalc, foeCalc, d.priority, threat?.priority ?? 0);
-    const p = project(d.expectedPct, theirHit, myHp, foeHp, first);
+    // expectedPct already includes the move's base accuracy; stages scale it (capped at 100%).
+    const baseAcc = ds.moves[g.id].accuracy;
+    const alwaysHits = baseAcc === true || typeof baseAcc !== 'number' || baseAcc <= 0; // same rule as accOf() in damage.ts
+    const base = alwaysHits ? 1 : (baseAcc as number) / 100;
+    const hitChance = alwaysHits ? 1 : Math.min(1, base * accMul);
+    const p = project(d.expectedPct * (hitChance / base), theirHit, myHp, foeHp, first);
     const ko = d.minPct >= foeHp ? 'sure' : d.maxPct >= foeHp ? 'chance' : undefined;
     let reason: string;
     if (ko === 'sure' && first !== false) reason = 'KOs now' + (first === null ? ' (speed tie)' : ', you move first') + '.';
     else if (ko === 'sure') reason = out.threat?.ko === 'sure' ? 'Would KO, but they move first and KO you.' : 'KOs after taking their hit.';
     else if (ko === 'chance') reason = `Can KO now (needs a high roll)${first === false ? ', after their hit' : ''}.`;
     else reason = `${p.myTurns === Infinity ? 'No KO' : `${p.myTurns} hits to KO`}; ${p.win ? 'you win the trade' : 'you lose the trade'}.`;
-    const accuracy = ds.moves[g.id].accuracy;
-    if (accuracy !== true && accuracy < 100) reason += ` ${accuracy}% accuracy.`;
+    if (!alwaysHits && hitChance < 1) {
+      reason += accMul === 1 ? ` ${baseAcc}% accuracy.` : ` ~${Math.round(hitChance * 100)}% to hit (accuracy/evasion stages).`;
+    }
     let score = Math.round(Math.max(0, Math.min(100, p.score + (ko === 'sure' && first !== false ? 10 : 0))));
     if (SELF_KO_MOVES.has(g.id)) {
       // One use only and you faint too: worth it for a sure KO, otherwise a last resort.
@@ -282,6 +320,17 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[]): Tu
     if (r.active || r.fainted || (r.hp ?? 1) <= 0) continue;
     out.actions.push(switchAdvice(ds, idx, box, r, foeCalc, foeMoves, rules, field));
   }
+
+  // Might the NPC switch out? (Display only.)
+  const myMoveIds = repeatable(snap.moves.filter((m) => !m.disabled).map((m) => idx.moves.get(lc(m.name))?.id).filter((x): x is string => !!x && !rules.bannedMoves.has(x)));
+  const npcBench = snap.opponentTeam
+    .filter((r) => !r.active && !r.fainted && (r.hp ?? 1) > 0 && lc(r.name) !== lc(snap.opponent!.name))
+    .map((r) => {
+      const s = foeSet(ds, idx, match?.variant, r);
+      return s && { name: r.name, calc: applyState(npcToCalc(ds, s.mon), r) };
+    })
+    .filter((x): x is NonNullable<typeof x> => !!x);
+  if (npcBench.length) out.npcSwitch = guessNpcSwitch(ds, foeCalc, defenderVsNpc(myCalc, rules), myMoveIds, foeMoves, npcBench, field);
 
   out.actions.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
   if (Object.keys(snap.boosts.player).length || Object.keys(snap.boosts.opponent).length) notes.push('Stat stages come from the battle log and are included.');

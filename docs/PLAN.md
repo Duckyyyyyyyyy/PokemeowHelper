@@ -222,7 +222,7 @@ Xem mockup: **[`docs/ui-mockup.html`](ui-mockup.html)**
 - [x] Bạn đăng nhập game trong trình duyệt. Mình sẽ xem trang `wiki/#/challenges`: cấu trúc NPC (level, move, ability, item, EV/IV?), số lượng, có phân trang không.
 - [x] Đọc luật trong Wiki xem có điều gì về extension/tool hỗ trợ không.
 - [x] (Đã xem trận Brock thật 2026-11-18, xem 3a) Vào một trận NPC thật: chụp HTML snapshot màn battle, xác định đọc được species/HP/move/PP/boost từ DOM.
-- [ ] Đối chiếu damage thực tế với `@smogon/calc` Gen 9 trên vài đòn để xác nhận công thức.
+- [x] Đối chiếu damage thực tế với `@smogon/calc` Gen 9 trên vài đòn để xác nhận công thức (xem 3b: Brock 1/1, Juan 4/4 → sau đó 6/6 trong khoảng).
 - [ ] (Khuyến nghị) Hỏi staff game về extension chỉ đọc, chỉ tư vấn.
 - **Kết quả:** chốt schema dữ liệu, danh sách selector, và quyết định có làm Phase 3 hay không.
 
@@ -286,12 +286,31 @@ Xem mockup: **[`docs/ui-mockup.html`](ui-mockup.html)**
   - Đoán nước NPC đúng 1/1 (Earthquake 54%).
   - **NPC có đổi Pokémon**: Juan rút Whiscash (yếu x4 trước Grass) khi Toedscruel vào sân, đưa Kingdra ra. Bằng chứng đầu tiên cho việc dự đoán NPC đổi Pokémon (chưa làm).
   - Lỗi tìm thấy và đã sửa: Self-Destruct/Explosion được coi như dùng lặp lại được ("wins the 1v1"). Giờ các move tự hạ gục không tính vào dự đoán 1v1 và gợi ý moveset.
-- Hoãn: lưu move NPC đã dùng qua nhiều trận, dự đoán NPC đổi Pokémon (chưa từng thấy), Doubles.
+- Hoãn (đã làm ở 3c, trừ Doubles): lưu move NPC đã dùng qua nhiều trận, dự đoán NPC đổi Pokémon, Doubles.
 
-### Giai đoạn 3 — Live battle advisor (2 tuần) — *chỉ làm nếu Giai đoạn 0 cho phép*
-- `BattleReader` bằng MutationObserver và state machine theo lượt.
-- `turnAdvisor` cùng `npcModel` heuristic; tab Battle và mini HUD (tuỳ chọn).
-- Ghi lại các move NPC thực sự dùng, cập nhật dữ liệu (`battle-observed`).
+### Giai đoạn 3c — Move NPC đã thấy qua nhiều trận + accuracy/evasion + đoán NPC đổi Pokémon ✅ (code + test 2026-11-18; chưa chạy thử qua 2 trận thật)
+- **`battle-observed`** (`engine/observed.ts`): move mà Pokémon NPC thật sự dùng được lưu trong `chrome.storage.local` (key `mdObserved`), **tách khỏi dữ liệu wiki** (sync wiki không xoá). Khoá = NPC id + variant (lần đầu/rematch tách riêng) + tên Pokémon + level; trainer không có trong wiki thì khoá theo tên + loại trận.
+  - Ghi **idempotent**: chỉ lưu tập move id, đọc lại cùng snapshot không đổi gì. Bỏ Struggle; Pokémon có Metronome/Sleep Talk/Copycat… chỉ ghi move có trong set (log hiện move được gọi).
+  - Set wiki **không bị ghi đè**: move thấy trong trận mà wiki không có được thêm vào danh sách đòn nguy hiểm, kèm ghi chú. Set đoán (không có trong wiki): move đã thấy được dùng trước.
+  - Hiển thị: tab NPC ("Seen in battle", move lạ tô đỏ "not in wiki"), tab Battle ("Seen in earlier battles"), ⚙ có nút Forget. Giới hạn 600 Pokémon, bỏ cái cũ nhất.
+  - Giới hạn: panel ghi lại, nên chỉ ghi được trận mà panel đang mở (đọc 80 sự kiện cuối của log). Content script vẫn chỉ đọc trang, không đổi.
+- **Accuracy/evasion stage** (Gen 5+: (3+n)/3 hoặc 3/(3−n), n = accuracy mình − evasion họ, giới hạn ±6): nhân vào damage kỳ vọng của move bạn khi xếp hạng (ví dụ Kingdra Evasion +1 → ~75% trúng). Move không bao giờ trượt không bị ảnh hưởng. Đòn mạnh nhất của NPC và cảnh báo KO không đổi (trường hợp xấu nhất).
+- **Đoán NPC đổi Pokémon** (`guessNpcSwitch`): chỉ khi Pokémon của NPC bị bạn KO được, không KO được bạn, và có đồng đội còn khoẻ nhận đòn mạnh nhất của bạn < 45%. Chỉ hiển thị "May switch to X (guess)", không đổi điểm. Dựa trên 1 lần quan sát (Juan rút Whiscash).
+
+- **Chạy thử trực tiếp 2026-11-18 (Lt. Surge, 2 trận liên tiếp)**:
+  - ✅ Trận 1 ghi được Voltorb: Screech, Tackle; tab NPC hiện "Seen in battle". Trận 2 (sau khi reload extension) tab Battle hiện "Seen in earlier battles: Screech, Tackle" → **lưu qua nhiều trận chạy đúng**.
+  - ✅ Calc check: Giga Drain của Gloom Lv28 lên Voltorb = 51 (calc 89–106% của 54 HP = 48–57).
+  - Lỗi 1: badge stat stage dạng **viết tắt "Def -2"** (Kingdra trước đó là "Evasion +1") bị đọc thành "không đổi" và còn đè lên stage dựng từ log. Đã sửa: hiểu Atk/Def/SpA/SpD/Spe/Acc/Eva; badge không đọc được thì dùng stage từ log.
+  - Lỗi 2: **game đổi câu chữ log giữa hai trận**: "Opponent’s Voltorb used…" → "**Lt. Surge’s** Voltorb used…", "Your Gloom used…" → "Gloom used…" (không tiền tố). Reader cũ mất hết sự kiện (không ghi move, không calc check). Đã sửa: hiểu cả hai kiểu; tên trainer lấy từ tiêu đề trận; tên trần chỉ được nhận khi trùng Pokémon đang ra sân (tránh đọc nhầm "Lt. Surge used Super Potion").
+  - Quan sát AI: **4/4 lần, đòn đầu tiên của Pokémon NPC khi ra sân là status move** (Geodude Defense Curl, Onix Screech, Voltorb Screech ×2 trận, Raichu Thunder Wave), và **status move không lặp lại** (Onix Screech 1 lần rồi Rock Tomb ×3). `npcModel`: status hữu ích ×3 ở đòn đầu, status đã dùng giảm ½ mỗi lần. Đoán đúng Screech (46%) ở trận 2.
+  - **Trận 3 (sau khi reload với reader mới)**: ✅ đọc đúng cả 16 move theo câu chữ mới (đúng phe, KO, 2 lần trượt ở Evasion +1/+2), badge "Def -2" và "Eva +1/+2", tê liệt ("couldn't move" không tính là move). Đoán đúng 5/8.
+  - Quan sát AI trận 3: Voltorb Screech → Spark; Raichu **Quick Attack** (đòn đầu là đòn đánh — ngoại lệ, tổng 7/8 status-trước) → Thunder Wave → Double Team ×2 → Electro Ball; Pikachu Double Team ×2 → Quick Attack. ⇒ **move tự tăng chỉ số (Double Team…) có lặp lại**, còn status lên bạn (Screech, Thunder Wave) thì không. `npcModel`: move tự tăng giảm ×0.8 mỗi lần dùng (thay vì ½), ≈0 khi chỉ số đó đã +6.
+
+### Giai đoạn 3 — Live battle advisor — ✅ xong phần chính (3a + 3b + 3c)
+- [x] `BattleReader` bằng MutationObserver (3a). Không cần state machine riêng: log được parse thành sự kiện theo lượt (3b).
+- [x] `turnAdvisor` cùng `npcModel` heuristic, tab Battle (3a, 3b). Mini HUD: **không làm** (bạn chọn chỉ dùng side panel).
+- [x] Ghi lại các move NPC thực sự dùng (`battle-observed`, 3c).
+- Chưa làm: expectimax nhiều lượt (mục 3.3; hiện là dự đoán 1v1), crit và hiệu ứng phụ, chấm điểm status move, Doubles (Giai đoạn 4).
 
 ### Giai đoạn 4 — Mở rộng
 - Doubles/Triples (đòn đánh nhiều mục tiêu, spread damage), Battle Tower/Frontier.

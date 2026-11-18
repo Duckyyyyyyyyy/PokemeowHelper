@@ -3,7 +3,7 @@ import type { BattleMon, BattleSnapshot, Boosts } from '../../shared/battle';
 import type { Dataset } from '../../shared/types';
 import { Empty, Tip, Types, scoreClass } from '../components/common';
 import { adviseTurn, type ActionAdvice } from '../../engine/turnAdvisor';
-import { battle, damageChecks, guessScore, loadSampleBattle } from '../battleStore';
+import { battle, damageChecks, guessScore, loadSampleBattle, observed } from '../battleStore';
 import { box, dataset, isExtension } from '../store';
 import { NoData } from './shared';
 import { timeAgo } from '../boxStore';
@@ -31,7 +31,7 @@ export function BattleTab() {
 }
 
 function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
-  const advice = useMemo(() => (snap.status === 'active' ? adviseTurn(ds, snap, box.value) : null), [ds, snap, box.value]);
+  const advice = useMemo(() => (snap.status === 'active' ? adviseTurn(ds, snap, box.value, { observed: observed.value }) : null), [ds, snap, box.value, observed.value]);
   const ended = snap.status === 'won' || snap.status === 'lost';
   const ranked = advice?.actions.filter((a) => a.score !== null) ?? [];
   const unscored = advice?.actions.filter((a) => a.score === null) ?? [];
@@ -67,6 +67,8 @@ function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
                 <>{i > 0 && ' · '}{g.name} {Math.round(g.prob * 100)}%{g.ko === 'sure' ? ' (KO)' : ''}</>
               ))}
               {guessScore.value.total > 0 && <> · guess right {guessScore.value.hit}/{guessScore.value.total} this battle</>}
+              {advice.npcSwitch && <div title={advice.npcSwitch.reason}><b>May switch to {advice.npcSwitch.to}</b> (guess): {advice.npcSwitch.reason}</div>}
+              {advice.seenBefore && <div>Seen in earlier battles: {advice.seenBefore.map((id) => ds.moves[id]?.name ?? id).join(', ')}</div>}
             </div>
           )}
           <div class="card">

@@ -78,14 +78,16 @@ function readCombatant(root: Element | null): BattleMon | undefined {
   const statusEl = root.querySelector(SEL.status);
   const itemLabel = root.querySelector(SEL.item)?.getAttribute('aria-label') ?? '';
   const item = itemLabel.match(/Held item:\s*([^.]+)/i)?.[1]?.trim();
-  const changes = root.querySelector(SEL.statChanges);
+  // One badge per stat or one list: read them all. Unparsed text gives undefined, so the log's stages are used instead.
+  const changes = [...root.querySelectorAll(SEL.statChanges)].map((c) => c.getAttribute('title') || c.textContent || '').join(', ');
+  const stages = changes ? parseStatChanges(changes) : undefined;
   return {
     name,
     level: num(root.querySelector(SEL.level)?.textContent?.match(/(\d+)/)?.[1]),
     ...parseHp(root.querySelector(SEL.hp)?.textContent ?? ''),
     status: statusEl?.getAttribute('data-status') || undefined,
     item,
-    stages: changes ? parseStatChanges(changes.getAttribute('title') || changes.textContent || '') : undefined,
+    stages: stages && Object.keys(stages).length ? stages : undefined,
   };
 }
 
@@ -160,32 +162,36 @@ function readOpponentTeam(doc: ParentNode): RosterMon[] {
   }).filter((r) => r.name);
 }
 
+/** Long log wording ("Defense fell") and the short badge labels seen live ("Def -2", "Evasion +1"). */
 const STAT_WORDS: [RegExp, BoostKey][] = [
-  [/special attack|sp\. ?atk/i, 'spa'],
-  [/special defense|sp\. ?def/i, 'spd'],
-  [/attack/i, 'atk'],
-  [/defense/i, 'def'],
-  [/speed/i, 'spe'],
-  [/accuracy/i, 'accuracy'],
-  [/evasion|evasiveness/i, 'evasion'],
+  [/special attack|sp\.? ?atk|\bspa\b/i, 'spa'],
+  [/special defen[cs]e|sp\.? ?def|\bspd\b/i, 'spd'],
+  [/attack|\batk\b/i, 'atk'],
+  [/defen[cs]e|\bdef\b/i, 'def'],
+  [/speed|\bspe\b/i, 'spe'],
+  [/accuracy|\bacc\b/i, 'accuracy'],
+  [/evasion|evasiveness|\beva\b/i, 'evasion'],
 ];
 
 /**
  * Stage change in one log line, mainline wording (seen in-game: "Your Timburr's Defense
  * fell harshly!", "Your Turtwig's Speed fell!"). Returns null when the line has none.
  */
-export function parseBoostLine(text: string): { side: 'player' | 'opponent'; stats: BoostKey[]; delta: number } | null {
-  const m = text.match(/^(Your|Opponent[’']s)\s+(.+?)[’']s\s+(.+?)\s+(rose|fell)(?:\s+(sharply|harshly|drastically|severely))?!/i);
+export function parseBoostLine(text: string, who: Who = {}): { side: 'player' | 'opponent'; stats: BoostKey[]; delta: number } | null {
+  const subj = splitSubject(text, who);
+  if (!subj) return null;
+  const m = subj.rest.match(/^(.+?)[’']s\s+(.+?)\s+(rose|fell)(?:\s+(sharply|harshly|drastically|severely))?!/i);
   if (!m) return null;
-  const side = /^Your/i.test(m[1]) ? 'player' : 'opponent';
+  const side = resolveSide(subj, m[1], who);
+  if (!side) return null;
   const stats: BoostKey[] = [];
-  for (const chunk of m[3].split(/,|\band\b/)) {
+  for (const chunk of m[2].split(/,|\band\b/)) {
     const hit = STAT_WORDS.find(([re]) => re.test(chunk));
     if (hit && !stats.includes(hit[1])) stats.push(hit[1]);
   }
   if (!stats.length) return null;
-  const size = /drastically|severely/i.test(m[5] ?? '') ? 3 : m[5] ? 2 : 1;
-  return { side, stats, delta: /rose/i.test(m[4]) ? size : -size };
+  const size = /drastically|severely/i.test(m[4] ?? '') ? 3 : m[4] ? 2 : 1;
+  return { side, stats, delta: /rose/i.test(m[3]) ? size : -size };
 }
 
 /** A line where a side sends in a new Pokémon (its stat stages start fresh). */
@@ -200,15 +206,64 @@ export function switchedIn(text: string): string | undefined {
   return (text.match(/^Go,\s+(.+?)!/i) ?? text.match(/\bsent out\s+(.+?)!/i))?.[1]?.trim();
 }
 
-const SIDE = /^(Your|Opponent[’']s)\s+/i;
-const sideOf = (word: string): 'player' | 'opponent' => (/^Your/i.test(word) ? 'player' : 'opponent');
+/** Who is battling: the opponent trainer's name and each side's active Pokémon (from the log so far). */
+export interface Who {
+  trainer?: string;
+  active?: { player?: string; opponent?: string };
+}
+type Side = 'player' | 'opponent';
+const lcName = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** "Opponent’s Onix used Rock Tomb! It dealt 12 damage." (wording seen in-game) */
-export function parseUseLine(text: string): { side: 'player' | 'opponent'; mon: string; move: string; damage?: number } | null {
-  const m = text.match(/^(Your|Opponent[’']s)\s+(.+?)\s+used\s+(.+?)!/i);
+/**
+ * Splits off who a log line is about. The game has used two wordings (both seen live 2026-11-18):
+ *   old: "Your Gloom used…", "Opponent’s Voltorb used…"
+ *   new: "Gloom used…" (yours, no prefix), "Lt. Surge’s Voltorb used…" (trainer's name)
+ * side is undefined for a bare name: resolveSide() decides from the active Pokémon.
+ */
+export function splitSubject(text: string, who: Who = {}): { side?: Side; rest: string } | null {
+  let m = text.match(/^Your\s+(.*)$/i);
+  if (m) return { side: 'player', rest: m[1] };
+  m = text.match(/^Opponent[’']s\s+(.*)$/i);
+  if (m) return { side: 'opponent', rest: m[1] };
+  if (who.trainer) {
+    m = text.match(new RegExp(`^${escRe(who.trainer.trim())}[’']s\\s+(.*)$`, 'i'));
+    if (m) return { side: 'opponent', rest: m[1] };
+  }
+  if (/^(You|It)\s/i.test(text)) return null; // "You used a Potion…", "It dealt 12 damage."
+  return { rest: text };
+}
+
+/** Side for a bare name: must be one of the active Pokémon when they are known; yours on a tie. */
+function resolveSide(subj: { side?: Side }, mon: string, who: Who): Side | undefined {
+  if (subj.side) return subj.side;
+  const n = lcName(mon);
+  if (who.trainer && n === lcName(who.trainer)) return undefined; // "Lt. Surge used Super Potion…"
+  const { player, opponent } = who.active ?? {};
+  if (player && n === lcName(player)) return 'player';
+  if (opponent && n === lcName(opponent)) return 'opponent';
+  return player || opponent ? undefined : 'player';
+}
+
+/** "Opponent’s Onix used Rock Tomb! It dealt 12 damage." / "Lt. Surge’s Voltorb used Screech!" / "Gloom used Giga Drain!" */
+export function parseUseLine(text: string, who: Who = {}): { side: Side; mon: string; move: string; damage?: number } | null {
+  const subj = splitSubject(text, who);
+  if (!subj) return null;
+  const m = subj.rest.match(/^(.+?)\s+used\s+(.+?)!/i);
   if (!m) return null;
+  const side = resolveSide(subj, m[1], who);
+  if (!side) return null;
   const dmg = text.match(/dealt (\d+) damage/i);
-  return { side: sideOf(m[1]), mon: m[2].trim(), move: m[3].trim(), damage: dmg ? parseInt(dmg[1], 10) : undefined };
+  return { side, mon: m[1].trim(), move: m[2].trim(), damage: dmg ? parseInt(dmg[1], 10) : undefined };
+}
+
+/** "X fainted." / "X’s attack missed." / "X avoided the attack." in either wording. */
+function subjectLine(text: string, re: RegExp, who: Who): { side: Side; mon: string } | null {
+  const subj = splitSubject(text, who);
+  const m = subj?.rest.match(re);
+  if (!subj || !m) return null;
+  const side = resolveSide(subj, m[1], who);
+  return side ? { side, mon: m[1].trim() } : null;
 }
 
 /** Wording we have not seen in a real battle yet: keep those hits out of damage checks. */
@@ -219,9 +274,10 @@ interface LogLine {
   turn?: number;
 }
 
-export function parseLog(lines: LogLine[]): { boosts: BattleSnapshot['boosts']; events: BattleEvent[] } {
+export function parseLog(lines: LogLine[], trainer?: string): { boosts: BattleSnapshot['boosts']; events: BattleEvent[] } {
   const boosts: { player: Boosts; opponent: Boosts } = { player: {}, opponent: {} };
   const active: { player?: string; opponent?: string } = {};
+  const who: Who = { trainer, active };
   const events: BattleEvent[] = [];
   const other = (s: 'player' | 'opponent') => (s === 'player' ? 'opponent' : 'player');
   lines.forEach(({ text, turn }, idx) => {
@@ -230,7 +286,7 @@ export function parseLog(lines: LogLine[]): { boosts: BattleSnapshot['boosts']; 
       boosts[sw] = {};
       active[sw] = switchedIn(text);
     }
-    const use = parseUseLine(text);
+    const use = parseUseLine(text, who);
     if (use) {
       active[use.side] ??= use.mon;
       events.push({
@@ -243,20 +299,22 @@ export function parseLog(lines: LogLine[]): { boosts: BattleSnapshot['boosts']; 
     const last = events[events.length - 1];
     if (last) {
       // Follow-up lines about the last move: "Your Cottonee's attack missed.", "It dealt 9 damage.", "Opponent’s Geodude fainted."
-      if (/attack missed|avoided the attack/i.test(text) && SIDE.test(text) && sideOf(text.match(SIDE)![1]) === last.side) last.missed = true;
+      const missed = subjectLine(text, /^(.+?)[’']s attack missed/i, who);
+      const avoided = subjectLine(text, /^(.+?) avoided the attack/i, who);
+      if ((missed && missed.side === last.side) || (avoided && avoided.side !== last.side)) last.missed = true;
       const dmg = text.match(/^It dealt (\d+) damage/i);
       if (dmg && last.damage === undefined) last.damage = parseInt(dmg[1], 10);
       if (UNUSUAL.test(text) && idx === last.idx + 1) last.unusual = true;
-      const fainted = text.match(/^(Your|Opponent[’']s)\s+(.+?)\s+fainted/i);
-      if (fainted && sideOf(fainted[1]) !== last.side && fainted[2].trim() === last.target) last.targetFainted = true;
+      const fainted = subjectLine(text, /^(.+?)\s+fainted/i, who);
+      if (fainted && fainted.side !== last.side && fainted.mon === last.target) last.targetFainted = true;
     }
-    const b = parseBoostLine(text);
+    const b = parseBoostLine(text, who);
     if (b) for (const s of b.stats) boosts[b.side][s] = Math.max(-6, Math.min(6, (boosts[b.side][s] ?? 0) + b.delta));
   });
   return { boosts, events };
 }
 
-function readLog(doc: ParentNode): { lines: string[]; boosts: BattleSnapshot['boosts']; events: BattleEvent[] } {
+function readLog(doc: ParentNode, trainer?: string): { lines: string[]; boosts: BattleSnapshot['boosts']; events: BattleEvent[] } {
   let turn: number | undefined;
   const lines: LogLine[] = [...doc.querySelectorAll(SEL.logLine)].map((li) => {
     const label = li.querySelector(SEL.logTurn)?.textContent ?? '';
@@ -265,14 +323,14 @@ function readLog(doc: ParentNode): { lines: string[]; boosts: BattleSnapshot['bo
     // Gender is shown as text after the name ("CottoneeFemale"); drop it so lines read naturally.
     return { text: clean((li.textContent ?? '').replace(label, '')).replace(/(\S)(Male|Female)\b/g, '$1'), turn };
   });
-  const { boosts, events } = parseLog(lines);
+  const { boosts, events } = parseLog(lines, trainer);
   return { lines: lines.slice(-12).map((l) => l.text), boosts, events: events.slice(-80) };
 }
 
 export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | null {
   const arena = doc.querySelector(SEL.arena);
   if (!arena) return null;
-  const log = readLog(arena);
+  const log = readLog(arena, clean(arena.querySelector(SEL.opponentName)?.textContent) || undefined);
   const player = readCombatant(arena.querySelector(SEL.playerStats));
   const opponent = readCombatant(arena.querySelector(SEL.opponentStats));
   return {

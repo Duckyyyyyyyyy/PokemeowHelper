@@ -29,6 +29,35 @@ describe('NPC move guess', () => {
     expect(g[0].prob).toBeGreaterThan(0.3);
   });
 
+  it('its first move on the field is likely a status move (seen live 4/4), later ones are mostly attacks', () => {
+    const me = boxToCalc(ds, mon(387, 14));
+    const first = predictNpcMove(ds, npcToCalc(ds, onix), me, onix.moves, { field, firstMove: true });
+    const later = predictNpcMove(ds, npcToCalc(ds, onix), me, onix.moves, { field, usedThisBattle: ['screech'] });
+    const screech = (g: typeof first) => g.find((x) => x.name === 'Screech')!.prob;
+    const plain = predictNpcMove(ds, npcToCalc(ds, onix), me, onix.moves, { field });
+    expect(screech(first)).toBeGreaterThan(1.5 * screech(plain));
+    expect(screech(later)).toBeLessThan(screech(plain)); // not repeated
+    expect(['Rock Tomb', 'Rock Throw']).toContain(later[0].name);
+    // A status move that is useless now (you already have a status) is not boosted.
+    const lance = ds.npcs.find((n) => n.id === 'challenge:kanto-lance')!.variants[0].team[2];
+    const tw = predictNpcMove(ds, npcToCalc(ds, lance), boxToCalc(ds, mon(387, 50)), lance.moves, { field, firstMove: true, myStatus: 'par' });
+    expect(tw.find((x) => x.name === 'Thunder Wave')!.prob).toBeLessThan(0.05);
+  });
+
+  it('a self-boost like Double Team can come again (Raichu and Pikachu each used it twice live), until maxed', () => {
+    const pikachu = ds.npcs.find((n) => n.id === 'challenge:ltsurge')!.variants[0].team[1];
+    const me = boxToCalc(ds, mon(387, 28));
+    const dt = (g: ReturnType<typeof predictNpcMove>) => g.find((x) => x.name === 'Double Team')!.prob;
+    const afterOne = predictNpcMove(ds, npcToCalc(ds, pikachu), me, pikachu.moves, { field, usedThisBattle: ['doubleteam'], foeBoosts: { evasion: 1 } });
+    expect(dt(afterOne)).toBeGreaterThan(0.15); // was ~11% live, and it came again
+    const maxed = predictNpcMove(ds, npcToCalc(ds, pikachu), me, pikachu.moves, { field, usedThisBattle: Array(6).fill('doubleteam'), foeBoosts: { evasion: 6 } });
+    expect(dt(maxed)).toBeLessThan(0.02);
+    // Screech on you still is not repeated.
+    const voltorb = ds.npcs.find((n) => n.id === 'challenge:ltsurge')!.variants[0].team[0];
+    const v = predictNpcMove(ds, npcToCalc(ds, voltorb), me, voltorb.moves, { field, usedThisBattle: ['screech'] });
+    expect(v.find((x) => x.name === 'Screech')!.prob).toBeLessThan(0.15);
+  });
+
   it('does not expect a status move on a Pokémon that already has a status', () => {
     const lance = ds.npcs.find((n) => n.id === 'challenge:kanto-lance')!.variants[0];
     const dragonair = lance.team[2]; // has Thunder Wave
