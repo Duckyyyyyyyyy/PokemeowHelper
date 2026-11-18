@@ -20,7 +20,7 @@ You need a `MeowHelper-x.y.z.zip` file (from a friend, or from the [Releases](..
 1. Unzip it into a folder you will keep, for example `Documents\MeowHelper`. Don't delete the folder later; Chrome runs the extension from it.
 2. Open `chrome://extensions` and turn on **Developer mode** (top right).
 3. Click **Load unpacked** and pick the unzipped folder (the one with `manifest.json` in it).
-4. Pin MeowHelper from the puzzle-piece menu, then click its icon to open the side panel.
+4. Pin MeowHelper from the puzzle-piece menu, then click its icon. By default MeowHelper opens in a small floating window (see **Window or side panel** below).
 5. Log in to pokemeowrpg.com. In MeowHelper's ⚙ tab click **Sync data** (the game's wiki data, about 8 MB, once), then **Sync box from game** (your Pokémon).
 6. Reload any open game tab once, so the Battle tab can see battles.
 7. Open the game's **Bag** page once, so MeowHelper knows your TMs and items. Open it again after buying or using items.
@@ -30,6 +30,15 @@ You need a `MeowHelper-x.y.z.zip` file (from a friend, or from the [Releases](..
 Chrome may show a "developer mode extensions" notice at startup; that is normal for extensions installed this way.
 
 **Brave, Edge and other Chromium browsers** work the same way: open `brave://extensions` (or `edge://extensions`), turn on Developer mode and **Load unpacked**. In Brave the panel opens in Brave's sidebar when you click the MeowHelper icon. Brave has had bugs with extension side panels (for example [the panel closing by itself](https://github.com/brave/brave-browser/issues/32132) or [crashes in some versions](https://github.com/brave/brave-browser/issues/40262)); if that happens, update Brave or use Chrome.
+
+## Window or side panel
+
+In ⚙ → **Where MeowHelper opens** you can choose:
+
+- **Floating window** (default): the toolbar icon opens a small standalone window, or focuses it if it is already open. Its size and position are remembered. It does not follow you between tabs. Live battle and bag data still arrive, because the game page writes them to extension storage, not to "the current tab". Chrome has no always-on-top option for windows, so the browser window can cover it; put it on a second monitor or snap the two side by side.
+- **Side panel on game tabs only**: the docked panel is enabled only on pokemeowrpg.com tabs and disappears on other sites.
+
+After switching, close the old window or panel and click the icon again.
 
 ## Share with a friend
 
@@ -100,7 +109,7 @@ Then load the `dist/` folder with **Load unpacked** as above.
 public/           manifest.json, icons (copied into dist/)
 sidepanel.html    side panel entry page
 src/
-  background/     service worker (opens the side panel)
+  background/     service worker (floating window / side panel toolbar handling)
   content/        read-only content script: battleReader (selectors + log parser), bagReader (Bag page)
   data/           wiki sync, box sync, data parsing, IndexedDB
   engine/         damage calc, team picker, move and held-item advice, turn advisor, NPC move guess, seen-in-battle store
