@@ -39,9 +39,32 @@ export interface RosterMon {
   moves?: { name: string; pp?: number; maxPp?: number }[];
 }
 
+/**
+ * One move use from the battle log, e.g. "Opponent’s Onix used Rock Tomb! It dealt 12 damage."
+ * Only wording seen in a real battle is parsed; crits/multi-hit lines are flagged, not parsed.
+ */
+export interface BattleEvent {
+  /** Position in the full log (stable while the battle lasts). */
+  idx: number;
+  turn?: number;
+  side: 'player' | 'opponent';
+  mon: string;
+  move: string;
+  /** The other side's active Pokémon when the move was used. */
+  target?: string;
+  damage?: number;
+  missed?: boolean;
+  /** The target fainted right after this hit (damage may be capped by its HP). */
+  targetFainted?: boolean;
+  /** Line has wording we don't model (critical hit, multi-hit…): keep out of damage checks. */
+  unusual?: boolean;
+  /** Stat stages of attacker and target at that moment. */
+  stages: { attacker: Boosts; target: Boosts };
+}
+
 export interface BattleSnapshot {
-  /** Reader schema version, bump when the shape changes. */
-  v: 1;
+  /** Reader schema version, bump when the shape changes (v1 had no events). */
+  v: 1 | 2;
   at: number;
   /** arena data-status: "active", "won", "lost"… */
   status: string;
@@ -59,4 +82,6 @@ export interface BattleSnapshot {
   boosts: { player: Boosts; opponent: Boosts };
   /** Last few log lines, for display. */
   log: string[];
+  /** Move uses parsed from the whole log (v2+; missing in v1 snapshots). */
+  events?: BattleEvent[];
 }

@@ -24,7 +24,9 @@ Full plan: [docs/PLAN.md](docs/PLAN.md) · Mockup: [docs/ui-mockup.html](docs/ui
 - Open a battle on pokemeowrpg.com and the **Battle** tab follows it live: both Pokémon with exact HP, status and stat changes (rebuilt from the battle log).
 - Every option is ranked: your 4 moves and each switch, with damage %, KO chance and a short reason. It also shows the NPC's most dangerous hit and who moves first.
 - How it reads the battle: a content script watches the battle screen and only reads it. It never clicks, types, changes the page or calls the game's API. After installing or updating MeowDex, reload the game tab once.
-- Not yet: Doubles, NPC switch prediction, crits and move side effects.
+- **Likely next move** (a guess): the NPC's moves with a probability each, and how often the guess was right this battle. The KO warning still uses their strongest hit.
+- **Calc check**: each hit in the battle log ("It dealt 12 damage") is compared with the calc's range for that hit, when both Pokémon's exact sets are known.
+- Not yet: Doubles, NPC switch prediction, crits and move side effects, remembering NPC moves across battles.
 
 ## Install in Chrome (load unpacked)
 ```bash

@@ -111,6 +111,9 @@ export interface MoveDamage {
   moveId: string;
   name: string;
   type: string;
+  /** Raw HP damage range (before accuracy). */
+  lo: number;
+  hi: number;
   /** % of the defender's max HP. */
   minPct: number;
   maxPct: number;
@@ -151,6 +154,8 @@ export function moveDamage(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, move
     moveId,
     name: ds.moves[moveId]?.name ?? mv.name,
     type: ds.moves[moveId]?.type ?? mv.type,
+    lo,
+    hi,
     minPct,
     maxPct,
     expectedPct: avg * accOf(ds, moveId),
@@ -159,6 +164,11 @@ export function moveDamage(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, move
     koText,
   };
 }
+
+/** Moves that make the user faint: they can't be repeated, so they never "win a 1v1" by spamming. */
+export const SELF_KO_MOVES: ReadonlySet<string> = new Set(['selfdestruct', 'explosion', 'mistyexplosion', 'finalgambit', 'memento', 'healingwish', 'lunardance']);
+/** Moves a Pokémon can keep using turn after turn (for 1v1 projections). */
+export const repeatable = (ids: string[]) => ids.filter((id) => !SELF_KO_MOVES.has(id));
 
 export function bestMove(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, moveIds: string[], field?: Field): MoveDamage | null {
   let best: MoveDamage | null = null;
@@ -201,7 +211,7 @@ export interface Duel {
  * or items that heal. Good for ranking, not a full simulator.
  */
 export function duel(ds: Dataset, me: CalcPokemon, myMoves: string[], foe: CalcPokemon, foeMoves: string[], field?: Field, rules?: BattleRules): Duel {
-  const legal = (ids: string[]) => (rules?.bannedMoves.size ? ids.filter((id) => !rules.bannedMoves.has(id)) : ids);
+  const legal = (ids: string[]) => repeatable(rules?.bannedMoves.size ? ids.filter((id) => !rules.bannedMoves.has(id)) : ids);
   const mine = bestMove(ds, me, foe, legal(myMoves), field);
   const theirs = bestMove(ds, foe, defenderVsNpc(me, rules), legal(foeMoves), field);
   const myAvg = mine ? (mine.minPct + mine.maxPct) / 2 : 0;

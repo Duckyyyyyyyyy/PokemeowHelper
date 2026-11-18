@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { monName, parseBoostLine, parseHp, parseMoveLabel, readBattle, switchSide } from '../src/content/battleReader';
+import { monName, parseBoostLine, parseHp, parseLog, parseMoveLabel, readBattle, switchSide, switchedIn } from '../src/content/battleReader';
 
 const html = readFileSync(resolve(__dirname, 'fixtures/battle/brock-turn3.reconstructed.html'), 'utf8');
 const load = (markup: string) => {
@@ -14,7 +14,7 @@ describe('battle reader (Brock, turn 3)', () => {
   const snap = readBattle(load(html), 1)!;
 
   it('reads the battle header', () => {
-    expect(snap).toMatchObject({ v: 1, status: 'active', kind: 'gym', opponentName: 'Brock', turn: 3 });
+    expect(snap).toMatchObject({ v: 2, status: 'active', kind: 'gym', opponentName: 'Brock', turn: 3 });
   });
 
   it('reads both active Pokémon with exact HP, status and item', () => {
@@ -93,5 +93,68 @@ describe('text parsers', () => {
     expect(switchSide('Go, Turtwig!')).toBe('player');
     expect(switchSide('Brock sent out Onix!')).toBe('opponent');
     expect(switchSide('Your Turtwig used Razor Leaf!')).toBeNull();
+  });
+});
+
+describe('log events (real lines from two Brock battles, 2026-11-18)', () => {
+  // Battle 1 (whole log) – gender already stripped as the reader does.
+  const battle1 = [
+    ['Go, Cottonee!'], ['Brock sent out Geodude!'],
+    ['Your Cottonee used Stun Spore!', 1], ['Opponent’s Geodude is paralyzed! It may be unable to move!', 1],
+    ["Opponent’s Geodude couldn't move — it is paralyzed.", 1],
+    ["Your Cottonee used Mega Drain! It's super effective! It dealt 35 damage.", 2], ['Opponent’s Geodude fainted.', 2],
+    ['Brock sent out Onix!', 2],
+    ['Go, Timburr!', 3], ['Opponent’s Onix used Screech!', 3], ["Your Timburr's Defense fell harshly!", 3],
+    ['Go, Turtwig!', 4], ['Opponent’s Onix used Rock Tomb! It dealt 12 damage.', 4], ["Your Turtwig's Speed fell!", 4],
+    ['Opponent’s Onix used Rock Tomb! It dealt 12 damage.', 5], ["Your Turtwig's Speed fell!", 5],
+    ["Your Turtwig used Razor Leaf! It's super effective! It dealt 24 damage.", 5],
+    ['Opponent’s Onix used Rock Tomb! It dealt 12 damage.', 6], ["Your Turtwig's Speed fell!", 6],
+    ["Your Turtwig used Razor Leaf! It's super effective! It dealt 14 damage.", 6], ['Opponent’s Onix fainted.', 6],
+    ['You won the battle!', 6],
+  ].map(([text, turn]) => ({ text: text as string, turn: turn as number | undefined }));
+  const { events, boosts } = parseLog(battle1);
+
+  it('finds every move use with side, user, target, turn and damage', () => {
+    expect(events.map((e) => [e.turn, e.side, e.mon, e.move, e.target, e.damage ?? null])).toEqual([
+      [1, 'player', 'Cottonee', 'Stun Spore', 'Geodude', null],
+      [2, 'player', 'Cottonee', 'Mega Drain', 'Geodude', 35],
+      [3, 'opponent', 'Onix', 'Screech', 'Timburr', null],
+      [4, 'opponent', 'Onix', 'Rock Tomb', 'Turtwig', 12],
+      [5, 'opponent', 'Onix', 'Rock Tomb', 'Turtwig', 12],
+      [5, 'player', 'Turtwig', 'Razor Leaf', 'Onix', 24],
+      [6, 'opponent', 'Onix', 'Rock Tomb', 'Turtwig', 12],
+      [6, 'player', 'Turtwig', 'Razor Leaf', 'Onix', 14],
+    ]);
+  });
+
+  it('marks KOs (damage may be capped by the target’s HP)', () => {
+    expect(events.filter((e) => e.targetFainted).map((e) => `${e.mon}:${e.move}:${e.damage}`)).toEqual(['Cottonee:Mega Drain:35', 'Turtwig:Razor Leaf:14']);
+  });
+
+  it('records the stat stages at the moment of each hit', () => {
+    // Third Rock Tomb: Turtwig already at -2 Speed from the first two.
+    expect(events[6].stages).toEqual({ attacker: {}, target: { spe: -2 } });
+    expect(events[5].stages).toEqual({ attacker: { spe: -2 }, target: {} });
+    expect(boosts.player).toEqual({ spe: -3 });
+  });
+
+  it('a miss is attached to the move that missed (battle 2)', () => {
+    const r = parseLog([
+      { text: 'Go, Cottonee!' }, { text: 'Brock sent out Geodude!' },
+      { text: 'Your Cottonee used Stun Spore!', turn: 1 }, { text: "Your Cottonee's attack missed.", turn: 1 },
+      { text: 'Opponent’s Geodude used Rock Tomb! It dealt 9 damage.', turn: 1 }, { text: "Your Cottonee's Speed fell!", turn: 1 },
+    ]);
+    expect(r.events.map((e) => [e.move, !!e.missed, e.damage ?? null])).toEqual([['Stun Spore', true, null], ['Rock Tomb', false, 9]]);
+  });
+
+  it('flags wording it does not model, and accepts straight apostrophes', () => {
+    const r = parseLog([{ text: "Opponent's Onix used Rock Throw! A critical hit! It dealt 20 damage." }]);
+    expect(r.events[0]).toMatchObject({ side: 'opponent', mon: 'Onix', move: 'Rock Throw', damage: 20, unusual: true });
+  });
+
+  it('switch-in names', () => {
+    expect(switchedIn('Go, Turtwig!')).toBe('Turtwig');
+    expect(switchedIn('Brock sent out Onix!')).toBe('Onix');
+    expect(switchedIn('Mr. Mime sent out Mr. Mime!')).toBe('Mr. Mime');
   });
 });

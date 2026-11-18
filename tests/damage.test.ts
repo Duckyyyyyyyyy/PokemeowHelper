@@ -86,3 +86,19 @@ describe('moveset suggestion', () => {
     expect(s.moves.every((m) => m.source !== 'tm')).toBe(true);
   });
 });
+
+describe('self-KO moves (live bug: "Self-Destruct … wins the 1v1")', () => {
+  const lance = npc('challenge:kanto-lance').variants[0];
+  const dragonite = lance.team.find((m) => m.name === 'Dragonite')!;
+  it('a Pokémon whose only attack is Explosion cannot win a 1v1 by spamming it', () => {
+    const golem = mon('Geodude', 60, ['explosion']);
+    const d = duel(ds, boxToCalc(ds, golem), golem.moves, npcToCalc(ds, dragonite), dragonite.moves, makeField('singles'));
+    expect(d.mine).toBeNull();
+    expect(d.win).toBe(false);
+  });
+  it('move advice never suggests a self-KO move', () => {
+    const s = suggestMoveset(ds, mon('Geodude', 60, ['selfdestruct', 'explosion', 'tackle']), lance);
+    expect(s.moves.map((m) => m.moveId)).not.toContain('selfdestruct');
+    expect(s.moves.map((m) => m.moveId)).not.toContain('explosion');
+  });
+});
