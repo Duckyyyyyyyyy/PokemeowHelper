@@ -1,72 +1,107 @@
-# MeowDex – PokeMeowRPG Battle Helper
+# MeowHelper – PokeMeowRPG Battle Helper
 
-A Chrome extension (side panel) for looking up NPCs and getting team suggestions in [PokeMeowRPG](https://pokemeowrpg.com).
-**Advice only**: the extension never clicks or plays for you (game rule: *"Play yourself. Do not use bots or automation"*).
+A Chrome extension (side panel) that helps you plan and fight NPC battles in [PokeMeowRPG](https://pokemeowrpg.com): look up any NPC's team, get a team picked from your own box, and get live tips during a battle.
 
-Full plan: [docs/PLAN.md](docs/PLAN.md) · Mockup: [docs/ui-mockup.html](docs/ui-mockup.html)
+**Advice only.** MeowHelper never clicks, types or plays for you. It only reads what is on the screen (game rule: *"Play yourself. Do not use bots or automation"*). The game's staff said a helper like this is fine as long as there is no automation, and it stays that way.
 
-## Phase 1 (current)
-- **NPC tab**: 460 NPCs (Gym, Elite Four, Champion, Tower, Frontier, Mega Chamber, Rival, Rocket, World Boss) with search and filters. Each NPC shows its team, moves, ability, item, nature, EVs, and Rematch/Silver/Gold versions.
-- **Type analysis**: best attacking types, best defensive types, priority/setup moves, medicine the NPC carries, challenge requirements.
-- **Box sync**: one click reads your own Pokémon from the game (level, moves, nature, ability, item, IVs/EVs), using the same read-only request as the game's team picker. It reads 30 Pokémon per page, about 1 s apart, and stops if the game asks it to wait. It can refresh automatically when you open MeowDex (at most every 5 min). Pokémon you add by hand are kept.
-- **Team tab**: MeowDex picks a team from your box, scores every matchup, suggests a lead, and excludes Pokémon over the level cap. Rematches have no cap.
-- **Settings**: sync wiki data, export/import your box as JSON, light/dark theme.
+Fan-made, not affiliated with PokeMeowRPG.
 
-**Phase 2 – damage calc** (current):
-- Every matchup uses real damage from `@smogon/calc` (Gen 9). The inputs are real stats, moves, abilities and items, with species stats and move power taken from the game's own data. The stat formula was checked against the game: a synced Lv 16 Timburr gives exactly the stats the game shows.
-- Each matrix cell is a 1v1 estimate: both sides use their best move each turn, and speed and priority decide who hits first. Tap a cell to see the damage ranges and the result.
-- **Move advice** suggests the best 4 damaging moves for a fight, from moves the Pokémon knows, level-up moves at its level, and TMs.
-- NPC Pokémon show their real stats. Frontier Brain sets have no level in the wiki, so Lv 50 is assumed.
-- **Challenge rules** (Gym, Elite Four, Champion): OHKO moves, Destiny Bond, Perish Song, Endeavor and Pain Split are ignored, and the NPC's attacks hit through Wonder Guard.
-- **Team controls**: 🔓 lock a Pokémon onto the team, ✕ exclude one, tap a bench name to lock it in, and **Copy team** puts the team on the clipboard as Showdown-style text.
+- [Install (for players)](#install-for-players)
+- [Share with a friend](#share-with-a-friend)
+- [Features](#features)
+- [Privacy](#privacy)
+- [Build from source](#build-from-source)
+- [Project layout](#project-layout)
 
-**Phase 3 – in-battle tips** (current, singles):
-- Open a battle on pokemeowrpg.com and the **Battle** tab follows it live: both Pokémon with exact HP, status and stat changes (rebuilt from the battle log).
-- Every option is ranked: your 4 moves and each switch, with damage %, KO chance and a short reason. It also shows the NPC's most dangerous hit and who moves first.
-- How it reads the battle: a content script watches the battle screen and only reads it. It never clicks, types, changes the page or calls the game's API. After installing or updating MeowDex, reload the game tab once.
-- **Likely next move** (a guess): the NPC's moves with a probability each, and how often the guess was right this battle. The KO warning still uses their strongest hit.
-- **Calc check**: each hit in the battle log ("It dealt 12 damage") is compared with the calc's range for that hit, when both Pokémon's exact sets are known.
-- **Seen in battle**: moves NPC Pokémon actually used are remembered across battles (on this computer only, separate from the wiki data). The NPC tab marks moves the wiki doesn't list, and the Battle tab counts them as possible threats. ⚙ → Seen in battle → Forget clears them. Only battles watched with the panel open are recorded.
-- Accuracy and evasion changes (e.g. Double Team) lower the expected damage of your moves in the ranking.
-- **May switch** (a guess): shown when the NPC's Pokémon can't win the 1v1 and a teammate takes your best hit much better.
-- Not yet: Doubles, crits and move side effects, multi-turn planning.
+## Install (for players)
 
-## Install in Chrome (load unpacked)
+You need a `MeowHelper-x.y.z.zip` file (from a friend, or from the [Releases](../../releases) page).
+
+1. Unzip it into a folder you will keep, for example `Documents\MeowHelper`. Don't delete the folder later; Chrome runs the extension from it.
+2. Open `chrome://extensions` and turn on **Developer mode** (top right).
+3. Click **Load unpacked** and pick the unzipped folder (the one with `manifest.json` in it).
+4. Pin MeowHelper from the puzzle-piece menu, then click its icon to open the side panel.
+5. Log in to pokemeowrpg.com. In MeowHelper's ⚙ tab click **Sync data** (the game's wiki data, about 8 MB, once), then **Sync box from game** (your Pokémon).
+6. Reload any open game tab once, so the Battle tab can see battles.
+
+**Updating:** unzip the new version over the same folder, then click the ↻ reload button on MeowHelper in `chrome://extensions` and reload the game tab. Your synced data and settings are kept.
+
+Chrome may show a "developer mode extensions" notice at startup; that is normal for extensions installed this way.
+
+## Share with a friend
+
+```bash
+npm run package
+```
+
+This builds the extension and writes `release/MeowHelper-<version>.zip`. Send that zip (Discord, Drive…), or attach it to a GitHub Release so friends can always download the latest one. They follow [Install (for players)](#install-for-players). Each friend syncs their own wiki data and box; nothing of yours is in the zip.
+
+Don't send a `.crx` file: Chrome on Windows blocks `.crx` files that don't come from the Chrome Web Store. Publishing on the Web Store (one-time $5 developer fee, a review, and a privacy policy) is the way to get one-click installs and automatic updates later.
+
+## Features
+
+**NPC tab** – 460 NPCs (Gym, Elite Four, Champion, Tower, Frontier, Mega Chamber, Rival, Rocket, World Boss) with search and filters. Each shows its team, moves, ability, item, nature, EVs and Rematch/Silver/Gold versions, plus the best attacking/defensive types, priority and setup moves, the medicine it carries and challenge requirements. Moves an NPC was seen using in battle that the wiki doesn't list are marked.
+
+**Team tab** – picks a team from your box with real damage numbers (`@smogon/calc`, Gen 9, using the game's own stats and move data), scores every matchup, suggests a lead and leaves out Pokémon over the level cap. Tap a matrix cell for damage ranges. Lock 🔓 or exclude ✕ Pokémon, get move advice (best 4 moves from what it knows, level-up moves and TMs), and **Copy team** as Showdown text. Challenge rules are applied (no OHKO, Destiny Bond, Perish Song, Endeavor or Pain Split; NPC attacks hit through Wonder Guard).
+
+**Battle tab** (singles) – follows the battle live: both Pokémon with exact HP, status and stat changes.
+- Ranks each of your moves and switches with damage %, KO chance and a short reason; accuracy/evasion changes lower a move's expected damage.
+- Shows the NPC's most dangerous hit and who moves first.
+- **Likely next move** (a guess) with how often the guess was right this battle.
+- **Calc check**: every "It dealt N damage" in the log is compared with the calc's range.
+- **Seen in battle**: moves NPC Pokémon actually used are remembered across battles.
+- **May switch** (a guess): when the NPC's Pokémon can't win and a teammate takes your hit much better.
+
+**Settings** – sync wiki data and box, export/import your box as JSON, forget seen moves, light/dark theme.
+
+Not yet: Double battles, scoring support moves (stat boosts, debuffs, screens) for the next Pokémon, crits and move side effects, multi-turn planning. See [docs/PLAN.md](docs/PLAN.md).
+
+## Privacy
+
+Everything stays in your own Chrome:
+- **Wiki data**: read from the game's `/wiki/` page with your login and parsed as plain data (no game code runs). Stored in IndexedDB; downloaded again only after a game update.
+- **Your box**: read with the same read-only request the game's team picker uses, 30 Pokémon per page about 1 s apart, stopping if the game asks it to wait.
+- **Battles**: a content script reads the battle screen. It never clicks, types, changes the page or calls the game's API.
+
+Nothing is sent anywhere else. There are no analytics.
+
+## Build from source
+
+Needs Node 20 or newer.
+
 ```bash
 npm install
 ```
+
 ```bash
 npm run build
 ```
-1. Open `chrome://extensions` and turn on **Developer mode**.
-2. Click **Load unpacked** and pick the `dist/` folder.
-3. Click the MeowDex icon in the toolbar to open the side panel.
-4. Log in to pokemeowrpg.com in Chrome. Open MeowDex's ⚙ tab and click **Sync data** (wiki data), then **Sync box from game** (your Pokémon).
 
-What sync does: reads the `/wiki/` page to find the data file, downloads it (~8 MB), then parses it as plain data (no game code runs). The result is stored in IndexedDB. Syncing again only downloads when the game has updated.
+Then load the `dist/` folder with **Load unpacked** as above.
 
-## Development
-```bash
-npm run dev
-```
-Open `http://localhost:5174/sidepanel.html`, go to the ⚙ tab and click **Load sample data** (a 20-NPC fixture). Real sync only works inside the extension.
+| Command | What it does |
+|---|---|
+| `npm run dev` | Panel in a normal tab at `http://localhost:5174/sidepanel.html`; ⚙ → **Load sample data** uses a small fixture (real sync only works in the extension) |
+| `npm test` | Unit tests (vitest) |
+| `npm run package` | Build and zip into `release/` |
+| `npm run validate-data -- <wiki-data.js>` | Check a full downloaded wiki data file after a game update |
+| `npm run fixture -- <wiki-data.js>` | Rebuild the small test fixture in `tests/fixtures/` |
 
-```bash
-npm test
+## Project layout
+
+```
+public/           manifest.json, icons (copied into dist/)
+sidepanel.html    side panel entry page
+src/
+  background/     service worker (opens the side panel)
+  content/        read-only content script: battleReader (selectors + log parser)
+  data/           wiki sync, box sync, data parsing, IndexedDB
+  engine/         damage calc, team picker, turn advisor, NPC move guess, seen-in-battle store
+  shared/         types shared by the panel and the content script
+  ui/             Preact side panel: App (tab list), tabs/, components/, theme.css
+tests/            unit tests and fixtures (a small trimmed wiki sample, a rebuilt battle page)
+scripts/          data checks, fixture builder, packaging
+docs/             PLAN.md (roadmap and live-test notes, Vietnamese), design/ (UI mockup, icon)
 ```
 
-```bash
-npx tsx scripts/validate-data.ts <wiki-data-file.js>
-```
-This checks a full downloaded wiki data file; run it after each game update. `npm run fixture -- <file>` rebuilds the small fixture in `tests/fixtures/`.
-
-## Structure
-```
-src/background/   service worker (opens the side panel when the icon is clicked)
-src/content/      read-only content script: battleReader (selectors + parsers) → chrome.storage → Battle tab
-src/data/         literalParser (acorn), normalize (one adapter per NPC source), sync (wiki data), boxSync (your box), db (IndexedDB)
-src/engine/       typeChart, analysis, damage (@smogon/calc wrapper + 1v1 duel), rules (challenge rules), moveset, teamSuggest, turnAdvisor – plain TypeScript, with tests
-src/ui/           side panel (Preact + signals): App (tab registry), tabs/, components/, theme.css
-public/           manifest.json, icons
-```
-To add a new tab: create a component in `src/ui/tabs/`, then add one line to `TABS` in `src/ui/App.tsx`.
+To add a tab: create a component in `src/ui/tabs/` and add one line to `TABS` in `src/ui/App.tsx`.

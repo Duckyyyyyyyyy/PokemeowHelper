@@ -2,7 +2,7 @@ import { openDB, type IDBPDatabase } from 'idb';
 import type { BoxMon, BoxSyncMeta, Dataset } from '../shared/types';
 
 /** IndexedDB persistence (works both in the extension and in the dev harness). */
-const DB_NAME = 'meowdex';
+const DB_NAME = 'meowdex'; // old name kept on purpose: renaming would lose synced data
 let dbp: Promise<IDBPDatabase> | null = null;
 
 function db() {

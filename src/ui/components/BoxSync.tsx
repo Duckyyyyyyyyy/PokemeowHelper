@@ -32,7 +32,7 @@ export function BoxSyncCard({ compact = false }: { compact?: boolean }) {
                 setAutoSync(e.currentTarget.checked);
               }}
             />
-            Refresh automatically when I open MeowDex (at most every 5 min)
+            Refresh automatically when I open MeowHelper (at most every 5 min)
           </label>
         )}
         {!isExtension && <div class="small muted" style={{ marginTop: '6px' }}>Box sync only works inside the Chrome extension.</div>}

@@ -29,7 +29,7 @@ export function App() {
       <header class="head">
         <div class="brandrow">
           <span class="ball lg" aria-hidden="true" />
-          <span class="brand">Meow<span>Dex</span></span>
+          <span class="brand">Meow<span>Helper</span></span>
           <span class="status" title={ds ? `Data: ${ds.version}` : 'No data yet'}>
             <i class={`dot${ds ? '' : ' off'}`} />
             {ds ? `${ds.npcs.length} NPCs` : 'No data yet'}

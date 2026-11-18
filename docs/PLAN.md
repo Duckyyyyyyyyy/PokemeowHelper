@@ -1,7 +1,7 @@
-# MeowDex — Kế hoạch Chrome Extension hỗ trợ battle NPC cho PokeMeowRPG
+# MeowHelper — Kế hoạch Chrome Extension hỗ trợ battle NPC cho PokeMeowRPG
 
 > Trạng thái: **v0.2** (2026-11-17), đã cập nhật kết quả Giai đoạn 0 (mục 0 bên dưới). Các mục ⚠️ ở phần sau vẫn là giả định, trừ khi mục 0 đã xác nhận.
-> Mockup UI: [`docs/ui-mockup.html`](ui-mockup.html)
+> Mockup UI: [`docs/design/ui-mockup.html`](design/ui-mockup.html)
 
 ---
 
@@ -88,7 +88,7 @@ Vì vậy extension phải tuân thủ các nguyên tắc **bắt buộc** sau:
 ### 1.3 Các tool/extension tương tự đã tham khảo
 Không tìm thấy tool nào dành riêng cho PokeMeowRPG (trong phạm vi tìm kiếm). Các tool gần nhất:
 
-| Tool | Làm gì | Bài học cho MeowDex |
+| Tool | Làm gì | Bài học cho MeowHelper |
 |---|---|---|
 | [Showdex](https://github.com/doshidak/showdex) (Showdown, mã nguồn mở) | Nhúng damage calc vào trận, tự đồng bộ forme/HP/status/boost/item/moveset | Mô hình **"calc tự đồng bộ theo battle state"**. Dùng `@smogon/calc`. Đây là reference chính cho tab Battle. |
 | [dekzeh/calc](https://github.com/dekzeh/calc) (Run & Bun) | Fork của Smogon calc, **nạp sẵn toàn bộ team trainer** | Mô hình **"dữ liệu NPC định sẵn + calc"**: đúng bài toán Phase 1–2. |
@@ -201,7 +201,7 @@ score = P(KO đối thủ) × wKO  + E[damage%] × wDmg
 
 ## 4. UI — phong cách Pokémon, compact
 
-Xem mockup: **[`docs/ui-mockup.html`](ui-mockup.html)**
+Xem mockup: **[`docs/design/ui-mockup.html`](design/ui-mockup.html)**
 
 - **Bảng màu Pokémon**: vàng `#FFCB05` cho hành động chính và tab đang chọn; xanh navy `#1B3A6B` cho header và thương hiệu; xanh dương `#2A75BB` cho thông tin và lựa chọn; đỏ Pokéball `#E3350D` cho đối thủ và cảnh báo.
 - **Phong cách hiện đại, dễ theo dõi**: thẻ trắng bo góc, bóng nhẹ, tab dạng segmented control. Mỗi màn hình đọc từ trên xuống: bối cảnh → kết quả → gợi ý → hành động. Màu trạng thái nhất quán: xanh lá = tốt/KO, vàng = trung bình, đỏ = rủi ro.
@@ -313,9 +313,26 @@ Xem mockup: **[`docs/ui-mockup.html`](ui-mockup.html)**
 - Chưa làm: expectimax nhiều lượt (mục 3.3; hiện là dự đoán 1v1), crit và hiệu ứng phụ, chấm điểm status move, Doubles (Giai đoạn 4).
 
 ### Giai đoạn 4 — Mở rộng
-- Doubles/Triples (đòn đánh nhiều mục tiêu, spread damage), Battle Tower/Frontier.
-- Học hành vi NPC từ log, chia sẻ bộ dữ liệu NPC qua file JSON.
-- Đóng gói lên Chrome Web Store (nếu staff đồng ý).
+- ✅ 2026-11-18: admin game đồng ý cho dùng/chia sẻ, **với điều kiện không có automation**. Đổi tên MeowDex → **MeowHelper** (0.5.0); `npm run package` tạo zip để chia sẻ.
+- Học hành vi NPC từ log, chia sẻ bộ dữ liệu NPC qua file JSON. Battle Tower/Frontier.
+- Chrome Web Store (phí 5 USD, cần privacy policy) khi muốn cài 1 click + tự cập nhật.
+
+#### 4a — Chấm điểm move hỗ trợ (buff/debuff, mở đường cho Pokémon sau) — làm trước
+Hiện status move không có điểm trong tab Battle. Người chơi hay: tăng chỉ số (Swords Dance, Calm Mind, Dragon Dance), hạ chỉ số địch (Screech, Charm, Icy Wind), gây trạng thái (Thunder Wave, Toxic, Will-O-Wisp), dựng màn/thời tiết/bẫy (Reflect, Light Screen, Tailwind, Rain Dance, Stealth Rock), rồi để Pokémon sau "dọn".
+- **Cách chấm**: so sánh 2 kế hoạch bằng calc 1v1 đã có — (A) đánh ngay, (B) dùng move hỗ trợ 1 lượt (chịu 1 đòn mạnh nhất của địch) rồi đánh với chỉ số mới. Điểm = B tốt hơn A bao nhiêu (số lượt để KO, % máu còn lại).
+- **Cho Pokémon sau**: debuff/status nằm lại trên địch (stage hạ, PAR/BRN/PSN), còn buff của mình mất khi đổi ra. Với debuff/status: chạy lại matchup của **cả đội còn lại** với địch đã bị hạ → "Screech giúp Machamp KO trong 1 đòn thay vì 2". Màn/thời tiết: tính theo số lượt còn lại.
+- **Không chấm**: khi mình sắp bị KO trước khi kịp hưởng lợi; stage đã ±6; địch đã có trạng thái; NPC sẽ đổi Pokémon (mất debuff stage).
+- Hiển thị: dòng "Setup" trong danh sách, kèm lý do ("+2 Atk: KO Onix trong 1 đòn thay vì 3").
+- Tab Team: đánh dấu Pokémon có move hỗ trợ đáng giá cho từng NPC (gợi ý "lead dựng màn / hạ chỉ số").
+
+#### 4b — Doubles
+Wiki có format `doubles` (vd. Tate & Liza, một số Gym/E4). Hiện tab Battle chỉ đọc 1 Pokémon mỗi bên → trong trận đôi có thể sai.
+1. **Xác minh trước (cần trận thật)**: DOM trận đôi (2 ô mỗi bên? chọn mục tiêu ra sao?), câu chữ log ("used X on Y"?), spread move có giảm 25% không.
+2. **Reader**: đọc 2 Pokémon mỗi bên + mục tiêu của mỗi đòn trong log. Trước khi làm xong: phát hiện trận đôi và hiện "Doubles: chưa hỗ trợ" thay vì gợi ý sai.
+3. **Calc**: `@smogon/calc` hỗ trợ `gameType: 'Doubles'` (spread ×0.75, màn ×2/3, ally). Gợi ý theo từng Pokémon của mình: move + mục tiêu tốt nhất, cảnh báo đòn đánh trúng cả đồng đội (Earthquake, Surf) nếu đồng đội không miễn.
+4. **Phối hợp**: điểm cộng cho combo phổ biến (Helping Hand, Follow Me/Rage Powder, Fake Out, Tailwind/Trick Room, Earthquake + đồng đội bay/Levitate), và dồn 2 đòn vào 1 mục tiêu để KO.
+5. **Tab Team**: chọn cặp lead và đánh giá theo cặp (không chỉ 1v1).
+- Triples: để sau.
 
 ---
 
@@ -323,7 +340,7 @@ Xem mockup: **[`docs/ui-mockup.html`](ui-mockup.html)**
 
 | Rủi ro | Giảm thiểu |
 |---|---|
-| Vi phạm ToS → bị khoá tài khoản | Chỉ tư vấn, đọc thụ động, UI ở side panel, hỏi staff trước Phase 3 |
+| Vi phạm ToS → bị khoá tài khoản | Chỉ tư vấn, đọc thụ động, UI ở side panel. Admin đã đồng ý (2026-11-18) với điều kiện không automation |
 | Game đổi UI → selector hỏng | Gom selector một chỗ, test bằng HTML snapshot, báo lỗi rõ trong panel |
 | Cơ chế game khác mainline | Đối chiếu damage ở Phase 0, có lớp override và rule modifier |
 | Dữ liệu NPC thiếu (ẩn EV/item) | Đánh dấu "chưa biết", dùng giá trị mặc định thận trọng, bổ sung từ quan sát trận |
@@ -334,7 +351,7 @@ Xem mockup: **[`docs/ui-mockup.html`](ui-mockup.html)**
 ## 7. Cấu trúc thư mục dự kiến
 ```
 PokemeowHelper/
-├─ docs/            PLAN.md, ui-mockup.html
+├─ docs/            PLAN.md, design/ (mockup, icon)
 ├─ src/
 │  ├─ manifest.ts
 │  ├─ background/   service worker, message bus

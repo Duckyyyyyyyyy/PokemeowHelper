@@ -71,7 +71,7 @@ export async function fetchCollection(opts: BoxSyncOptions = {}): Promise<RawCol
     } catch {
       throw new BoxSyncError('Unexpected response from the game (not JSON). Are you signed in?');
     }
-    if (!Array.isArray(body?.pokemon)) throw new BoxSyncError('Unexpected response format from the game. MeowDex may need an update.');
+    if (!Array.isArray(body?.pokemon)) throw new BoxSyncError('Unexpected response format from the game. MeowHelper may need an update.');
 
     all.push(...body.pokemon);
     opts.onProgress?.(all.length, page);

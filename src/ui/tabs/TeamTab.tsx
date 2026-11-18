@@ -41,7 +41,7 @@ function Suggestion({ ds }: { ds: Dataset }) {
 
   async function exportTeam() {
     if (!res || !npc || !v) return;
-    const text = teamToText(ds, res.team.map((c) => c.mon), `MeowDex team vs ${v.trainerName ?? npc.name}${npc.variants.length > 1 ? ` (${v.label})` : ''}`);
+    const text = teamToText(ds, res.team.map((c) => c.mon), `MeowHelper team vs ${v.trainerName ?? npc.name}${npc.variants.length > 1 ? ` (${v.label})` : ''}`);
     try {
       await navigator.clipboard.writeText(text);
       setCopied('Team copied to the clipboard.');

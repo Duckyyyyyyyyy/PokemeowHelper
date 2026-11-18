@@ -19,11 +19,11 @@ export function BattleTab() {
     return (
       <>
         <Empty title="No battle open">
-          <p class="small">Start a battle on pokemeowrpg.com. MeowDex reads the battle screen (read-only) and ranks your options every turn.</p>
-          {isExtension && <p class="small muted">Just installed or updated MeowDex? Reload the game tab once so it can see the battle.</p>}
+          <p class="small">Start a battle on pokemeowrpg.com. MeowHelper reads the battle screen (read-only) and ranks your options every turn.</p>
+          {isExtension && <p class="small muted">Just installed or updated MeowHelper? Reload the game tab once so it can see the battle.</p>}
         </Empty>
         {import.meta.env.DEV && <button class="btn" style={{ width: '100%' }} onClick={loadSampleBattle}>Load sample battle (dev)</button>}
-        <Tip kind="info">MeowDex only gives advice. You always pick your moves – it never clicks for you.</Tip>
+        <Tip kind="info">MeowHelper only gives advice. You always pick your moves – it never clicks for you.</Tip>
       </>
     );
   }

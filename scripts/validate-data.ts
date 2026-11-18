@@ -1,6 +1,6 @@
 /**
  * Checks a downloaded wiki data file end-to-end: parse → normalize → analysis.
- * Use after a game update to see whether MeowDex still understands the data.
+ * Use after a game update to see whether MeowHelper still understands the data.
  *
  *   npx tsx scripts/validate-data.ts <path-to-downloaded-wiki-data.js>
  */

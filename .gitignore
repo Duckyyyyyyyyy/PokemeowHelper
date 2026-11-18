@@ -1,4 +1,28 @@
+# Dependencies and build output
 node_modules/
 dist/
+release/
+*.zip
+*.crx
+coverage/
+
+# Extension signing key: never publish it (whoever has it can ship updates as you)
+*.pem
+
+# Local settings and secrets
 *.local
-.claude/worktrees/
+.env
+.env.*
+.claude/
+.vscode/
+.idea/
+
+# Your own game data: raw wiki downloads and box exports
+*wiki-data*.js
+meowdex-box*.json
+meowhelper-box*.json
+
+# OS and logs
+.DS_Store
+Thumbs.db
+*.log
