@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { readWild } from '../src/content/wildReader';
+import { readTeamPanel, readWild } from '../src/content/wildReader';
+import { wildParty } from '../src/engine/wildDefeat';
 
 const html = readFileSync(resolve(__dirname, 'fixtures/explore/doduo-intro.reconstructed.html'), 'utf8');
 const load = (markup: string) => {
@@ -26,7 +27,7 @@ describe('wild encounter reader (Doduo intro, Grasslands 3)', () => {
       { name: 'Ultra Ball', count: 18 },
       { name: 'Quick Ball', count: 5 },
     ]);
-    expect(snap.lead).toEqual({ name: 'Charizard', level: 56, hp: 166, maxHp: 166, item: 'Fire Gem' });
+    expect(snap.lead).toEqual({ name: 'Charizard', level: 56, hp: 166, maxHp: 166, item: 'Fire Gem', gender: 'M' });
   });
 
   it('returns null without an encounter card', () => {
@@ -72,8 +73,38 @@ describe('wild encounter reader (Doduo intro, Grasslands 3)', () => {
     const panel = `<ul class="starter-options"><li data-explore-team-slot="0"><img class="pokemon-sprite" alt="Charizard"><span class="explore-team-level">Lv. 56</span><span>166/166 HP</span></li>
       <li data-explore-team-slot="1"><img class="pokemon-sprite" alt="Pidgey"><span class="explore-team-level">Lv. 12</span><span>0/35 HP</span></li></ul>`;
     const s = readWild(load(panel + html))!;
-    expect(s.party?.map((r) => [r.name, r.level, r.hp, r.active, r.fainted])).toEqual([['Charizard', 56, 166, true, false], ['Pidgey', 12, 0, false, true]]);
+    expect(s.party?.map((r) => [r.name, r.level, r.hp, r.active, r.fainted])).toEqual([['Charizard', 56, 166, false, false], ['Pidgey', 12, 0, false, true]]);
     expect(s.moves).toBeUndefined();
+  });
+});
+
+describe('Explore team panel with the starter (regression: slot 1 was dropped)', () => {
+  const panel = readFileSync(resolve(__dirname, 'fixtures/explore/team-panel-starter.reconstructed.html'), 'utf8');
+  // The encounter card with Slaking ♀ Lv. 43 as lead, as in the user's screenshot.
+  const card = html.replace(/<strong title="Charizard">[\s\S]*?<\/strong>/, '<strong title="Slaking">Slaking<svg class="pokemon-gender pokemon-gender-F" aria-label="Female"></svg><span class="battle-pokemon-level">Lv. 43</span></strong>').replace('166/166 HP', '187/187 HP');
+
+  it('reads the starter block plus slots 2–6, in slot order', () => {
+    const team = readTeamPanel(load(panel));
+    expect(team.map((r) => [r.slot, r.name, r.level, r.gender])).toEqual([
+      [1, 'Slaking', 43, 'F'], [2, 'Crocalor', 19, 'M'], [3, 'Snorlax', 51, 'M'], [4, 'Slowbro', 43, 'F'], [5, 'Hawlucha', 17, 'F'], [6, 'Electivire', 44, 'M'],
+    ]);
+    expect(team.every((r) => !r.active && !r.fainted && r.hp === undefined)).toBe(true);
+  });
+
+  it('makes the card lead the active one, with the HP from the card', () => {
+    const w = readWild(load(panel + card))!;
+    expect(w.lead).toMatchObject({ name: 'Slaking', level: 43, gender: 'F', hp: 187, maxHp: 187 });
+    const party = wildParty(w);
+    expect(party.map((r) => r.name)).toEqual(['Slaking', 'Crocalor', 'Snorlax', 'Slowbro', 'Hawlucha', 'Electivire']);
+    expect(party[0]).toMatchObject({ active: true, hp: 187, maxHp: 187 });
+    expect(party.filter((r) => r.active)).toHaveLength(1);
+  });
+
+  it('follows the lead when it is not slot 1, and falls back to slot 1 without a match', () => {
+    const w = readWild(load(panel + card.replace(/Slaking/g, 'Snorlax').replace('Lv. 43', 'Lv. 51')))!;
+    expect(wildParty(w).map((r) => r.name)).toEqual(['Snorlax', 'Slaking', 'Crocalor', 'Slowbro', 'Hawlucha', 'Electivire']);
+    const none = readWild(load(panel + card.replace(/Slaking/g, 'Mew')))!;
+    expect(wildParty(none)[0]).toMatchObject({ name: 'Slaking', active: true });
   });
 });
 

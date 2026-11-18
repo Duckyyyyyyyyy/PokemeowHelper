@@ -15,11 +15,34 @@ import { effectiveness, formatMult } from './typeChart';
 /** Your side as known from the card: the battle's switch cards or the team panel, else just the lead. */
 export function wildParty(w: WildSnapshot): RosterMon[] {
   if (w.party?.length) {
-    const active = w.party.filter((r) => r.active);
-    return [...active, ...w.party.filter((r) => !r.active)];
+    let party = w.party;
+    // Battle switch cards say who is active. The Explore team panel does not: the lead on the
+    // encounter card does (matched by species, then level, then gender); else slot 1.
+    if (!party.some((r) => r.active)) {
+      const i = w.lead ? leadIndex(party, w.lead) : -1;
+      const at = i >= 0 ? i : 0;
+      const lead = w.lead && i >= 0 ? w.lead : undefined;
+      party = party.map((r, j) => (j === at ? {
+        ...r, active: true,
+        // The card shows the lead's HP; the panel does not.
+        hp: r.hp ?? lead?.hp, maxHp: r.maxHp ?? lead?.maxHp,
+        fainted: r.fainted || lead?.hp === 0,
+      } : r));
+    }
+    const active = party.filter((r) => r.active);
+    return [...active, ...party.filter((r) => !r.active)];
   }
   if (w.lead) return [{ name: w.lead.name, level: w.lead.level, hp: w.lead.hp, maxHp: w.lead.maxHp, active: true, fainted: w.lead.hp === 0 }];
   return [];
+}
+
+/** Index of the encounter card's lead in the team panel: same species, then same level, then same gender. */
+export function leadIndex(party: RosterMon[], lead: { name: string; level?: number; gender?: 'M' | 'F' }): number {
+  const key = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const same = party.map((r, i) => ({ r, i })).filter(({ r }) => key(r.name) === key(lead.name));
+  if (!same.length) return -1;
+  const score = ({ r }: { r: RosterMon }) => (lead.level !== undefined && r.level === lead.level ? 2 : 0) + (lead.gender && r.gender === lead.gender ? 1 : 0);
+  return same.sort((x, y) => score(y) - score(x) || x.i - y.i)[0].i;
 }
 
 /** The wild Pokémon as the battle screen would show it. HP-bar-only reads become a 0–100 scale. */
