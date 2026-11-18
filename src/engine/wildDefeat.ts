@@ -4,6 +4,7 @@ import type { WildSnapshot } from '../shared/wild';
 import { adviseTurn, indexes, mySet, type ActionAdvice, type ThreatInfo } from './turnAdvisor';
 import { movesForBox } from './teamSuggest';
 import { effectiveness, formatMult } from './typeChart';
+import { leadIndex } from '../shared/wildTeam';
 
 /**
  * "Defeat it" mode of the Explore tab: the Battle tab's engine (adviseTurn) run against the wild
@@ -12,22 +13,35 @@ import { effectiveness, formatMult } from './typeChart';
  * at its level (foeSet), and there is no trainer name, so no NPC is matched.
  */
 
-/** Your side as known from the card: the battle's switch cards or the team panel, else just the lead. */
-export function wildParty(w: WildSnapshot): RosterMon[] {
+/**
+ * Your side as known from the card: the battle's switch cards or the team panel, else just the lead.
+ * Who is active, in order: the switch cards; the Pokémon on the card (species, level, gender);
+ * the log's last "Go, X!"; the one whose known moves match the move buttons (`movesOf`). Before
+ * the battle (no move buttons) it falls back to slot 1. During a battle it never guesses: the
+ * buttons would be paired with the wrong Pokémon (bug seen live 2026-11-19 after "Go, Slaking!").
+ */
+export function wildParty(w: WildSnapshot, movesOf?: (r: RosterMon) => string[]): RosterMon[] {
   if (w.party?.length) {
     let party = w.party;
-    // Battle switch cards say who is active. The Explore team panel does not: the lead on the
-    // encounter card does (matched by species, then level, then gender); else slot 1.
     if (!party.some((r) => r.active)) {
-      const i = w.lead ? leadIndex(party, w.lead) : -1;
-      const at = i >= 0 ? i : 0;
-      const lead = w.lead && i >= 0 ? w.lead : undefined;
-      party = party.map((r, j) => (j === at ? {
-        ...r, active: true,
-        // The card shows the lead's HP; the panel does not.
-        hp: r.hp ?? lead?.hp, maxHp: r.maxHp ?? lead?.maxHp,
-        fainted: r.fainted || lead?.hp === 0,
-      } : r));
+      let at = w.lead ? leadIndex(party, w.lead) : -1;
+      const lead = w.lead && at >= 0 ? w.lead : undefined;
+      if (at < 0 && w.lead?.name) {
+        // The card names a Pokémon the team panel does not list: it is still the one in front.
+        party = [{ name: w.lead.name, level: w.lead.level, hp: w.lead.hp, maxHp: w.lead.maxHp, gender: w.lead.gender, active: true, fainted: w.lead.hp === 0 }, ...party];
+      } else {
+        if (at < 0 && w.sentOut) at = leadIndex(party, { name: w.sentOut });
+        if (at < 0 && w.moves?.length && movesOf) at = moveOwner(party, w.moves.map((m) => m.name), movesOf);
+        if (at < 0 && !w.moves?.length) at = 0;
+        if (at >= 0) {
+          party = party.map((r, j) => (j === at ? {
+            ...r, active: true,
+            // The card shows the lead's HP; the panel does not.
+            hp: lead?.hp ?? r.hp, maxHp: lead?.maxHp ?? r.maxHp,
+            fainted: lead ? lead.hp === 0 : r.fainted,
+          } : r));
+        }
+      }
     }
     const active = party.filter((r) => r.active);
     return [...active, ...party.filter((r) => !r.active)];
@@ -36,14 +50,17 @@ export function wildParty(w: WildSnapshot): RosterMon[] {
   return [];
 }
 
-/** Index of the encounter card's lead in the team panel: same species, then same level, then same gender. */
-export function leadIndex(party: RosterMon[], lead: { name: string; level?: number; gender?: 'M' | 'F' }): number {
-  const key = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const same = party.map((r, i) => ({ r, i })).filter(({ r }) => key(r.name) === key(lead.name));
-  if (!same.length) return -1;
-  const score = ({ r }: { r: RosterMon }) => (lead.level !== undefined && r.level === lead.level ? 2 : 0) + (lead.gender && r.gender === lead.gender ? 1 : 0);
-  return same.sort((x, y) => score(y) - score(x) || x.i - y.i)[0].i;
+/** The one member whose known moves include the most move-button names (all of them ideally); -1 if none or a tie. */
+function moveOwner(party: RosterMon[], buttons: string[], movesOf: (r: RosterMon) => string[]): number {
+  const k = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const want = new Set(buttons.map(k));
+  const hits = party.map((r) => movesOf(r).filter((m) => want.has(k(m))).length);
+  const best = Math.max(0, ...hits);
+  if (best < Math.min(2, want.size) || hits.filter((h) => h === best).length !== 1) return -1;
+  return hits.indexOf(best);
 }
+
+export { leadIndex };
 
 /** The wild Pokémon as the battle screen would show it. HP-bar-only reads become a 0–100 scale. */
 export function wildOpponent(w: WildSnapshot): BattleMon {
@@ -107,7 +124,8 @@ export interface DefeatPlan {
 /** Ranks each healthy party member's moves vs the wild Pokémon at its live HP; fainted ones are skipped. */
 export function defeatPlan(ds: Dataset, box: BoxMon[], w: WildSnapshot, maxMoves = 3): DefeatPlan {
   const notes: string[] = [];
-  const party = wildParty(w).filter((r) => !isDown(r));
+  const all = wildParty(w, (r) => moveNamesFor(ds, box, w, { ...r, active: false }));
+  const party = all.filter((r) => !isDown(r));
   if (!party.length) return { options: [], notes: ['No healthy Pokémon on your team.'] };
   let foe: NpcMon | undefined;
   const options: DefeatOption[] = [];
@@ -129,5 +147,6 @@ export function defeatPlan(ds: Dataset, box: BoxMon[], w: WildSnapshot, maxMoves
   }
   if (foe) notes.push(`${foe.name}'s moves are a guess: its latest level-up attacks at Lv ${foe.level} (${foe.moves.map((id) => ds.moves[id]?.name ?? id).join(', ') || 'none'}).`);
   if (!w.party?.length) notes.push('Only your lead is known here: the team panel was not read.');
+  if (w.moves?.length && !all.some((r) => r.active)) notes.push("Couldn't tell which of your Pokémon is out, so the battle's move buttons are not used: each one shows its own moves.");
   return { foe, options, notes };
 }

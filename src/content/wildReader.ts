@@ -95,12 +95,47 @@ function statusOf(el: Element | null | undefined): string | undefined {
   return undefined;
 }
 
+/**
+ * Your Pokémon on the card. Intro view (seen live): .battle-partner.quick-catch-lead with
+ * strong[title]. Battle view (game stylesheet only, 2026-11-19): still a .battle-partner, but with
+ * `strong > span` text and a .battle-deployment sprite, so the name may carry extra words; the
+ * sprite's alt text is the clean species name. The last non-quick-catch card wins in battle.
+ */
+function leadCard(card: Element): Element | null {
+  const scope = card.closest('.encounter-card') ?? card;
+  const all = [...scope.querySelectorAll(WILD_SEL.lead)];
+  return all.filter((e) => !e.classList.contains('quick-catch-lead')).pop() ?? all.pop() ?? null;
+}
+
 function readLead(root: Element | null): WildLead | undefined {
   if (!root) return undefined;
-  const name = nameOf(root.querySelector(WILD_SEL.name) ?? root);
+  const title = root.querySelector('strong[title]')?.getAttribute('title');
+  const alt = clean(root.querySelector('.pokemon-sprite[alt], img[alt]:not([alt=""])')?.getAttribute('alt'));
+  const name = clean(title) || alt || nameOf(root.querySelector(WILD_SEL.name) ?? root);
   if (!name) return undefined;
-  const { hp, maxHp } = hpOf(root);
-  return { name, level: levelOf(root), hp, maxHp, item: itemOf(root), gender: genderOf(root) };
+  let { hp, maxHp } = hpOf(root);
+  const text = spacedText(root);
+  if (hp === undefined) {
+    const m = text.match(/(\d+)\s*\/\s*(\d+)\s*HP/i);
+    if (m) [hp, maxHp] = [num(m[1]), num(m[2])];
+  }
+  const level = levelOf(root) ?? num(text.match(/Lv\.?\s*(\d+)/i)?.[1]);
+  return { name, level, hp, maxHp, item: itemOf(root), gender: genderOf(root) };
+}
+
+/** "Go, Slaking!" in the card's battle log: the last Pokémon you sent out (that line is gone a turn later). */
+function sentOutOf(card: Element): string | undefined {
+  const scope = card.closest('.encounter-card') ?? card;
+  let out: string | undefined;
+  scope.querySelectorAll('.battle-log li, .battle-log-column li, .battle-log p').forEach((line) => {
+    // The first line of a turn starts with its label: "Turn 2 Go, Slaking!".
+    const text = spacedText(line).replace(clean(line.querySelector('.battle-log-turn')?.textContent), '').trim();
+    if (!/^Go,/i.test(text)) return;
+    const mon = line.querySelector('.battle-log-pokemon');
+    const name = clean(mon?.querySelector('span')?.textContent) || clean(text.match(/^Go,\s*(.+?)\s*[♂♀]?\s*!/)?.[1]);
+    if (name) out = name;
+  });
+  return out;
 }
 
 /** Text with a space between elements, so "Lv. 56" and "166/166 HP" never run together. */
@@ -173,7 +208,12 @@ export function readWild(doc: ParentNode, now = Date.now()): WildSnapshot | null
   const rarity = clean(card.querySelector(WILD_SEL.rarity)?.textContent) || undefined;
   const pageTitle = (doc as Document).querySelector?.(WILD_SEL.pageTitle);
   const registered = card.querySelector(WILD_SEL.dexCaught) ? true : card.querySelector(WILD_SEL.dexUncaught) ? false : undefined;
-  const { hp, maxHp, hpPct } = opp ? hpOf(opp) : {};
+  let { hp, maxHp, hpPct } = opp ? hpOf(opp) : {};
+  if (opp && hp === undefined) {
+    // Battle view per the stylesheet may put the numbers in .battle-health strong instead.
+    const m = spacedText(opp).match(/(\d+)\s*\/\s*(\d+)\s*HP/i);
+    if (m) [hp, maxHp, hpPct] = [num(m[1]), num(m[2]), undefined];
+  }
   // Your team: the battle's switch cards (same markup the battle reader knows), else the Explore team panel.
   const bench = readBench(card);
   const party = bench.length ? bench : readTeamPanel(doc);
@@ -196,7 +236,8 @@ export function readWild(doc: ParentNode, now = Date.now()): WildSnapshot | null
     hpPct,
     status: opp ? statusOf(opp) : undefined,
     balls,
-    lead: readLead(card.querySelector(WILD_SEL.lead)),
+    lead: readLead(leadCard(card)),
+    sentOut: view === 'intro' ? undefined : sentOutOf(card),
     ...(party.length ? { party } : {}),
     ...(moves.length ? { moves } : {}),
   };

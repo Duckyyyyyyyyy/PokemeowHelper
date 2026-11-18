@@ -1,6 +1,7 @@
 import { readBattle } from './battleReader';
 import { mergeBag, readBag } from './bagReader';
 import { readWild } from './wildReader';
+import { carryTeamHp } from '../shared/wildTeam';
 
 /**
  * MeowHelper content script (pokemeowrpg.com). READ-ONLY by design (game rule: "Play yourself"):
@@ -15,6 +16,8 @@ let last = 'none';
 let lastBag = '';
 // Same rule as battles: a tab that never showed an encounter never clears one.
 let lastWild = 'none';
+/** Last published encounter, so a Pokémon switched out keeps its HP (the team panel shows none). */
+let lastWildSnap: ReturnType<typeof readWild> = null;
 let timer: number | undefined;
 
 function publishBag() {
@@ -31,7 +34,8 @@ function publishBag() {
 
 /** The wild encounter card on the Explore page (read-only). */
 function publishWild() {
-  const snap = readWild(document);
+  const snap = carryTeamHp(lastWildSnap, readWild(document));
+  lastWildSnap = snap;
   const { at: _at, ...rest } = snap ?? ({ at: 0 } as { at: number });
   const sig = snap ? JSON.stringify(rest) : 'none';
   if (sig === lastWild) return;

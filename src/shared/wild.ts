@@ -48,6 +48,8 @@ export interface WildSnapshot {
   lead?: WildLead;
   /** Your team: switch cards in the wild battle, or the Explore team panel before it (lead first). */
   party?: RosterMon[];
+  /** Last Pokémon you sent out per the battle log ("Go, Slaking!"), when the log shows it. */
+  sentOut?: string;
   /** Your active Pokémon's move buttons, once the battle runs. */
   moves?: BattleMove[];
 }

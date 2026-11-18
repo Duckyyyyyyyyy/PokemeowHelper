@@ -100,11 +100,13 @@ describe('Explore team panel with the starter (regression: slot 1 was dropped)',
     expect(party.filter((r) => r.active)).toHaveLength(1);
   });
 
-  it('follows the lead when it is not slot 1, and falls back to slot 1 without a match', () => {
+  it('follows the lead when it is not slot 1; a lead missing from the panel is still the one in front', () => {
     const w = readWild(load(panel + card.replace(/Slaking/g, 'Snorlax').replace('Lv. 43', 'Lv. 51')))!;
     expect(wildParty(w).map((r) => r.name)).toEqual(['Snorlax', 'Slaking', 'Crocalor', 'Slowbro', 'Hawlucha', 'Electivire']);
     const none = readWild(load(panel + card.replace(/Slaking/g, 'Mew')))!;
-    expect(wildParty(none)[0]).toMatchObject({ name: 'Slaking', active: true });
+    expect(wildParty(none).map((r) => [r.name, r.active])).toEqual([['Mew', true], ['Slaking', false], ['Crocalor', false], ['Snorlax', false], ['Slowbro', false], ['Hawlucha', false], ['Electivire', false]]);
+    // Without a card lead (and no battle buttons) slot 1 leads.
+    expect(wildParty({ ...none, lead: undefined })[0]).toMatchObject({ name: 'Slaking', active: true });
   });
 });
 
