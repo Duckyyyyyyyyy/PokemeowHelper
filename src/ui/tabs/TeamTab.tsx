@@ -11,6 +11,7 @@ import { rulesFor } from '../../engine/rules';
 import { excludedUids, lockedUids, resetTeamPrefs, teamToText, toggleExclude, toggleLock } from '../teamPrefs';
 import { assignHeldItems, suggestHeldItems } from '../../engine/heldItems';
 import { bag, ownedItems } from '../bagStore';
+import { GrindCard } from '../components/GrindCard';
 
 export function TeamTab() {
   const ds = dataset.value;
@@ -80,7 +81,7 @@ function Suggestion({ ds }: { ds: Dataset }) {
       ) : res && (
         <>
           <div class="card">
-            <p class="title">Suggested team <span class="r">Coverage {res.coverage}/100</span></p>
+            <p class="title">Suggested team · ready now <span class="r">Coverage {res.coverage}/100</span></p>
             {res.team.map((c) => {
               const s = ds.species[c.mon.species];
               const bi = c.pairs.reduce((a, p, i) => ((p.duel?.mine?.expectedPct ?? 0) > (c.pairs[a].duel?.mine?.expectedPct ?? 0) ? i : a), 0);
@@ -134,6 +135,8 @@ function Suggestion({ ds }: { ds: Dataset }) {
           {lockedOut.length > 0 && (
             <Tip kind="warn">Locked but not on the team: {lockedOut.map((c) => `${name(c)} (${c.reason ?? 'team is full'})`).join(', ')}</Tip>
           )}
+
+          <GrindCard ds={ds} v={v} ready={res} rules={rules} locked={locked} excluded={excluded} />
 
           {res.team.length > 0 && (
             <div class="card">

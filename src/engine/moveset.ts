@@ -30,9 +30,9 @@ export interface MovesetSuggestion {
  * Candidates: moves it already knows, level-up moves at or below its level (or up to
  * `untilLevel`, e.g. the level cap you can train it to), and TM moves if `allowTM`
  * (only TMs in `ownedTms` when your bag is known). Egg moves are only kept if already known.
- * Damage is always computed at its CURRENT level, so the lists compare fairly.
+ * Damage is computed at its CURRENT level (so the lists compare fairly) unless `calcLevel` is set.
  */
-export function suggestMoveset(ds: Dataset, b: BoxMon, v: NpcTeamVariant, opts: { levelCap?: number; untilLevel?: number; passedLevelUps?: boolean; allowTM?: boolean; ownedTms?: ReadonlySet<string> | null; rules?: BattleRules } = {}): MovesetSuggestion {
+export function suggestMoveset(ds: Dataset, b: BoxMon, v: NpcTeamVariant, opts: { levelCap?: number; untilLevel?: number; calcLevel?: number; passedLevelUps?: boolean; allowTM?: boolean; ownedTms?: ReadonlySet<string> | null; rules?: BattleRules } = {}): MovesetSuggestion {
   const s = ds.species[b.species];
   const level = b.level ?? opts.levelCap ?? 50;
   const until = Math.max(level, opts.untilLevel ?? level);
@@ -49,7 +49,8 @@ export function suggestMoveset(ds: Dataset, b: BoxMon, v: NpcTeamVariant, opts: 
   if (opts.allowTM !== false) for (const id of s?.machineMoves ?? []) if (!sources.has(id) && (!opts.ownedTms || opts.ownedTms.has(id))) sources.set(id, { source: 'tm' });
 
   const candidates = [...sources.keys()].filter((id) => ds.moves[id] && ds.moves[id].category !== 'Status' && !opts.rules?.bannedMoves.has(id) && !SELF_KO_MOVES.has(id) && !SLEEP_ONLY_MOVES.has(id));
-  const me = boxToCalc(ds, b, level);
+  // `calcLevel`: score the moves as if it were already that level (potential view).
+  const me = boxToCalc(ds, opts.calcLevel ? { ...b, level: opts.calcLevel } : b, level);
   const foes = v.team.map((n) => npcToCalc(ds, n));
   const field: Field = makeField(v.format);
 
