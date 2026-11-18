@@ -27,6 +27,48 @@ export interface Species {
   levelMoves: [string, number][];
   machineMoves: string[];
   eggMoves: string[];
+  /** Wild catch data (schema 4+, missing in older cached data). Mainline-style catch rate 1–255. */
+  catchRate?: number;
+  /** Game rarity tier when found in the wild: common, rare, extremely-rare, legendary. */
+  rarity?: string | null;
+  /** How the game says it is obtained: wild, fishing, evolution, event, world-boss… */
+  availability?: string;
+  /** Extra condition for its spawn (seasonal forms etc.), from the wiki. */
+  spawnRequirement?: string | null;
+}
+
+/** One wild encounter row of an explore map (rows with the same species + method are merged). */
+export interface WildEncounter {
+  species: number;
+  rarity: string;
+  /** walking, surf, oldrod, goodrod, superrod */
+  method: string;
+  levels: [number, number];
+  /** Best chance per encounter, by day / by night, in the best spot of this map (0–1). */
+  day: number;
+  night: number;
+  /** Sub-areas where it appears ("Walking · northwestern flower clearing"). */
+  labels: string[];
+  sections: string[];
+}
+
+export interface ExploreMap {
+  id: string;
+  name: string;
+  /** Map theme from the wiki: grass, water, rock, fire… */
+  theme: string;
+  levels: [number, number];
+  description: string;
+  encounters: WildEncounter[];
+}
+
+/** Explore data (schema 4+). */
+export interface WildData {
+  maps: ExploreMap[];
+  /** Species that evolve with a Moon Stone (Moon Ball). */
+  moonStone: number[];
+  /** mechanics.encounterChance etc. from the wiki. */
+  encounterChance?: number;
 }
 
 export interface Move {
@@ -52,6 +94,15 @@ export interface Item {
   id: string;
   name: string;
   effect: string;
+  /** Schema 4+: bag category (balls, held, berries…), full description, wild holders. */
+  category?: string;
+  description?: string;
+  /** Wild Pokémon that can hold this item: chance 0–1, on these maps. */
+  wildSources?: { species: number; chance: number; mapIds: string[] }[];
+  /** Prose rule for type/map-wide wild drops ("Fairy-type wild Pokémon … 5%"). */
+  wildRule?: string;
+  /** Wiki notes (e.g. "not currently awarded"). */
+  notes?: string[];
 }
 
 export type NpcCategory =
@@ -109,7 +160,7 @@ export interface Npc {
 }
 
 /** Bump when normalize() output changes, so cached data is rebuilt on next sync. */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export interface Dataset {
   /** `${SCHEMA_VERSION}:${hashed wiki data file name}` – changes on every game deploy or schema change. */
@@ -121,6 +172,8 @@ export interface Dataset {
   abilities: Record<string, Ability>;
   items: Record<string, Item>;
   npcs: Npc[];
+  /** Explore maps and wild data (schema 4+; undefined until the user syncs again). */
+  wild?: WildData;
 }
 
 // ---------- The user's own Pokémon (synced from the game or entered by hand) ----------
