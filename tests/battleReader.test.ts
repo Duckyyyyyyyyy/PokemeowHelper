@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { monName, parseBoostLine, parseHp, parseLog, parseMoveLabel, readBattle, switchSide, switchedIn } from '../src/content/battleReader';
+import { monName, parseBoostLine, parseHp, parseLog, parseStatChanges, parseMoveLabel, readBattle, switchSide, switchedIn } from '../src/content/battleReader';
 
 const html = readFileSync(resolve(__dirname, 'fixtures/battle/brock-turn3.reconstructed.html'), 'utf8');
 const load = (markup: string) => {
@@ -156,5 +156,28 @@ describe('log events (real lines from two Brock battles, 2026-11-18)', () => {
     expect(switchedIn('Go, Turtwig!')).toBe('Turtwig');
     expect(switchedIn('Brock sent out Onix!')).toBe('Onix');
     expect(switchedIn('Mr. Mime sent out Mr. Mime!')).toBe('Mr. Mime');
+  });
+});
+
+describe('live markup: stat-change badge next to the name (Juan, 2026-11-18)', () => {
+  // Bug seen live: the opponent was read as "Kingdra Evasion +1", so no advice was shown.
+  const heading = `<section class="battle-arena" data-status="active"><div class="battle-opponent-stats"><div class="battle-combatant-heading">
+    <div class="battle-combatant-name"><strong title="Kingdra">Kingdra<span class="battle-capture-ball" role="img" aria-label="Poké Ball"></span><button class="battle-weakness-button" aria-label="Weaknesses of Kingdra"></button></strong>
+      <span class="battle-pokemon-level">Lv. 46<button class="battle-held-item" aria-label="Held item: Chesto Berry. View item information"></button></span>
+      <span class="battle-status battle-stat-changes" title="Evasion +1">Evasion +1</span></div>
+    <span class="battle-hp-numbers">45/139 HP</span></div></div></section>`;
+
+  it('reads the name, level, item, HP and the on-screen stage', () => {
+    document.body.innerHTML = heading;
+    const s = readBattle(document)!;
+    expect(s.opponent).toMatchObject({ name: 'Kingdra', level: 46, hp: 45, maxHp: 139, item: 'Chesto Berry', stages: { evasion: 1 } });
+    expect(s.opponent!.status).toBeUndefined(); // the badge has class battle-status but is not a status condition
+    expect(s.boosts.opponent).toEqual({ evasion: 1 });
+  });
+
+  it('parses stat-change badges', () => {
+    expect(parseStatChanges('Evasion +1')).toEqual({ evasion: 1 });
+    expect(parseStatChanges('Attack +2, Speed −1')).toEqual({ atk: 2, spe: -1 });
+    expect(parseStatChanges('Sp. Atk -2')).toEqual({ spa: -2 });
   });
 });

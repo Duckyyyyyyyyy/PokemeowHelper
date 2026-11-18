@@ -168,7 +168,9 @@ export function moveDamage(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, move
 /** Moves that make the user faint: they can't be repeated, so they never "win a 1v1" by spamming. */
 export const SELF_KO_MOVES: ReadonlySet<string> = new Set(['selfdestruct', 'explosion', 'mistyexplosion', 'finalgambit', 'memento', 'healingwish', 'lunardance']);
 /** Moves a Pokémon can keep using turn after turn (for 1v1 projections). */
-export const repeatable = (ids: string[]) => ids.filter((id) => !SELF_KO_MOVES.has(id));
+/** Moves that fail unless someone is asleep: never a plan for a normal 1v1. */
+export const SLEEP_ONLY_MOVES: ReadonlySet<string> = new Set(['snore', 'dreameater']);
+export const repeatable = (ids: string[]) => ids.filter((id) => !SELF_KO_MOVES.has(id) && !SLEEP_ONLY_MOVES.has(id));
 
 export function bestMove(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, moveIds: string[], field?: Field): MoveDamage | null {
   let best: MoveDamage | null = null;

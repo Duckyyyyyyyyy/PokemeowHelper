@@ -15,6 +15,8 @@ export interface BattleMon {
   /** Game status code: par, brn, psn, tox, slp, frz. */
   status?: string;
   item?: string;
+  /** Stat stages shown on screen next to the name ("Evasion +1"), when any. */
+  stages?: Boosts;
 }
 
 export interface BattleMove {
