@@ -3,7 +3,7 @@ import type { BoxMon, Dataset, Npc, NpcMon, NpcTeamVariant, StatKey, StatTable }
 import { ASSUMED_NPC_LEVEL, SELF_KO_MOVES, SLEEP_ONLY_MOVES, boxToCalc, duel, makeField, npcToCalc } from './damage';
 import { suggestMoveset, type MoveChoice } from './moveset';
 import { rulesFor } from './rules';
-import { scoreAgainstTeam, type Candidate, type PairResult, type SuggestOptions, type Suggestion } from './teamSuggest';
+import { scoreAgainstTeam, scorePair, type Candidate, type PairResult, type SuggestOptions, type Suggestion } from './teamSuggest';
 
 /**
  * "Worth grinding": how good each of your Pokémon WOULD be once trained to the level this fight
@@ -59,7 +59,8 @@ export function ivSummary(mon: BoxMon): IvSummary {
   const maxed = KEYS.filter((k) => (iv[k] ?? 0) >= 30).map((k) => STAT_LABEL[k]);
   const low = KEYS.filter((k) => (iv[k] ?? 0) <= 10).map((k) => STAT_LABEL[k]);
   const parts = [`IVs ${total}/186 (${grade})`];
-  if (maxed.length) parts.push(`max ${maxed.join('/')}`);
+  if (maxed.length === 6) parts.push('all 30+');
+  else if (maxed.length) parts.push(`max ${maxed.join('/')}`);
   if (low.length) parts.push(`low ${low.join('/')}`);
   if (mon.nature) parts.push(mon.nature);
   return { total, grade, text: parts.join(' · ') };
@@ -149,8 +150,14 @@ export function worthGrinding(ds: Dataset, v: NpcTeamVariant, ready: Suggestion,
     const prev = bySpecies.get(m.species);
     if (!prev || ivTotal(m) > ivTotal(prev) || (ivTotal(m) === ivTotal(prev) && (m.level ?? 0) > (prev.level ?? 0))) bySpecies.set(m.species, m);
   }
-  // Prefilter by base stats, NOT types: bulky neutral picks (Snorlax, Slowbro) win on stats.
-  const pool = [...bySpecies.values()].sort((a, b) => bst(ds, b) - bst(ds, a) || ivTotal(b) - ivTotal(a)).slice(0, opts.shortlist ?? 24);
+  // Shortlist for the full calc: top by base stats (bulky neutral picks like Snorlax win on stats)
+  // UNION top by type matchup (a low-stat 4× answer still makes it).
+  const all = [...bySpecies.values()];
+  const n = Math.ceil((opts.shortlist ?? 24) / 2);
+  const typeAvg = (m: BoxMon) => v.team.reduce((s, foe) => s + scorePair(ds, { ...m, moves: [] }, foe, opts.rules).score, 0);
+  const byStats = [...all].sort((a, b) => bst(ds, b) - bst(ds, a) || ivTotal(b) - ivTotal(a)).slice(0, n);
+  const byType = all.map((m) => [m, typeAvg(m)] as const).sort((a, b) => b[1] - a[1] || bst(ds, b[0]) - bst(ds, a[0])).slice(0, n).map(([m]) => m);
+  const pool = [...new Set([...byStats, ...byType])];
 
   const npcCalc = opts.mode === 'type' ? undefined : v.team.map((n) => npcToCalc(ds, n));
   const teamBest = v.team.map((_n, j) => Math.max(0, ...ready.team.map((c) => c.pairs[j]?.score ?? 0)));
@@ -202,6 +209,9 @@ const foeCalc = (ds: Dataset, m: NpcMon) => {
   return c;
 };
 
+/** Must rest a turn after use: `duel` would count them as usable every turn, so they're left out here. */
+export const RECHARGE_MOVES: ReadonlySet<string> = new Set(['hyperbeam', 'gigaimpact', 'blastburn', 'frenzyplant', 'hydrocannon', 'rockwrecker', 'roaroftime', 'eternabeam', 'prismaticlaser', 'meteorassault']);
+
 /** Damaging moves it can have by `level` (known + crossed level-up + owned TMs), best one per type, at most `max`. */
 export function movePool(ds: Dataset, mon: BoxMon, level: number, ownedTms?: ReadonlySet<string> | null, max = 5): string[] {
   const s = ds.species[mon.species];
@@ -213,7 +223,7 @@ export function movePool(ds: Dataset, mon: BoxMon, level: number, ownedTms?: Rea
   const bestPerType = new Map<string, { id: string; v: number }>();
   for (const id of ids) {
     const m = ds.moves[id];
-    if (!m || m.category === 'Status' || SELF_KO_MOVES.has(id) || SLEEP_ONLY_MOVES.has(id)) continue;
+    if (!m || m.category === 'Status' || SELF_KO_MOVES.has(id) || SLEEP_ONLY_MOVES.has(id) || RECHARGE_MOVES.has(id)) continue;
     const v = (m.power || 60) * (types.includes(m.type) ? 1.5 : 1) * (m.accuracy === true ? 1 : m.accuracy / 100);
     const prev = bestPerType.get(m.type);
     if (!prev || v > prev.v) bestPerType.set(m.type, { id, v });

@@ -51,11 +51,13 @@ describe('potential: target level and moves by level', () => {
   it('no TMs unless the bag is known, then only owned ones', () => {
     const v = npc('challenge:koga').variants[0];
     expect(potentialFor(ds, mon('Snorlax', 20, ['tackle']), v).moves.some((m) => m.source === 'tm')).toBe(false);
-    const tm = ds.species[sp('Snorlax')].machineMoves.find((id) => ds.moves[id]?.type === 'Ground' && ds.moves[id].power >= 80);
-    if (tm) {
-      const p = potentialFor(ds, mon('Snorlax', 20, ['tackle']), v, { ownedTms: new Set([tm]) });
-      expect(p.moves.filter((m) => m.source === 'tm').every((m) => m.moveId === tm)).toBe(true);
-    }
+    // Koga's team is Poison: a Ground TM is the best coverage Snorlax can get.
+    const tm = ds.species[sp('Snorlax')].machineMoves.find((id) => ds.moves[id]?.type === 'Ground' && ds.moves[id].power >= 80)!;
+    expect(tm).toBeTruthy();
+    const p = potentialFor(ds, mon('Snorlax', 20, ['tackle']), v, { ownedTms: new Set([tm]) });
+    const tmMoves = p.moves.filter((m) => m.source === 'tm');
+    expect(tmMoves.length).toBeGreaterThan(0);
+    expect(tmMoves.every((m) => m.moveId === tm)).toBe(true);
     expect(movePool(ds, mon('Snorlax', 20, ['tackle']), 30)).not.toContain('bite');
   });
 });
@@ -73,8 +75,22 @@ describe('potential: ranking', () => {
     expect(list.every((r) => (r.mon.level ?? 0) < 48)).toBe(true);
     expect(list[0].potential).toBeGreaterThan(list[0].current);
     expect(list[0].why).toContain('Lv 48');
-    const rat = list.find((r) => r.mon.uid === 'Rattata-12');
-    if (rat) expect(rat.potential).toBeLessThan(list[0].potential);
+    const rat = potentialFor(ds, mon('Rattata', 12, ['tackle']), v);
+    expect(rat.potential).toBeLessThan(list[0].potential);
+  });
+  it('a low-stat type answer survives the shortlist on a big box', () => {
+    const v = npc('challenge:blaine').variants[0]; // all Fire, cap 52
+    // 40+ strong species with no Water/Ground/Rock typing, plus one low-stat Squirtle.
+    const strong = Object.values(ds.species).filter((s) => !/Mega|max/.test(s.name) && !s.types.some((t) => ['Water', 'Ground', 'Rock'].includes(t)))
+      .filter((s) => Object.values(s.baseStats).reduce((a, b) => a + b, 0) >= 420);
+    expect(strong.length).toBeGreaterThan(40);
+    const big = [...strong.map((s) => ({ uid: String(s.id), species: s.id, level: 10, moves: ['tackle'], source: 'game' as const, ivs: PERFECT, evs: {} })), mon('Squirtle', 10, ['tackle'])];
+    const ready = suggestTeam(ds, [...big, mon('Pidgey', 50, ['wingattack'])], v, { levelCap: 52 });
+    const names = worthGrinding(ds, v, ready, { levelCap: 52, limit: 40 }).map((r) => ds.species[r.mon.species].name);
+    expect(names).toContain('Squirtle'); // BST 314: only the type half of the shortlist keeps it
+  });
+  it('versatility leaves out recharge moves', () => {
+    expect(movePool(ds, mon('Snorlax', 12, ['tackle']), 100)).not.toContain('gigaimpact');
   });
   it('versatility: Snorlax is a good pick against more NPCs than Rattata', () => {
     const a = versatility(ds, mon('Snorlax', 12, ['tackle']), ds.npcs);

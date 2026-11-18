@@ -32,7 +32,10 @@ export function GrindCard({ ds, v, ready, rules, locked, excluded }: {
   // Versatility across every NPC: one Pokémon per tick so the panel stays responsive.
   useEffect(() => {
     let cancelled = false;
-    const keyOf = (uid: string) => `${ds.version}:${uid}:${tms ? [...tms].sort().join(',') : '-'}`;
+    const tmKey = tms ? [...tms].sort().join(',') : '-';
+    const byUid = new Map(list.map((r) => [r.mon.uid, r.mon]));
+    // Level and moves in the key: a re-synced Pokémon gets a fresh rating.
+    const keyOf = (uid: string) => { const m = byUid.get(uid)!; return `${ds.version}:${uid}:${m.level}:${m.moves.join(',')}:${tmKey}`; };
     const todo = list.filter((r) => !versCache.has(keyOf(r.mon.uid)));
     const publish = () => setVers(Object.fromEntries(list.filter((r) => versCache.has(keyOf(r.mon.uid))).map((r) => [r.mon.uid, versCache.get(keyOf(r.mon.uid))!])));
     publish();
