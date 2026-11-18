@@ -162,3 +162,4 @@ button.cell.sel { box-shadow: inset 0 0 0 2px var(--text); }
 .act .score { min-width: 34px; text-align: center; }
 details.card > summary { list-style: none; }
 details.card > summary::-webkit-details-marker { display: none; }
+.ok-t { color: var(--green); } .bad-t { color: var(--red); }

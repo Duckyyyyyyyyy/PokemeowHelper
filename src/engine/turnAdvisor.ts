@@ -1,9 +1,10 @@
 import type { Pokemon as CalcPokemon } from '@smogon/calc';
 import type { BattleMon, BattleSnapshot, Boosts, RosterMon } from '../shared/battle';
 import type { BoxMon, Dataset, Npc, NpcMon, NpcTeamVariant } from '../shared/types';
-import { ASSUMED_NPC_LEVEL, bestMove, boxToCalc, defenderVsNpc, makeField, moveDamage, npcToCalc, type MoveDamage } from './damage';
+import { ASSUMED_NPC_LEVEL, SELF_KO_MOVES, bestMove, boxToCalc, defenderVsNpc, makeField, moveDamage, npcToCalc, repeatable, type MoveDamage } from './damage';
 import { rulesFor, type BattleRules } from './rules';
 import { movesForBox } from './teamSuggest';
+import { predictNpcMove, type NpcGuess } from './npcModel';
 
 /**
  * Phase 3 turn advice for SINGLES, from a battle snapshot (content script) + game data + your box.
@@ -43,18 +44,20 @@ export interface TurnAdvice {
   me?: { mon: BoxMon; known: boolean };
   actions: ActionAdvice[];
   threat?: ThreatInfo;
+  /** Guess of the NPC's next move (see npcModel.ts). Display only: scores use the worst-case threat. */
+  prediction?: NpcGuess[];
   notes: string[];
 }
 
-const lc = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+export const lc = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-function indexes(ds: Dataset) {
+export function indexes(ds: Dataset) {
   const species = new Map(Object.values(ds.species).map((s) => [lc(s.name), s]));
   const moves = new Map(Object.values(ds.moves).map((m) => [lc(m.name), m]));
   const items = new Map(Object.values(ds.items).map((i) => [lc(i.name), i]));
   return { species, moves, items };
 }
-type Idx = ReturnType<typeof indexes>;
+export type Idx = ReturnType<typeof indexes>;
 
 const KIND_TO_CATEGORY: Record<string, Npc['category'][]> = {
   gym: ['gym'], league: ['elite-four', 'champion'], 'elite-four': ['elite-four'], champion: ['champion'],
@@ -85,7 +88,7 @@ export function matchNpc(ds: Dataset, snap: BattleSnapshot): { npc: Npc; variant
   return best && { npc: best.npc, variant: best.variant };
 }
 
-function foeSet(ds: Dataset, idx: Idx, v: NpcTeamVariant | undefined, b: BattleMon): { mon: NpcMon; known: boolean } | undefined {
+export function foeSet(ds: Dataset, idx: Idx, v: NpcTeamVariant | undefined, b: BattleMon): { mon: NpcMon; known: boolean } | undefined {
   const named = v?.team.filter((m) => lc(m.name) === lc(b.name)) ?? [];
   const hit = named.find((m) => m.level === b.level) ?? named[0];
   if (hit) return { mon: { ...hit, level: b.level ?? hit.level ?? ASSUMED_NPC_LEVEL }, known: true };
@@ -98,7 +101,7 @@ function foeSet(ds: Dataset, idx: Idx, v: NpcTeamVariant | undefined, b: BattleM
 }
 
 /** Your box entry for a Pokémon on the battle screen: same species, best move overlap, closest level. */
-function mySet(idx: Idx, box: BoxMon[], b: { name: string; level?: number; item?: string }, moveNames: string[]): { mon: BoxMon; known: boolean } | undefined {
+export function mySet(idx: Idx, box: BoxMon[], b: { name: string; level?: number; item?: string }, moveNames: string[]): { mon: BoxMon; known: boolean } | undefined {
   const s = idx.species.get(lc(b.name));
   if (!s) return undefined;
   const moveIds = moveNames.map((n) => idx.moves.get(lc(n))?.id).filter((x): x is string => !!x);
@@ -118,7 +121,7 @@ function mySet(idx: Idx, box: BoxMon[], b: { name: string; level?: number; item?
 
 const STATUS: Record<string, Exclude<CalcPokemon['status'], ''>> = { par: 'par', brn: 'brn', psn: 'psn', tox: 'tox', slp: 'slp', frz: 'frz' };
 
-function applyState(p: CalcPokemon, b: { hp?: number; maxHp?: number; status?: string }, boosts?: Boosts) {
+export function applyState(p: CalcPokemon, b: { hp?: number; maxHp?: number; status?: string }, boosts?: Boosts) {
   if (b.hp !== undefined && b.maxHp) p.originalCurHP = Math.max(0, Math.round((p.maxHP() * b.hp) / b.maxHp));
   const st = b.status ? STATUS[b.status] : undefined;
   if (st) p.status = st;
@@ -184,12 +187,24 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[]): Tu
     notes.push(`Unknown Pokémon: ${!foe ? snap.opponent.name : snap.player.name}.`);
     return out;
   }
-  if (!foe.known) notes.push(`${foe.mon.name}'s set is a guess (latest level-up moves, perfect IVs).`);
+  // Moves this opponent Pokémon has used in this battle (from the log).
+  const usedThisBattle = (snap.events ?? [])
+    .filter((e) => e.side === 'opponent' && lc(e.mon) === lc(foe.mon.name))
+    .map((e) => idx.moves.get(lc(e.move))?.id)
+    .filter((x): x is string => !!x);
+  if (!foe.known) {
+    // Guessed set: moves seen in the log are certain, fill the rest with the guess.
+    foe.mon.moves = [...new Set([...usedThisBattle, ...foe.mon.moves])].slice(0, 4);
+    notes.push(`${foe.mon.name}'s set is a guess (moves seen this battle + latest level-up moves, perfect IVs).`);
+  }
   if (!me.known) notes.push(`${snap.player.name} is not in your box: using average IVs. Sync your box for exact numbers.`);
 
   const myCalc = applyState(boxToCalc(ds, me.mon), snap.player, snap.boosts.player);
   const foeCalc = applyState(npcToCalc(ds, foe.mon), snap.opponent, snap.boosts.opponent);
   const foeMoves = foe.mon.moves.filter((id) => !rules.bannedMoves.has(id));
+  out.prediction = predictNpcMove(ds, foeCalc, defenderVsNpc(myCalc, rules), foeMoves, {
+    field, myStatus: snap.player.status, myBoosts: snap.boosts.player, foeBoosts: snap.boosts.opponent, usedThisBattle,
+  });
   const myHp = curPct(myCalc);
   const foeHp = curPct(foeCalc);
 
@@ -238,7 +253,19 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[]): Tu
     else reason = `${p.myTurns === Infinity ? 'No KO' : `${p.myTurns} hits to KO`}; ${p.win ? 'you win the trade' : 'you lose the trade'}.`;
     const accuracy = ds.moves[g.id].accuracy;
     if (accuracy !== true && accuracy < 100) reason += ` ${accuracy}% accuracy.`;
-    out.actions.push({ kind: 'move', label: m.name, moveId: g.id, minPct: d.minPct, maxPct: d.maxPct, ko, score: Math.round(Math.max(0, Math.min(100, p.score + (ko === 'sure' && first !== false ? 10 : 0)))), reason });
+    let score = Math.round(Math.max(0, Math.min(100, p.score + (ko === 'sure' && first !== false ? 10 : 0))));
+    if (SELF_KO_MOVES.has(g.id)) {
+      // One use only and you faint too: worth it for a sure KO, otherwise a last resort.
+      const name = snap.player.name;
+      if (ko === 'sure' && first !== false) {
+        score = Math.min(score, 60);
+        reason = `KOs now, but ${name} faints too.`;
+      } else {
+        score = Math.min(score, 15);
+        reason = `${name} faints after using it (${pctTxt(d)} to them). Last resort only.`;
+      }
+    }
+    out.actions.push({ kind: 'move', label: m.name, moveId: g.id, minPct: d.minPct, maxPct: d.maxPct, ko, score, reason });
   }
 
   // Switches
@@ -261,7 +288,7 @@ function switchAdvice(ds: Dataset, idx: Idx, box: BoxMon[], r: RosterMon, foeCal
   const incoming = bestMove(ds, foeCalc, defenderVsNpc(p, rules), foeMoves, field);
   const hpAfter = curPct(p) - avg(incoming);
   if (hpAfter <= 0) return { kind: 'switch', label, score: 0, reason: `Would faint switching in (${incoming ? `${incoming.name} ${pctTxt(incoming)}` : ''}).` };
-  const mineBest = bestMove(ds, p, foeCalc, moves, field);
+  const mineBest = bestMove(ds, p, foeCalc, repeatable(moves.filter((id) => !rules.bannedMoves.has(id))), field);
   if (!mineBest) return { kind: 'switch', label, score: 5, reason: `Takes ~${Math.round(avg(incoming))}% switching in; no known damaging move${mine.known ? '' : ' (not in your box)'}.` };
   const first = order(p, foeCalc, mineBest.priority, incoming?.priority ?? 0);
   const proj = project(mineBest.expectedPct, avg(incoming), hpAfter, curPct(foeCalc), first);

@@ -3,7 +3,7 @@ import type { BattleMon, BattleSnapshot, Boosts } from '../../shared/battle';
 import type { Dataset } from '../../shared/types';
 import { Empty, Tip, Types, scoreClass } from '../components/common';
 import { adviseTurn, type ActionAdvice } from '../../engine/turnAdvisor';
-import { battle, loadSampleBattle } from '../battleStore';
+import { battle, damageChecks, guessScore, loadSampleBattle } from '../battleStore';
 import { box, dataset, isExtension } from '../store';
 import { NoData } from './shared';
 import { timeAgo } from '../boxStore';
@@ -60,6 +60,15 @@ function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
               {advice.threat.youFirst === null ? 'Speed tie.' : advice.threat.youFirst ? 'You are faster.' : 'They are faster.'}
             </Tip>
           )}
+          {advice.prediction && advice.prediction.length > 0 && (
+            <div class="small muted" style={{ padding: '0 4px' }}>
+              <b>Likely next (guess):</b>{' '}
+              {advice.prediction.slice(0, 3).map((g, i) => (
+                <>{i > 0 && ' · '}{g.name} {Math.round(g.prob * 100)}%{g.ko === 'sure' ? ' (KO)' : ''}</>
+              ))}
+              {guessScore.value.total > 0 && <> · guess right {guessScore.value.hit}/{guessScore.value.total} this battle</>}
+            </div>
+          )}
           <div class="card">
             <p class="title">Best options</p>
             {ranked.map((a, i) => <Action a={a} top={i === 0} />)}
@@ -73,6 +82,8 @@ function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
           {advice.notes.length > 0 && <div class="small muted">{advice.notes.map((n) => <div>• {n}</div>)}</div>}
         </>
       )}
+
+      <CalcCheck />
 
       {snap.log.length > 0 && (
         <details class="card">
@@ -124,5 +135,31 @@ function Action({ a, top }: { a: ActionAdvice; top: boolean }) {
         <div class="small muted">{a.reason}</div>
       </div>
     </div>
+  );
+}
+
+const VERDICT = { ok: '✓', off: '✗', 'set-mismatch': '≠' } as const;
+
+/** Real damage from the battle log vs the calc range for the same hit. */
+function CalcCheck() {
+  const checks = damageChecks.value;
+  if (!checks.length) return null;
+  const judged = checks.filter((c) => c.verdict !== 'set-mismatch');
+  const ok = judged.filter((c) => c.verdict === 'ok').length;
+  return (
+    <details class="card">
+      <summary class="title" style={{ margin: 0, cursor: 'pointer' }}>
+        Calc check <span class="r">{judged.length ? `${ok}/${judged.length} hits in range` : 'sets differ'}</span>
+      </summary>
+      <div class="small" style={{ marginTop: '6px' }}>
+        {checks.slice(-8).map((c) => (
+          <div title={c.verdict === 'set-mismatch' ? 'Max HP on screen differs from the calc: IVs/EVs/level in the data differ, so this hit is not judged.' : undefined}>
+            <b class={c.verdict === 'ok' ? 'ok-t' : c.verdict === 'off' ? 'bad-t' : 'muted'}>{VERDICT[c.verdict]}</b>{' '}
+            {c.attacker} {c.move} → {c.target}: <b>{c.damage}</b> <span class="muted">(calc {c.lo}–{c.hi}{c.capped ? ', KO: capped' : ''})</span>
+          </div>
+        ))}
+      </div>
+      <div class="small muted" style={{ marginTop: '4px' }}>Damage the game reported vs the Gen 9 calc. Only hits where both Pokémon's exact sets are known; crits and unusual hits are skipped.</div>
+    </details>
   );
 }

@@ -275,6 +275,19 @@ Xem mockup: **[`docs/ui-mockup.html`](ui-mockup.html)**
 - ⚠️ Fixture test `tests/fixtures/battle/brock-turn3.reconstructed.html` là **bản dựng lại** từ cấu trúc đã đọc (công cụ trình duyệt không cho lấy HTML thô). Nên thay bằng trang lưu thật (Ctrl+S) khi có dịp.
 - Chưa làm: Doubles, dự đoán NPC đổi Pokémon, crit, hiệu ứng phụ, expectimax nhiều lượt, so sánh damage thật với calc ngay trong panel.
 
+### Giai đoạn 3b — Log trận: kiểm tra calc + đoán nước NPC ✅ (đã chạy thử trong Chrome thật 2026-11-18, trận Juan)
+- Reader đọc **toàn bộ log** thành sự kiện (snapshot `v: 2`): ai dùng move gì, lên ai, lượt nào, damage bao nhiêu, trượt, KO, và stat stage ngay lúc ra đòn. Chỉ parse câu đã thấy trong trận thật; câu lạ (crit, multi-hit, recoil…) được đánh dấu và bỏ qua.
+- **Calc check** (`engine/damageCheck.ts`): mỗi đòn mới trong log được so với khoảng damage của calc, dùng snapshot *trước* đòn đó (level/HP đổi trong trận). Chỉ chấm khi biết chính xác set cả hai bên. Nếu max HP trên màn hình khác calc thì ghi "set mismatch" (IV/EV/level lệch), không tính là sai công thức. Đòn KO chỉ cần ≤ max của calc (game cắt theo HP còn lại).
+  - Dữ liệu thật: Turtwig 41 HP ở Lv14 → IV HP 12–18 theo công thức; Rock Tomb của Onix = 12 nằm trong khoảng calc. Có test.
+- **Đoán nước NPC** (`engine/npcModel.ts`): xác suất cho từng move (đòn mạnh/KO được ưu tiên, status vô ích bị bỏ, move đã dùng trong trận được cộng nhẹ). Chỉ hiển thị như *đoán*; cảnh báo KO và điểm vẫn dùng đòn mạnh nhất (trường hợp xấu nhất). Panel đếm số lần đoán đúng trong trận.
+- Đối thủ có set đoán (không có trong wiki): move thấy trong log được dùng trước.
+- **Chạy thử trực tiếp 2026-11-18 (Juan, Hoenn Gym)**, bạn chơi, mình đọc trang song song:
+  - Calc check **4/4 trong khoảng**: Earthquake → Electivire 102 (calc 102–120, x2), Earthquake → Toedscruel 36 (30–36, kháng), Seed Bomb → Kingdra 21 (18–22, kháng x4), Thunder Punch → Luvdisc 98 (KO, bị cắt). Công thức damage của game = Gen 9.
+  - Đoán nước NPC đúng 1/1 (Earthquake 54%).
+  - **NPC có đổi Pokémon**: Juan rút Whiscash (yếu x4 trước Grass) khi Toedscruel vào sân, đưa Kingdra ra. Bằng chứng đầu tiên cho việc dự đoán NPC đổi Pokémon (chưa làm).
+  - Lỗi tìm thấy và đã sửa: Self-Destruct/Explosion được coi như dùng lặp lại được ("wins the 1v1"). Giờ các move tự hạ gục không tính vào dự đoán 1v1 và gợi ý moveset.
+- Hoãn: lưu move NPC đã dùng qua nhiều trận, dự đoán NPC đổi Pokémon (chưa từng thấy), Doubles.
+
 ### Giai đoạn 3 — Live battle advisor (2 tuần) — *chỉ làm nếu Giai đoạn 0 cho phép*
 - `BattleReader` bằng MutationObserver và state machine theo lượt.
 - `turnAdvisor` cùng `npcModel` heuristic; tab Battle và mini HUD (tuỳ chọn).
