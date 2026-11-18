@@ -87,7 +87,7 @@ export function suggestHeldItems(
   const add = (id: string, value: number, why: string) => {
     if (has(id) && !tips.some((t) => t.itemId === id)) tips.push({ itemId: id, name: name(ds, id), value, calc: false, why });
   };
-  const npcMoveDescs = v.team.flatMap((n) => n.moves.map((id) => ds.moves[id]).filter((m) => !!m && !opts.rules?.bannedMoves.has(m.id)));
+  const npcMoveDescs = v.team.flatMap((n) => n.moves.map((id) => ds.moves[id]).filter((m) => !!m));
   const meCalc = boxToCalc(ds, mon, opts.levelCap ?? 50);
   const best = foes.map((f) => bestMove(ds, meCalc, f, myMoves, field));
   const bestAcc = best.map((b) => (b ? ds.moves[b.moveId]?.accuracy : true)).filter((a): a is number => typeof a === 'number');

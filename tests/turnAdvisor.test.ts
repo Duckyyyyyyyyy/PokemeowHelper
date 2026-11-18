@@ -156,12 +156,22 @@ describe('Destiny Bond (a friend saw an NPC use it exactly when its next hit wou
     expect(leaf(a).reason).toMatch(/before it can use Destiny Bond/); // …but Destiny Bond does not
   });
 
-  it('is ignored under League challenge rules', () => {
-    const dsGym = structuredClone(dsDb);
-    dsGym.npcs.find((n) => n.id === 'challenge:brock')!.category = 'gym';
-    const a = adviseTurn(dsGym, { ...base, boosts: { player: {}, opponent: { spe: 6 } } }, box);
-    expect(a.notes.join(' ')).not.toMatch(/Destiny Bond/);
-    expect(leaf(a).reason).not.toMatch(/Destiny Bond/);
+  it('the NPC keeps its Destiny Bond in Gym and in Mega Chamber battles (only YOUR Destiny Bond fails there)', () => {
+    for (const category of ['gym', 'mega'] as const) {
+      const d = structuredClone(dsDb);
+      d.npcs.find((n) => n.id === 'challenge:brock')!.category = category;
+      const a = adviseTurn(d, { ...base, boosts: { player: {}, opponent: { spe: 6 } } }, box);
+      expect(a.notes.join(' ')).toMatch(/knows Destiny Bond/);
+      expect(leaf(a).reason).toMatch(/Bait it/);
+    }
+  });
+
+  it('no item advice in Battle Towers (Bag medicine is not allowed there)', () => {
+    const d = structuredClone(dsDb);
+    d.npcs.find((n) => n.id === 'challenge:brock')!.category = 'tower';
+    const a = adviseTurn(d, { ...base, player: { ...base.player!, hp: 3 } }, box, { items: new Map([['superpotion', 5]]) });
+    expect(a.actions.some((x) => x.kind === 'item')).toBe(false);
+    expect(a.notes.join(' ')).toMatch(/Bag medicine cannot be used/);
   });
 });
 

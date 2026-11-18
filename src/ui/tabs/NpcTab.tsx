@@ -199,7 +199,8 @@ function NpcDetail({ ds, npc }: { ds: Dataset; npc: Npc }) {
         </Tip>
       )}
 
-      {rulesFor(npc.category).npcIgnoresWonderGuard && <Tip kind="info"><b>Challenge rules:</b> {RULES_TEXT}</Tip>}
+      {rulesFor(npc.category).npcIgnoresWonderGuard && <Tip kind="info"><b>Special rules:</b> {RULES_TEXT}</Tip>}
+      {!rulesFor(npc.category).bagItems && <Tip kind="info"><b>Battle Tower rules:</b> Bag medicine cannot be used, and HP, status and PP carry over between opponents.</Tip>}
       <div class="btns">
         <button class="btn primary" onClick={() => (activeTab.value = 'team')}>Suggest team →</button>
       </div>

@@ -195,7 +195,7 @@ function Suggestion({ ds }: { ds: Dataset }) {
               ))}
             </Tip>
           )}
-          {rules.npcIgnoresWonderGuard && <div class="small muted">Challenge rules applied: banned moves score 0 and their attacks ignore Wonder Guard.</div>}
+          {rules.npcIgnoresWonderGuard && <div class="small muted">World Boss / Mega Chamber rules applied: your banned moves score 0 and their attacks ignore Wonder Guard.</div>}
           <div class="foot">Damage via Gen 9 formulas with real stats, moves, abilities and items. 1v1 estimate: both sides use their best move each turn (no switching, crits or healing).</div>
         </>
       )}

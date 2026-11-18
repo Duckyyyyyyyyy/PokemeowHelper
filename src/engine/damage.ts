@@ -181,7 +181,7 @@ export function bestMove(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, moveId
   return best;
 }
 
-/** Under challenge rules the NPC's attacks ignore Wonder Guard: hit a copy without it. */
+/** In World Boss / Mega Chamber battles the NPC's attacks ignore Wonder Guard: hit a copy without it. */
 export function defenderVsNpc(me: CalcPokemon, rules?: BattleRules): CalcPokemon {
   if (!rules?.npcIgnoresWonderGuard || me.ability !== 'Wonder Guard') return me;
   const c = me.clone();
@@ -215,7 +215,8 @@ export interface Duel {
 export function duel(ds: Dataset, me: CalcPokemon, myMoves: string[], foe: CalcPokemon, foeMoves: string[], field?: Field, rules?: BattleRules): Duel {
   const legal = (ids: string[]) => repeatable(rules?.bannedMoves.size ? ids.filter((id) => !rules.bannedMoves.has(id)) : ids);
   const mine = bestMove(ds, me, foe, legal(myMoves), field);
-  const theirs = bestMove(ds, foe, defenderVsNpc(me, rules), legal(foeMoves), field);
+  // Banned moves are yours only (World Boss / Mega Chamber rules); the NPC keeps its moves.
+  const theirs = bestMove(ds, foe, defenderVsNpc(me, rules), repeatable(foeMoves), field);
   const myAvg = mine ? (mine.minPct + mine.maxPct) / 2 : 0;
   const theirAvg = theirs ? (theirs.minPct + theirs.maxPct) / 2 : 0;
 

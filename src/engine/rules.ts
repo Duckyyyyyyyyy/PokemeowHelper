@@ -1,20 +1,20 @@
 import type { NpcCategory } from '../shared/types';
 
 /**
- * Challenge rule modifiers.
- *
- * Source: the game's `challenge-battle-rules` chunk (read 2026-11-17, see docs/PLAN.md 1.1):
- * OHKO moves, Destiny Bond, Perish Song, Endeavor and Pain Split are disabled, and the
- * opponent's attacks ignore Wonder Guard. The rules are not in the wiki data file, so they
- * are hardcoded here.
- * ASSUMPTION: they apply to League challenges only (Gym, Elite Four, Champion), the NPCs that
- * come from the `challenges` key. Other modes (towers, rivals, bosses…) use normal rules.
+ * Special battle rules, from the game's wiki (Tips & Tricks, "Rules that change your plan", and
+ * World Boss Battles; read 2026-11-18), matching the game's `challenge-battle-rules` chunk:
+ *  - World Boss battles and Mega Chambers: YOUR Destiny Bond, Perish Song, Endeavor, Pain Split
+ *    and one-hit KO moves fail; opposing attacks bypass your Wonder Guard.
+ *    (Up to 0.6.0 this was wrongly applied to Gym / Elite Four / Champion battles.)
+ *  - Player Battles and Battle Towers: Bag medicine cannot be used.
  */
 export interface BattleRules {
-  /** Moves that do nothing in this battle. */
+  /** YOUR moves that do nothing in this battle (the NPC's moves are not affected). */
   bannedMoves: ReadonlySet<string>;
   /** The NPC's attacks hit your Wonder Guard Pokémon normally. */
   npcIgnoresWonderGuard: boolean;
+  /** Medicine from your Bag can be used in battle. */
+  bagItems: boolean;
 }
 
 export const CHALLENGE_BANNED_MOVES: ReadonlySet<string> = new Set([
@@ -22,13 +22,17 @@ export const CHALLENGE_BANNED_MOVES: ReadonlySet<string> = new Set([
   'destinybond', 'perishsong', 'endeavor', 'painsplit',
 ]);
 
-const CHALLENGE_CATEGORIES: NpcCategory[] = ['gym', 'elite-four', 'champion'];
+const CHALLENGE_CATEGORIES: NpcCategory[] = ['boss', 'mega'];
+const NO_BAG_CATEGORIES: NpcCategory[] = ['tower'];
 
-export const NORMAL_RULES: BattleRules = { bannedMoves: new Set(), npcIgnoresWonderGuard: false };
-export const CHALLENGE_RULES: BattleRules = { bannedMoves: CHALLENGE_BANNED_MOVES, npcIgnoresWonderGuard: true };
+export const NORMAL_RULES: BattleRules = { bannedMoves: new Set(), npcIgnoresWonderGuard: false, bagItems: true };
+export const CHALLENGE_RULES: BattleRules = { bannedMoves: CHALLENGE_BANNED_MOVES, npcIgnoresWonderGuard: true, bagItems: true };
+export const TOWER_RULES: BattleRules = { ...NORMAL_RULES, bagItems: false };
 
 export function rulesFor(category?: NpcCategory): BattleRules {
-  return category && CHALLENGE_CATEGORIES.includes(category) ? CHALLENGE_RULES : NORMAL_RULES;
+  if (category && CHALLENGE_CATEGORIES.includes(category)) return CHALLENGE_RULES;
+  if (category && NO_BAG_CATEGORIES.includes(category)) return TOWER_RULES;
+  return NORMAL_RULES;
 }
 
 export const isChallengeRules = (r?: BattleRules) => !!r?.npcIgnoresWonderGuard;
@@ -38,4 +42,4 @@ export function abilityVsNpc(ability: string | undefined, rules?: BattleRules): 
   return rules?.npcIgnoresWonderGuard && ability === 'Wonder Guard' ? undefined : ability;
 }
 
-export const RULES_TEXT = "OHKO moves, Destiny Bond, Perish Song, Endeavor and Pain Split don't work, and the NPC's attacks ignore Wonder Guard. Team tab damage scores and move advice account for this.";
+export const RULES_TEXT = "Your OHKO moves, Destiny Bond, Perish Song, Endeavor and Pain Split fail, and their attacks hit through Wonder Guard (World Boss and Mega Chamber rules). Team tab damage scores and move advice account for this.";

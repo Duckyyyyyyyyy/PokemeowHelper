@@ -67,7 +67,7 @@ export function scorePair(ds: Dataset, b: BoxMon, npc: NpcMon, rules?: BattleRul
   const myAbility = abilityVsNpc(b.ability, rules);
   for (const id of npc.moves) {
     const mv = ds.moves[id];
-    if (!mv || mv.category === 'Status' || rules?.bannedMoves.has(id)) continue;
+    if (!mv || mv.category === 'Status') continue; // the rules only ban YOUR moves
     hasDamaging = true;
     const mult = effectiveness(ds.types, mv.type, myTypes, myAbility ? [myAbility] : undefined);
     if (mult > worst.mult || worst.moveName === undefined) worst = { mult, moveName: mv.name };
