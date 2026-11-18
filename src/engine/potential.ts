@@ -125,19 +125,35 @@ const bst = (ds: Dataset, m: BoxMon) => {
 };
 
 export interface GrindOptions extends PotentialOptions {
-  /** How many to return (default 5). */
-  limit?: number;
-  /** How many go through the full damage calc after the base-stat prefilter (default 24). */
+  /** How many go in "More candidates" (default 5). */
+  more?: number;
+  /** How many go through the full damage calc after the prefilter (default 24). */
   shortlist?: number;
 }
 
+export interface GrindTeamPick extends PotentialResult {
+  /** Didn't pass the "clearly helps" bar: only there so the team has 6. */
+  filler?: boolean;
+}
+
+export interface GrindTeam {
+  /** Up to `size` (default 6) picks, in pick order (coverage greedy). */
+  team: GrindTeamPick[];
+  /** Next best candidates, by potential. */
+  more: GrindTeamPick[];
+  /** Why the team is short or has fillers. */
+  note?: string;
+}
+
 /**
- * Pokémon below the target level that would clearly help once trained: their potential beats the
- * weakest ready-now team member, or they would answer an NPC Pokémon better than the team does.
- * One copy per species (best IVs, then highest level). Low-level members of the ready team are
- * included too: they may only be there because the box has nothing better.
+ * A full team to train for this fight. Candidates: one copy per species (best IVs, then highest
+ * level) below the target level, ready-now members included. Picks use the same greedy as
+ * `suggestTeam`: best potential first, then whoever adds the most vs NPC Pokémon the picks so far
+ * don't answer. Candidates that clearly help (potential beats the weakest ready-now member or
+ * answers an NPC Pokémon better than that team) go first; others only fill empty slots (`filler`).
  */
-export function worthGrinding(ds: Dataset, v: NpcTeamVariant, ready: Suggestion, opts: GrindOptions = {}): PotentialResult[] {
+export function worthGrinding(ds: Dataset, v: NpcTeamVariant, ready: Suggestion, opts: GrindOptions = {}): GrindTeam {
+  const size = opts.size ?? 6;
   const level = targetLevel(v);
   const excluded = new Set(opts.excluded ?? []);
   const current = new Map<string, Candidate>(ready.ranked.map((c) => [c.mon.uid, c]));
@@ -153,7 +169,7 @@ export function worthGrinding(ds: Dataset, v: NpcTeamVariant, ready: Suggestion,
   // Shortlist for the full calc: top by base stats (bulky neutral picks like Snorlax win on stats)
   // UNION top by type matchup (a low-stat 4× answer still makes it).
   const all = [...bySpecies.values()];
-  const n = Math.ceil((opts.shortlist ?? 24) / 2);
+  const n = Math.ceil(Math.max(opts.shortlist ?? 24, size + (opts.more ?? 5)) / 2);
   const typeAvg = (m: BoxMon) => v.team.reduce((s, foe) => s + scorePair(ds, { ...m, moves: [] }, foe, opts.rules).score, 0);
   const byStats = [...all].sort((a, b) => bst(ds, b) - bst(ds, a) || ivTotal(b) - ivTotal(a)).slice(0, n);
   const byType = all.map((m) => [m, typeAvg(m)] as const).sort((a, b) => b[1] - a[1] || bst(ds, b[0]) - bst(ds, a[0])).slice(0, n).map(([m]) => m);
@@ -162,9 +178,10 @@ export function worthGrinding(ds: Dataset, v: NpcTeamVariant, ready: Suggestion,
   const npcCalc = opts.mode === 'type' ? undefined : v.team.map((n) => npcToCalc(ds, n));
   const teamBest = v.team.map((_n, j) => Math.max(0, ...ready.team.map((c) => c.pairs[j]?.score ?? 0)));
   const weakest = ready.team.length ? Math.min(...ready.team.map((c) => c.avg)) : 0;
-  const full = ready.team.length >= (opts.size ?? 6);
+  const full = ready.team.length >= size;
 
-  const out: PotentialResult[] = [];
+  const good: GrindTeamPick[] = [];
+  const rest: GrindTeamPick[] = [];
   for (const mon of pool) {
     const p = potentialFor(ds, mon, v, opts, npcCalc, level);
     const cur = current.get(mon.uid);
@@ -172,10 +189,44 @@ export function worthGrinding(ds: Dataset, v: NpcTeamVariant, ready: Suggestion,
     const curWins = cur ? wins(cur.pairs) : 0;
     const fillsGap = v.team.filter((_n, j) => p.pairs[j].score >= 55 && p.pairs[j].score >= teamBest[j] + 10).map((n) => n.name);
     const beatsWeakest = !full || p.potential > weakest;
-    if (p.potential < curAvg + 5 || p.potential < 45 || (!beatsWeakest && !fillsGap.length)) continue;
-    out.push({ ...p, current: curAvg, currentWins: curWins, fillsGap, why: whyText(ds, p, curWins, v.team.length, fillsGap) });
+    const helps = p.potential >= curAvg + 5 && p.potential >= 45 && (beatsWeakest || fillsGap.length > 0);
+    const why = whyText(ds, p, curWins, v.team.length, fillsGap);
+    if (helps) good.push({ ...p, current: curAvg, currentWins: curWins, fillsGap, why });
+    else rest.push({ ...p, current: curAvg, currentWins: curWins, fillsGap, filler: true, why: `Filler – weak vs this NPC. ${why}` });
   }
-  return out.sort((a, b) => b.potential - a.potential || b.fillsGap.length - a.fillsGap.length || a.levelsNeeded - b.levelsNeeded).slice(0, opts.limit ?? 5);
+  const byPotential = (a: GrindTeamPick, b: GrindTeamPick) => b.potential - a.potential || b.fillsGap.length - a.fillsGap.length || a.levelsNeeded - b.levelsNeeded;
+  good.sort(byPotential);
+  rest.sort(byPotential);
+
+  // Greedy coverage, as in suggestTeam: the pick that most raises "best answer per NPC Pokémon".
+  const team: GrindTeamPick[] = [];
+  const bestPer = v.team.map(() => 0);
+  for (const group of [good, rest]) {
+    while (team.length < size && group.length) {
+      let pick = 0;
+      let gain = -1;
+      group.forEach((c, i) => {
+        const g = c.pairs.reduce((s, p, j) => s + Math.max(0, p.score - bestPer[j]), 0) + c.potential / 1000;
+        if (g > gain) {
+          gain = g;
+          pick = i;
+        }
+      });
+      if (team.length && gain < 1) pick = 0; // nobody adds coverage: highest potential
+      const c = group.splice(pick, 1)[0];
+      team.push(c);
+      c.pairs.forEach((p, j) => (bestPer[j] = Math.max(bestPer[j], p.score)));
+    }
+  }
+  const more = [...good, ...rest].sort(byPotential).slice(0, opts.more ?? 5);
+
+  const fillers = team.filter((c) => c.filler).length;
+  let note: string | undefined;
+  if (team.length < size)
+    note = `Only ${all.length} of your Pokémon ${all.length === 1 ? 'is' : 'are'} below Lv ${level} (one per species; excluded ones left out), so the grind team has ${team.length}.`;
+  else if (fillers)
+    note = `${fillers} filler${fillers > 1 ? 's' : ''}: only ${team.length - fillers} of your low-level Pokémon clearly beat the ready-now team at Lv ${level}.`;
+  return { team, more, note };
 }
 
 function whyText(ds: Dataset, p: Omit<PotentialResult, 'current' | 'currentWins' | 'fillsGap' | 'why'>, curWins: number, n: number, fillsGap: string[]): string {

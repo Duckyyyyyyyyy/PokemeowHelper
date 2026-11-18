@@ -63,20 +63,67 @@ describe('potential: target level and moves by level', () => {
 });
 
 describe('potential: ranking', () => {
-  it('lists a low-level Snorlax over a low-level Rattata, not mons already at the cap', () => {
-    const v = npc('challenge:koga').variants[0];
-    const box = [mon('Snorlax', 12, ['tackle']), mon('Rattata', 12, ['tackle']), mon('Geodude', 48, ['tackle']), mon('Pidgey', 47, ['tackle']), mon('Snorlax', 10, ['tackle'], { ivs: { ...PERFECT, atk: 0 } })];
-    const ready = suggestTeam(ds, box, v, { levelCap: 48, size: 2 });
-    const list = worthGrinding(ds, v, ready, { levelCap: 48, size: 2 });
-    const names = list.map((r) => ds.species[r.mon.species].name);
-    expect(names[0]).toBe('Snorlax');
-    expect(list[0].mon.uid).toBe('Snorlax-12'); // best-IV copy only
-    expect(names.filter((n) => n === 'Snorlax')).toHaveLength(1);
-    expect(list.every((r) => (r.mon.level ?? 0) < 48)).toBe(true);
-    expect(list[0].potential).toBeGreaterThan(list[0].current);
-    expect(list[0].why).toContain('Lv 48');
-    const rat = potentialFor(ds, mon('Rattata', 12, ['tackle']), v);
-    expect(rat.potential).toBeLessThan(list[0].potential);
+  const KOGA = () => npc('challenge:koga').variants[0]; // cap 48, all Poison
+  const lowBox = () => ['Snorlax', 'Slowbro', 'Pikachu', 'Charizard', 'Rattata', 'Caterpie', 'Geodude', 'Squirtle', 'Pidgey', 'Abra', 'Machop', 'Onix']
+    .map((n) => mon(n, 12, ['tackle']));
+  const names = (rs: { mon: BoxMon }[]) => rs.map((r) => ds.species[r.mon.species].name);
+
+  it('picks a team of 6: one per species, best-IV copy, never at/over the target level', () => {
+    const v = KOGA();
+    const box = [...lowBox(), mon('Geodude', 48, ['tackle']), mon('Snorlax', 10, ['tackle'], { ivs: { ...PERFECT, atk: 0 } })];
+    const ready = suggestTeam(ds, box, v, { levelCap: 48 });
+    const g = worthGrinding(ds, v, ready, { levelCap: 48 });
+    expect(g.team).toHaveLength(6);
+    expect(new Set(names(g.team)).size).toBe(6);
+    expect(g.team.find((r) => ds.species[r.mon.species].name === 'Snorlax')?.mon.uid).toBe('Snorlax-12');
+    expect([...g.team, ...g.more].every((r) => (r.mon.level ?? 0) < 48)).toBe(true);
+    expect(g.more.length).toBeGreaterThan(0);
+    expect(g.more.length).toBeLessThanOrEqual(5);
+    expect(g.more.some((r) => g.team.includes(r))).toBe(false);
+    const snorlax = g.team.find((r) => r.mon.uid === 'Snorlax-12')!;
+    expect(snorlax.potential).toBeGreaterThan(snorlax.current);
+    expect(snorlax.why).toContain('Lv 48');
+    expect(potentialFor(ds, mon('Rattata', 12, ['tackle']), v).potential).toBeLessThan(snorlax.potential);
+  });
+  it('picks in coverage order: best potential first, then the biggest gain vs unanswered NPC Pokémon', () => {
+    const v = KOGA();
+    const ready = suggestTeam(ds, lowBox(), v, { levelCap: 48 });
+    const g = worthGrinding(ds, v, ready, { levelCap: 48, more: 20 });
+    const all = [...g.team, ...g.more];
+    const first = g.team[0];
+    expect(all.filter((r) => r.filler === first.filler).every((r) => r.potential <= first.potential)).toBe(true);
+    const bestPer = v.team.map(() => 0);
+    g.team.forEach((pick, i) => {
+      const gain = (r: typeof pick) => r.pairs.reduce((s, p, j) => s + Math.max(0, p.score - bestPer[j]), 0);
+      if (i > 0) {
+        const rivals = [...g.team.slice(i + 1), ...g.more].filter((r) => r.filler === pick.filler);
+        if (gain(pick) >= 1) for (const r of rivals) expect(gain(pick)).toBeGreaterThanOrEqual(gain(r));
+      }
+      pick.pairs.forEach((p, j) => (bestPer[j] = Math.max(bestPer[j], p.score)));
+    });
+  });
+  it('fills empty slots with marked fillers and says why', () => {
+    const v = KOGA();
+    // A strong ready-now team at the cap: few low-level Pokémon clearly beat it.
+    const strong = ['Geodude', 'Golem', 'Rhydon', 'Dugtrio', 'Alakazam', 'Nidoking'].map((n) => mon(n, 48, ['earthquake', 'psychic', 'rockslide']));
+    const low = ['Caterpie', 'Rattata', 'Pidgey', 'Spearow', 'Weedle', 'Zubat', 'Snorlax'].map((n) => mon(n, 12, ['tackle']));
+    const ready = suggestTeam(ds, [...strong, ...low], v, { levelCap: 48 });
+    const g = worthGrinding(ds, v, ready, { levelCap: 48 });
+    expect(g.team).toHaveLength(6);
+    const fillers = g.team.filter((r) => r.filler);
+    expect(fillers.length).toBeGreaterThan(0);
+    expect(fillers.every((r) => r.why.startsWith('Filler – weak vs this NPC'))).toBe(true);
+    // Non-fillers come first.
+    expect(g.team.findIndex((r) => r.filler)).toBe(g.team.length - fillers.length);
+    expect(g.note).toMatch(/filler/);
+  });
+  it('a small box gives a short team with a reason', () => {
+    const v = KOGA();
+    const box = [mon('Snorlax', 12, ['tackle']), mon('Pikachu', 15, ['thundershock']), mon('Caterpie', 5, ['tackle']), mon('Geodude', 48, ['tackle'])];
+    const g = worthGrinding(ds, v, suggestTeam(ds, box, v, { levelCap: 48 }), { levelCap: 48 });
+    expect(g.team).toHaveLength(3);
+    expect(g.more).toHaveLength(0);
+    expect(g.note).toMatch(/Only 3 of your Pokémon are below Lv 48/);
   });
   it('a low-stat type answer survives the shortlist on a big box', () => {
     const v = npc('challenge:blaine').variants[0]; // all Fire, cap 52
@@ -86,8 +133,8 @@ describe('potential: ranking', () => {
     expect(strong.length).toBeGreaterThan(40);
     const big = [...strong.map((s) => ({ uid: String(s.id), species: s.id, level: 10, moves: ['tackle'], source: 'game' as const, ivs: PERFECT, evs: {} })), mon('Squirtle', 10, ['tackle'])];
     const ready = suggestTeam(ds, [...big, mon('Pidgey', 50, ['wingattack'])], v, { levelCap: 52 });
-    const names = worthGrinding(ds, v, ready, { levelCap: 52, limit: 40 }).map((r) => ds.species[r.mon.species].name);
-    expect(names).toContain('Squirtle'); // BST 314: only the type half of the shortlist keeps it
+    const g = worthGrinding(ds, v, ready, { levelCap: 52, more: 40 });
+    expect(names([...g.team, ...g.more])).toContain('Squirtle'); // BST 314: only the type half of the shortlist keeps it
   });
   it('versatility leaves out recharge moves', () => {
     expect(movePool(ds, mon('Snorlax', 12, ['tackle']), 100)).not.toContain('gigaimpact');
