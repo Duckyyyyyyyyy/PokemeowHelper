@@ -37,6 +37,9 @@ export const WILD_SEL = {
   shiny: '.encounter-rarity-shiny, .pokemon-name-shiny, .shiny-encounter-reveal, .battle-shiny-sparkles',
   /** Explore team panel (class names from the game stylesheet; markup not seen live). */
   teamSlot: '.starter-options > li[data-explore-team-slot]',
+  /** Slot 1, the starter: its own block above the list, not an li. */
+  teamStarter: '.starter-panel .starter-summary',
+  teamName: '.starter-info h3, h3, .explore-team-name',
   teamLevel: '.explore-team-level',
 };
 
@@ -53,7 +56,7 @@ function nameOf(el: Element | null | undefined): string {
   const title = el.querySelector('strong[title]')?.getAttribute('title');
   if (title) return clean(title);
   const copy = el.cloneNode(true) as Element;
-  copy.querySelectorAll('button, svg, img, .encounter-level-held, .battle-pokemon-level, .battle-status, small').forEach((n) => n.remove());
+  copy.querySelectorAll('button, svg, img, .encounter-level-held, .battle-pokemon-level, .explore-team-level, .battle-status, small').forEach((n) => n.remove());
   return clean(copy.textContent);
 }
 
@@ -97,13 +100,9 @@ function readLead(root: Element | null): WildLead | undefined {
   const name = nameOf(root.querySelector(WILD_SEL.name) ?? root);
   if (!name) return undefined;
   const { hp, maxHp } = hpOf(root);
-  return { name, level: levelOf(root), hp, maxHp, item: itemOf(root) };
+  return { name, level: levelOf(root), hp, maxHp, item: itemOf(root), gender: genderOf(root) };
 }
 
-/**
- * Explore team panel before a battle (NOT verified live: built from the stylesheet's class names).
- * Name from the sprite's alt text or the slot's first text, level "Lv. 56", HP "30/30 HP". Slot 1 = lead.
- */
 /** Text with a space between elements, so "Lv. 56" and "166/166 HP" never run together. */
 function spacedText(el: Element): string {
   const parts: string[] = [];
@@ -112,16 +111,45 @@ function spacedText(el: Element): string {
   return clean(parts.join(' '));
 }
 
+/** One team-panel entry (starter summary or a slot row). */
+function teamEntry(el: Element, slot: number): RosterMon | null {
+  const heading = el.querySelector(WILD_SEL.teamName);
+  const alt = clean(el.querySelector('img.pokemon-sprite[alt], .pokemon-sprite[alt]')?.getAttribute('alt'));
+  const text = spacedText(el);
+  const name = (heading && nameOf(heading)) || alt || clean(text.split(/\s+Lv\.?\s*\d+/i)[0]).replace(/[♂♀]/g, '').trim();
+  if (!name) return null;
+  const level = num((clean(el.querySelector(WILD_SEL.teamLevel)?.textContent) || text).match(/Lv\.?\s*(\d+)/i)?.[1]);
+  const hpm = text.match(/(\d+)\s*\/\s*(\d+)\s*HP/i);
+  const hp = num(hpm?.[1]);
+  const slotText = num(text.match(/\bSlot\s*(\d+)/i)?.[1]);
+  return {
+    name, level, hp, maxHp: num(hpm?.[2]),
+    // The panel does not say who leads: the encounter card's lead decides (see wildParty).
+    active: false,
+    fainted: hp === 0 || el.getAttribute('data-fainted') === 'true',
+    gender: genderOf(heading ?? el),
+    slot: slotText ?? slot,
+  };
+}
+
+/**
+ * Explore team panel. Checked against the user's live screenshot (2026-11-18) and the game's
+ * stylesheet: slot 1 (the starter, "★ Starter") is NOT a list row but a separate summary block,
+ *   .starter-panel-compact .starter-summary > .pokemon-sprite + .starter-info h3 (name, .explore-team-level)
+ * and slots 2–6 are `.starter-options > li[data-explore-team-slot]`. Returned in slot order.
+ */
 export function readTeamPanel(doc: ParentNode): RosterMon[] {
-  return [...doc.querySelectorAll(WILD_SEL.teamSlot)].map((li, i) => {
-    const alt = clean(li.querySelector('img.pokemon-sprite, img[alt]')?.getAttribute('alt'));
-    const text = spacedText(li);
-    const name = alt || clean(text.split(/\s+Lv\.?\s*\d+/i)[0]).replace(/[♂♀]/g, '').trim();
-    const level = num((clean(li.querySelector(WILD_SEL.teamLevel)?.textContent) || text).match(/Lv\.?\s*(\d+)/i)?.[1]);
-    const hpm = text.match(/(\d+)\s*\/\s*(\d+)\s*HP/i);
-    const hp = num(hpm?.[1]);
-    return { name, level, hp, maxHp: num(hpm?.[2]), active: i === 0, fainted: hp === 0 || li.getAttribute('data-fainted') === 'true' };
-  }).filter((r) => r.name);
+  const out: RosterMon[] = [];
+  const starter = doc.querySelector(WILD_SEL.teamStarter);
+  if (starter) {
+    const r = teamEntry(starter, 1);
+    if (r) out.push(r);
+  }
+  doc.querySelectorAll(WILD_SEL.teamSlot).forEach((li) => {
+    const r = teamEntry(li, out.length + 1);
+    if (r) out.push(r);
+  });
+  return out.sort((x, y) => (x.slot ?? 99) - (y.slot ?? 99));
 }
 
 export function readWild(doc: ParentNode, now = Date.now()): WildSnapshot | null {

@@ -16,6 +16,7 @@ export interface WildLead {
   hp?: number;
   maxHp?: number;
   item?: string;
+  gender?: 'M' | 'F';
 }
 
 export interface WildSnapshot {

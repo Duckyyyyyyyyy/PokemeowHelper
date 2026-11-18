@@ -37,6 +37,10 @@ export interface RosterMon {
   maxHp?: number;
   active: boolean;
   fainted: boolean;
+  /** Gender when the page shows it (Explore team panel). */
+  gender?: 'M' | 'F';
+  /** Team slot shown on the Explore team panel (1 = starter). */
+  slot?: number;
   /** Your side only: move names (with PP) shown on the switch card. */
   moves?: { name: string; pp?: number; maxPp?: number }[];
 }
