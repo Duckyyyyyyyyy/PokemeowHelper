@@ -229,7 +229,15 @@ export function duel(ds: Dataset, me: CalcPokemon, myMoves: string[], foe: CalcP
     youFirst = a === b ? null : a > b;
   }
 
-  const myTurns = myAvg > 0 ? Math.ceil(100 / myAvg) : Infinity;
+  let myTurns = myAvg > 0 ? Math.ceil(100 / myAvg) : Infinity;
+  // A Gem is used up by the first hit of its type: only that hit is boosted.
+  if (mine && myAvg > 0 && me.item?.endsWith(' Gem')) {
+    const plainMe = me.clone();
+    plainMe.item = undefined;
+    const plain = bestMove(ds, plainMe, foe, legal(myMoves), field);
+    const plainAvg = plain ? (plain.minPct + plain.maxPct) / 2 : 0;
+    if (plainAvg > 0 && plainAvg < myAvg) myTurns = myAvg >= 100 ? 1 : 1 + Math.ceil((100 - myAvg) / plainAvg);
+  }
   const theirTurns = theirAvg > 0 ? Math.ceil(100 / theirAvg) : Infinity;
   const first = youFirst ?? false; // ties are counted pessimistically
   const win = myTurns !== Infinity && (first ? myTurns <= theirTurns : myTurns < theirTurns);

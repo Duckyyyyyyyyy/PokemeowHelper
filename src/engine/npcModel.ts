@@ -42,7 +42,9 @@ export function predictNpcMove(
   foe: CalcPokemon,
   me: CalcPokemon,
   moveIds: string[],
-  ctx: { field?: Field; myStatus?: string; myBoosts?: Boosts; foeBoosts?: Boosts; usedThisBattle?: string[]; firstMove?: boolean } = {},
+  ctx: { field?: Field; myStatus?: string; myBoosts?: Boosts; foeBoosts?: Boosts; usedThisBattle?: string[]; firstMove?: boolean;
+    /** Your best hit can KO it from its current HP. */ facingKo?: boolean;
+    /** Its previous move (Destiny Bond fails twice in a row). */ lastMove?: string } = {},
 ): NpcGuess[] {
   const myHp = (100 * me.curHP()) / me.maxHP();
   const used = ctx.usedThisBattle ?? [];
@@ -64,10 +66,12 @@ export function predictNpcMove(
       const raises = /raises the user's/i.test(d) ? RAISES_USER.find(([re]) => re.test(d)) : undefined;
       if (raises && (ctx.foeBoosts?.[raises[1]] ?? 0) >= 6) w = 0.05; // already maxed
       if (/protect|detect|endure/i.test(mv.name)) w = 0.6;
+      // Seen by a friend: the NPC used Destiny Bond exactly when your next hit would KO it.
+      if (id === 'destinybond') w = ctx.lastMove === 'destinybond' ? 0.05 : ctx.facingKo ? 6 : 0.1;
       if (/heal|restore|recover|rest\b/i.test(d) && myHp > 0) w = (100 * foe.curHP()) / foe.maxHP() < 50 ? 2 : 0.2;
       // Seen live 4 of 4 times: an NPC Pokémon's FIRST move on the field was a useful status move
       // (Brock: Geodude Defense Curl, Onix Screech; Lt. Surge: Voltorb Screech, Raichu Thunder Wave).
-      else if (ctx.firstMove && w >= 1) w *= 3;
+      else if (ctx.firstMove && w >= 1 && id !== 'destinybond') w *= 3;
       // Status moves on you were not repeated live (Onix: Screech once, then Rock Tomb ×3; Voltorb: Screech,
       // then Tackle). Self-boosts were: Raichu and Pikachu each used Double Team twice before attacking.
       w *= (raises ? 0.8 : 0.5) ** used.filter((u) => u === id).length;

@@ -109,3 +109,93 @@ describe('moves that need sleep (live bug: Snore scored 81 on an awake Snorlax)'
     expect(a.score).toBeGreaterThan(0);
   });
 });
+
+describe('Destiny Bond (a friend saw an NPC use it exactly when its next hit would KO)', () => {
+  // Same battle, but outside League rules and Onix knows Destiny Bond at 5 HP.
+  const dsDb = structuredClone(ds);
+  const brock = dsDb.npcs.find((n) => n.id === 'challenge:brock')!;
+  brock.category = 'rival';
+  const onix = brock.variants[0].team.find((m) => m.name === 'Onix')!;
+  onix.moves = [...onix.moves.slice(0, 3), 'destinybond'];
+  const box: BoxMon[] = [
+    { uid: 'game:1', gameId: '1', source: 'game', species: 546, level: 18, moves: ['fairywind', 'stunspore', 'megadrain', 'razorleaf'], nature: 'Modest', ivs: iv(20), evs: zero },
+  ];
+  const base = { ...snap, opponent: { ...snap.opponent!, hp: 5, status: undefined }, events: (snap.events ?? []).filter((e) => e.turn !== 3) };
+  const leaf = (a: ReturnType<typeof adviseTurn>) => a.actions.find((x) => x.label === 'Razor Leaf')!;
+
+  it('when it moves first, a KO move is risky and the advice says to bait it', () => {
+    const a = adviseTurn(dsDb, { ...base, boosts: { player: {}, opponent: { spe: 6 } } }, box);
+    expect(leaf(a).ko).toBe('sure');
+    expect(leaf(a).score!).toBeLessThanOrEqual(45);
+    expect(leaf(a).reason).toMatch(/Bait it/);
+    expect(a.prediction![0].name).toBe('Destiny Bond');
+    expect(a.notes.join(' ')).toMatch(/knows Destiny Bond/);
+  });
+
+  it('when you move first, the KO is safe', () => {
+    const a = adviseTurn(dsDb, { ...base, boosts: { player: {}, opponent: {} } }, box);
+    expect(leaf(a).reason).toMatch(/before it can use Destiny Bond/);
+    expect(leaf(a).score!).toBeGreaterThan(60);
+  });
+
+  it('right after it used Destiny Bond: KO is unsafe if you hit first, safe if it moves first', () => {
+    const used = [...base.events, { idx: 99, turn: 4, side: 'opponent' as const, mon: 'Onix', move: 'Destiny Bond', target: 'Cottonee', stages: { attacker: {}, target: {} } }];
+    const youFirst = adviseTurn(dsDb, { ...base, events: used, boosts: { player: {}, opponent: {} } }, box);
+    expect(leaf(youFirst).score!).toBeLessThanOrEqual(30);
+    expect(leaf(youFirst).reason).toMatch(/Destiny Bond is active/);
+    const theyFirst = adviseTurn(dsDb, { ...base, events: used, boosts: { player: {}, opponent: { spe: 6 } } }, box);
+    expect(leaf(theyFirst).reason).toMatch(/safe to KO/);
+    expect(theyFirst.prediction!.find((g) => g.name === 'Destiny Bond')!.prob).toBeLessThan(0.05);
+  });
+
+  it('compares speed with Destiny Bond itself, not with a priority attack (Quick Attack)', () => {
+    const dsQa = structuredClone(dsDb);
+    dsQa.npcs.find((n) => n.id === 'challenge:brock')!.variants[0].team.find((m) => m.name === 'Onix')!.moves = ['quickattack', 'destinybond'];
+    const a = adviseTurn(dsQa, { ...base, boosts: { player: {}, opponent: {} } }, box);
+    expect(a.threat?.youFirst).toBe(false); // Quick Attack goes first…
+    expect(leaf(a).reason).toMatch(/before it can use Destiny Bond/); // …but Destiny Bond does not
+  });
+
+  it('is ignored under League challenge rules', () => {
+    const dsGym = structuredClone(dsDb);
+    dsGym.npcs.find((n) => n.id === 'challenge:brock')!.category = 'gym';
+    const a = adviseTurn(dsGym, { ...base, boosts: { player: {}, opponent: { spe: 6 } } }, box);
+    expect(a.notes.join(' ')).not.toMatch(/Destiny Bond/);
+    expect(leaf(a).reason).not.toMatch(/Destiny Bond/);
+  });
+});
+
+describe('battle items (battle screen: "Choose an item, then its target. Uses one turn.")', () => {
+  const box: BoxMon[] = [
+    { uid: 'game:1', gameId: '1', source: 'game', species: 546, level: 18, moves: ['fairywind', 'stunspore', 'megadrain', 'razorleaf'], nature: 'Modest', ivs: iv(20), evs: zero },
+    { uid: 'game:2', gameId: '2', source: 'game', species: 387, level: 14, moves: ['razorleaf'], nature: 'Hardy', ivs: iv(20), evs: zero },
+  ];
+  const items = new Map([['potion', 10], ['superpotion', 15], ['fullheal', 13], ['revive', 12]]);
+  const items_ = (a: ReturnType<typeof adviseTurn>) => a.actions.filter((x) => x.kind === 'item');
+
+  it('suggests nothing when healthy, and none without a bag', () => {
+    expect(items_(adviseTurn(ds, { ...snap, player: { ...snap.player!, hp: snap.player!.maxHp, status: undefined } }, box, { items }))).toEqual([]);
+    expect(items_(adviseTurn(ds, { ...snap, player: { ...snap.player!, hp: 5 } }, box))).toEqual([]);
+  });
+
+  it('low HP: picks a potion big enough, scored with their free hit', () => {
+    const a = adviseTurn(ds, { ...snap, player: { ...snap.player!, hp: Math.round(snap.player!.maxHp! * 0.3), status: undefined } }, box, { items });
+    const heal = items_(a).find((x) => /Potion/.test(x.label))!;
+    expect(heal.label).toMatch(/^(Super )?Potion on Cottonee/);
+    expect(heal.reason).toMatch(/\+\d+ HP \(\d+ in bag\), takes ~\d+%/);
+    expect(heal.score).not.toBeNull();
+  });
+
+  it('a status: offers the matching cure', () => {
+    const a = adviseTurn(ds, { ...snap, player: { ...snap.player!, status: 'par' } }, box, { items });
+    expect(items_(a).find((x) => x.label.startsWith('Full Heal'))!.reason).toMatch(/Cures paralysis/);
+  });
+
+  it('a fainted team member: offers Revive with a two-turn penalty', () => {
+    const bench = snap.bench.map((r) => (r.name === 'Turtwig' ? { ...r, hp: 0, fainted: true } : r));
+    const a = adviseTurn(ds, { ...snap, bench }, box, { items });
+    const rev = items_(a).find((x) => x.label === 'Revive on Turtwig')!;
+    expect(rev.reason).toMatch(/back at half HP/);
+    expect(rev.score!).toBeLessThan(a.actions[0].score!);
+  });
+});

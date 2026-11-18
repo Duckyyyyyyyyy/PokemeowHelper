@@ -12,6 +12,8 @@ export interface MoveChoice {
   source: MoveSource;
   /** Learn level for 'level' moves. */
   level?: number;
+  /** A level-up move it learns ABOVE its current level (before the level cap). */
+  later?: boolean;
   /** NPC Pokémon this move is the best answer to. */
   bestAgainst: string[];
 }
@@ -25,16 +27,20 @@ export interface MovesetSuggestion {
 
 /**
  * Picks up to 4 damaging moves that together hit the NPC team hardest.
- * Candidates: moves it already knows, level-up moves at or below its level,
- * and TM moves (you need the TM item). Egg moves are only kept if already known.
+ * Candidates: moves it already knows, level-up moves at or below its level (or up to
+ * `untilLevel`, e.g. the level cap you can train it to), and TM moves if `allowTM`
+ * (only TMs in `ownedTms` when your bag is known). Egg moves are only kept if already known.
+ * Damage is always computed at its CURRENT level, so the lists compare fairly.
  */
-export function suggestMoveset(ds: Dataset, b: BoxMon, v: NpcTeamVariant, opts: { levelCap?: number; allowTM?: boolean; rules?: BattleRules } = {}): MovesetSuggestion {
+export function suggestMoveset(ds: Dataset, b: BoxMon, v: NpcTeamVariant, opts: { levelCap?: number; untilLevel?: number; allowTM?: boolean; ownedTms?: ReadonlySet<string> | null; rules?: BattleRules } = {}): MovesetSuggestion {
   const s = ds.species[b.species];
   const level = b.level ?? opts.levelCap ?? 50;
-  const sources = new Map<string, { source: MoveSource; level?: number }>();
+  const until = Math.max(level, opts.untilLevel ?? level);
+  const sources = new Map<string, { source: MoveSource; level?: number; later?: boolean }>();
   for (const id of b.moves) sources.set(id, { source: 'known' });
-  for (const [id, l] of s?.levelMoves ?? []) if (l <= level && !sources.has(id)) sources.set(id, { source: 'level', level: l });
-  if (opts.allowTM !== false) for (const id of s?.machineMoves ?? []) if (!sources.has(id)) sources.set(id, { source: 'tm' });
+  for (const [id, l] of s?.levelMoves ?? []) if (l <= until && !sources.has(id)) sources.set(id, { source: 'level', level: l, later: l > level || undefined });
+  // With a bag read from the game, only TMs you own.
+  if (opts.allowTM !== false) for (const id of s?.machineMoves ?? []) if (!sources.has(id) && (!opts.ownedTms || opts.ownedTms.has(id))) sources.set(id, { source: 'tm' });
 
   const candidates = [...sources.keys()].filter((id) => ds.moves[id] && ds.moves[id].category !== 'Status' && !opts.rules?.bannedMoves.has(id) && !SELF_KO_MOVES.has(id) && !SLEEP_ONLY_MOVES.has(id));
   const me = boxToCalc(ds, b, level);
@@ -57,7 +63,8 @@ export function suggestMoveset(ds: Dataset, b: BoxMon, v: NpcTeamVariant, opts: 
       const gain = coverageOf([...chosen, i]) - base;
       // Tie-break toward moves it already knows, then level-up over TM (never enough to add a useless move).
       const src = sources.get(candidates[i])!.source;
-      const rank = gain + (src === 'known' ? 0.5 : src === 'level' ? 0.2 : 0);
+      const later = sources.get(candidates[i])!.later;
+      const rank = gain + (src === 'known' ? 0.5 : src === 'level' ? (later ? 0.1 : 0.2) : 0);
       if (rank > bestRank) {
         bestRank = rank;
         best = i;
@@ -78,6 +85,7 @@ export function suggestMoveset(ds: Dataset, b: BoxMon, v: NpcTeamVariant, opts: 
       type: ds.moves[id].type,
       source: src.source,
       level: src.level,
+      later: src.later,
       bestAgainst: v.team.filter((_n, j) => chosen.every((k) => dmg[k][j] <= dmg[i][j]) && dmg[i][j] > 0).map((n) => n.name),
     };
   });

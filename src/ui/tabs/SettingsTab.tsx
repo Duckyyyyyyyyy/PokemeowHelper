@@ -4,6 +4,7 @@ import { Tip } from '../components/common';
 import { BoxSyncCard } from '../components/BoxSync';
 import type { BoxMon } from '../../shared/types';
 import { clearObserved, observed } from '../battleStore';
+import { bag, forgetBag, loadSampleBag } from '../bagStore';
 
 type Theme = 'auto' | 'light' | 'dark';
 
@@ -109,6 +110,19 @@ export function SettingsTab() {
         <div class="small muted">Moves NPC Pokémon actually used in your battles, remembered across battles and shown in the NPC and Battle tabs. Stored on this computer only; a wiki sync does not touch it.</div>
         <div class="btns" style={{ marginTop: '6px' }}>
           <button class="btn" disabled={!Object.keys(observed.value).length} onClick={() => confirm('Forget all moves seen in battle?') && clearObserved()}>Forget</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <p class="title">Your bag<span class="r">{bag.value ? `${bag.value.items.length} kinds` : 'not read yet'}</span></p>
+        <div class="small muted">
+          {bag.value
+            ? `Read from the game's Bag page ${new Date(bag.value.at).toLocaleString()}. Open the Bag page again after buying or using items.`
+            : "Open the Bag page in the game once: MeowHelper reads it from the screen (no extra requests) to suggest TMs and held items you own."}
+        </div>
+        <div class="btns" style={{ marginTop: '6px' }}>
+          <button class="btn" disabled={!bag.value} onClick={() => confirm('Forget your bag? It is read again next time you open the Bag page.') && forgetBag()}>Forget</button>
+          {import.meta.env.DEV && <button class="link" onClick={loadSampleBag}>Load sample bag</button>}
         </div>
       </div>
 

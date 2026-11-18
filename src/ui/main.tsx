@@ -9,8 +9,10 @@ import { init } from './store';
 import { applyTheme, savedTheme } from './tabs/SettingsTab';
 import { initBoxSync, maybeAutoSyncBox } from './boxStore';
 import { initBattle } from './battleStore';
+import { initBag } from './bagStore';
 
 applyTheme(savedTheme());
 render(<App />, document.getElementById('app')!);
 Promise.all([init(), initBoxSync()]).then(maybeAutoSyncBox);
 initBattle();
+initBag();
