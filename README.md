@@ -20,7 +20,11 @@ Full plan: [docs/PLAN.md](docs/PLAN.md) · Mockup: [docs/ui-mockup.html](docs/ui
 - **Challenge rules** (Gym, Elite Four, Champion): OHKO moves, Destiny Bond, Perish Song, Endeavor and Pain Split are ignored, and the NPC's attacks hit through Wonder Guard.
 - **Team controls**: 🔓 lock a Pokémon onto the team, ✕ exclude one, tap a bench name to lock it in, and **Copy team** puts the team on the clipboard as Showdown-style text.
 
-In-battle tips are Phase 3.
+**Phase 3 – in-battle tips** (current, singles):
+- Open a battle on pokemeowrpg.com and the **Battle** tab follows it live: both Pokémon with exact HP, status and stat changes (rebuilt from the battle log).
+- Every option is ranked: your 4 moves and each switch, with damage %, KO chance and a short reason. It also shows the NPC's most dangerous hit and who moves first.
+- How it reads the battle: a content script watches the battle screen and only reads it. It never clicks, types, changes the page or calls the game's API. After installing or updating MeowDex, reload the game tab once.
+- Not yet: Doubles, NPC switch prediction, crits and move side effects.
 
 ## Install in Chrome (load unpacked)
 ```bash
@@ -54,8 +58,9 @@ This checks a full downloaded wiki data file; run it after each game update. `np
 ## Structure
 ```
 src/background/   service worker (opens the side panel when the icon is clicked)
+src/content/      read-only content script: battleReader (selectors + parsers) → chrome.storage → Battle tab
 src/data/         literalParser (acorn), normalize (one adapter per NPC source), sync (wiki data), boxSync (your box), db (IndexedDB)
-src/engine/       typeChart, analysis, damage (@smogon/calc wrapper + 1v1 duel), rules (challenge rules), moveset, teamSuggest – plain TypeScript, with tests
+src/engine/       typeChart, analysis, damage (@smogon/calc wrapper + 1v1 duel), rules (challenge rules), moveset, teamSuggest, turnAdvisor – plain TypeScript, with tests
 src/ui/           side panel (Preact + signals): App (tab registry), tabs/, components/, theme.css
 public/           manifest.json, icons
 ```

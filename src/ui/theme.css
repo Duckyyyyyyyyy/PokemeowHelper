@@ -150,3 +150,15 @@ button.cell { border: 0; font: inherit; font-weight: 800; cursor: pointer; width
 button.cell:focus-visible { outline: 3px solid var(--blue); outline-offset: 1px; }
 button.cell.sel { box-shadow: inset 0 0 0 2px var(--text); }
 .statline { font-variant-numeric: tabular-nums; }
+
+/* Battle tab (Phase 3) */
+.hpbar { height: 8px; border-radius: 999px; background: var(--border); overflow: hidden; margin: 3px 0 1px; }
+.hpbar i { display: block; height: 100%; border-radius: 999px; transition: width .3s; }
+.hpbar i.g { background: var(--green); } .hpbar i.y { background: var(--yellow-deep); } .hpbar i.r { background: var(--red); }
+.av.foe { background: var(--red-soft); color: var(--red); }
+.act { display: flex; gap: 10px; align-items: flex-start; padding: 7px 8px; border-radius: 12px; }
+.act + .act { margin-top: 2px; }
+.act.top { background: var(--green-soft); }
+.act .score { min-width: 34px; text-align: center; }
+details.card > summary { list-style: none; }
+details.card > summary::-webkit-details-marker { display: none; }

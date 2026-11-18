@@ -221,7 +221,7 @@ Xem mockup: **[`docs/ui-mockup.html`](ui-mockup.html)**
 ### Giai đoạn 0 — Xác minh (1–2 ngày) ⬅ **làm trước tiên**
 - [x] Bạn đăng nhập game trong trình duyệt. Mình sẽ xem trang `wiki/#/challenges`: cấu trúc NPC (level, move, ability, item, EV/IV?), số lượng, có phân trang không.
 - [x] Đọc luật trong Wiki xem có điều gì về extension/tool hỗ trợ không.
-- [~] (Đã có class name; còn thiếu snapshot trận thật) Vào một trận NPC thật: chụp HTML snapshot màn battle, xác định đọc được species/HP/move/PP/boost từ DOM.
+- [x] (Đã xem trận Brock thật 2026-11-18, xem 3a) Vào một trận NPC thật: chụp HTML snapshot màn battle, xác định đọc được species/HP/move/PP/boost từ DOM.
 - [ ] Đối chiếu damage thực tế với `@smogon/calc` Gen 9 trên vài đòn để xác nhận công thức.
 - [ ] (Khuyến nghị) Hỏi staff game về extension chỉ đọc, chỉ tư vấn.
 - **Kết quả:** chốt schema dữ liệu, danh sách selector, và quyết định có làm Phase 3 hay không.
@@ -258,6 +258,22 @@ Xem mockup: **[`docs/ui-mockup.html`](ui-mockup.html)**
 - [x] Tích hợp `@smogon/calc`, rule modifiers, override cho Pokémon custom.
 - [x] `BoxReader`: đọc box của bạn (qua API collection, xem 2a).
 - [x] `teamBuilder` và `moveset` (learnset/TM), ma trận damage, khoá/loại slot, xuất đội.
+
+### Giai đoạn 3a — Battle reader + gợi ý theo lượt ✅ (đã chạy thử trong Chrome thật 2026-11-18, trận Brock)
+- Bạn chọn: làm để dùng cá nhân trước, hỏi staff trước khi phát hành công khai. Không có HUD trong trang; gợi ý chỉ nằm ở side panel.
+- **Đã xem màn battle thật** (Brock, 6 lượt, bạn tự chơi, mình chỉ đọc):
+  - HP hiện **số thật** cả hai bên (`.battle-hp-numbers` "43/43 HP"), level, held item (aria-label), status (`[data-status="par"]` trong `.battle-status-par`).
+  - Move: aria-label của `.battle-move-button` có đủ "Tên · Hệ · Loại · Power · Accuracy · PP".
+  - Switch: aria-label "Switch to Timburr, level 16, 51 of 51 HP"; `data-fainted` trên `.battle-switch-card`.
+  - Đội đối thủ: `.battle-opponent-roster li` có `data-active`/`data-fainted`, HP từng con (cả con chưa ra sân).
+  - Kết thúc: `.battle-arena[data-status="won"]`. URL vẫn là `/` (SPA) nên nhận diện bằng `.battle-arena`.
+  - **Boost không hiện trên màn hình**, chỉ có trong log: "Your Timburr's Defense fell harshly!", "Your Turtwig's Speed fell!". Reader dựng lại stat stage từ log, reset khi đổi Pokémon ("Go, X!" / "sent out X!").
+  - Log có damage thật: "It dealt 12 damage." Rock Tomb của Onix Lv14 lên Turtwig Lv14 = 12, nằm trong khoảng calc (9–12 với IV 31). Có test.
+- `src/content/battleReader.ts` (selector gom ở `SEL`), `src/content/index.ts` (MutationObserver, debounce 300 ms, ghi snapshot vào `chrome.storage.local`; không click, không sửa trang, không gọi API). Quyền mới: `storage` + `content_scripts`.
+- `src/engine/turnAdvisor.ts`: tìm NPC + variant theo tên và roster; ghép Pokémon của bạn với box (species + move trùng). Mỗi move và mỗi switch được chấm 0–100 bằng dự đoán 1v1 từ HP/status/stage hiện tại. Switch phải nhận một đòn miễn phí trước.
+- Kiểm tra trên trận thật: bản đầu đọc thiếu Pokémon đang ra sân và đọc tên trong roster thành "Male" (tên nằm trong phần tử con, cạnh nhãn giới tính). Đã sửa bằng `monName()`; tab Battle chạy đúng trong Chrome của bạn.
+- ⚠️ Fixture test `tests/fixtures/battle/brock-turn3.reconstructed.html` là **bản dựng lại** từ cấu trúc đã đọc (công cụ trình duyệt không cho lấy HTML thô). Nên thay bằng trang lưu thật (Ctrl+S) khi có dịp.
+- Chưa làm: Doubles, dự đoán NPC đổi Pokémon, crit, hiệu ứng phụ, expectimax nhiều lượt, so sánh damage thật với calc ngay trong panel.
 
 ### Giai đoạn 3 — Live battle advisor (2 tuần) — *chỉ làm nếu Giai đoạn 0 cho phép*
 - `BattleReader` bằng MutationObserver và state machine theo lượt.
