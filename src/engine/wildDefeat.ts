@@ -117,7 +117,8 @@ export function defeatPlan(ds: Dataset, box: BoxMon[], w: WildSnapshot, maxMoves
     foe ??= advice.foe?.mon;
     const foeTypes = foe ? ds.species[foe.species]?.types ?? [] : [];
     const moves: DefeatMove[] = advice.actions
-      .filter((a) => a.kind === 'move' && a.score !== null)
+      // Setup moves (Phase 4a) stay in the Battle tab: Defeat it lists attacks only.
+      .filter((a) => a.kind === 'move' && a.score !== null && a.tag !== 'setup')
       .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
       .slice(0, maxMoves)
       .map((a) => {

@@ -48,7 +48,7 @@ export const STATUS_MOVES: Record<string, StatusMoveInfo> = {
 };
 
 /** Abilities that stop a status outright. */
-const BLOCKING_ABILITIES: Record<Status, string[]> = {
+export const BLOCKING_ABILITIES: Record<Status, string[]> = {
   slp: ['Insomnia', 'Vital Spirit', 'Sweet Veil', 'Comatose', 'Purifying Salt'],
   par: ['Limber', 'Comatose', 'Purifying Salt'],
   brn: ['Water Veil', 'Water Bubble', 'Thermal Exchange', 'Comatose', 'Purifying Salt'],

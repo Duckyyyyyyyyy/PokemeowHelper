@@ -6,6 +6,10 @@ import { rulesFor, type BattleRules } from './rules';
 import { movesForBox } from './teamSuggest';
 import { guessNpcSwitch, predictNpcMove, type NpcGuess, type NpcSwitchGuess } from './npcModel';
 import { npcKey, observedMoves, type ObservedStore } from './observed';
+import { accuracyStageMul, battleSpeed, order, project } from './projection';
+import { fieldFromLog, rateSupport, supportEffect, type BenchMon, type SupportContext } from './supportMoves';
+
+export { accuracyStageMul, battleSpeed };
 
 /**
  * Phase 3 turn advice for SINGLES, from a battle snapshot (content script) + game data + your box.
@@ -29,6 +33,8 @@ export interface ActionAdvice {
   ko?: 'sure' | 'chance';
   /** Switch-ins only: their best hit on this Pokémon once it is in. */
   threat?: ThreatInfo;
+  /** Support move scored as setup (stat boost, drop, status, screen, weather, hazard): see supportMoves.ts. */
+  tag?: 'setup';
 }
 
 export interface ThreatInfo {
@@ -84,11 +90,6 @@ const CURE_ITEMS: [id: string, name: string, cures: string[]][] = [
 ];
 const REVIVE_ITEMS: [id: string, name: string, frac: number][] = [['revive', 'Revive', 0.5], ['maxrevive', 'Max Revive', 1]];
 
-/** Gen 5+ accuracy/evasion stage multiplier for a net stage n (attacker accuracy − target evasion). */
-export function accuracyStageMul(n: number): number {
-  const s = Math.max(-6, Math.min(6, n));
-  return s >= 0 ? (3 + s) / 3 : 3 / (3 - s);
-}
 
 export const lc = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -171,35 +172,6 @@ export function applyState(p: CalcPokemon, b: { hp?: number; maxHp?: number; sta
 }
 
 const curPct = (p: CalcPokemon) => (100 * p.curHP()) / p.maxHP();
-const stage = (b: number) => (b >= 0 ? (2 + b) / 2 : 2 / (2 - b));
-
-export function battleSpeed(p: CalcPokemon): number {
-  let s = p.stats.spe * stage(p.boosts.spe ?? 0);
-  if (p.item === 'Choice Scarf') s *= 1.5;
-  if (p.status === 'par') s *= 0.5;
-  return s;
-}
-
-function order(me: CalcPokemon, foe: CalcPokemon, myPrio: number, theirPrio: number): boolean | null {
-  if (myPrio !== theirPrio) return myPrio > theirPrio;
-  const a = battleSpeed(me);
-  const b = battleSpeed(foe);
-  return a === b ? null : a > b;
-}
-
-/** Projects a 1v1 from current HP%. Damage values are % of each side's max HP per hit. */
-function project(myHit: number, theirHit: number, myHp: number, foeHp: number, youFirst: boolean | null) {
-  const myTurns = myHit > 0 ? Math.ceil(foeHp / myHit) : Infinity;
-  const theirTurns = theirHit > 0 ? Math.ceil(myHp / theirHit) : Infinity;
-  const first = youFirst ?? false; // ties count against you
-  const win = myTurns !== Infinity && (first ? myTurns <= theirTurns : myTurns < theirTurns);
-  if (win) {
-    const hpLeft = Math.max(0, myHp - (first ? myTurns - 1 : myTurns) * theirHit);
-    return { win, myTurns, score: 55 + 0.45 * hpLeft };
-  }
-  const dealt = Math.min(foeHp, (theirTurns === Infinity ? 0 : first ? theirTurns : theirTurns - 1) * myHit);
-  return { win, myTurns, score: 0.45 * (foeHp > 0 ? (100 * dealt) / foeHp : 0) };
-}
 
 const avg = (d: MoveDamage | null) => (d ? (d.minPct + d.maxPct) / 2 : 0);
 const pctTxt = (d: { minPct: number; maxPct: number }) => `${Math.round(d.minPct)}–${Math.round(d.maxPct)}%`;
@@ -306,6 +278,26 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
     };
   }
 
+  // Might the NPC switch out? (Display, and stage drops on it would be lost.)
+  const npcBench = snap.opponentTeam
+    .filter((r) => !r.active && !r.fainted && (r.hp ?? 1) > 0 && lc(r.name) !== lc(snap.opponent!.name))
+    .map((r) => {
+      const s = foeSet(ds, idx, match?.variant, r);
+      return s && { name: r.name, calc: applyState(npcToCalc(ds, s.mon), r) };
+    })
+    .filter((x): x is NonNullable<typeof x> => !!x);
+  if (npcBench.length) out.npcSwitch = guessNpcSwitch(ds, foeCalc, defenderVsNpc(myCalc, rules), myMoveIds, foeMoves, npcBench, field);
+
+  // Support moves (Phase 4a): plan A (attack now) vs plan B (support move, then attack).
+  const support: SupportContext = {
+    ds, rules, me: myCalc, myBoosts: snap.boosts.player, myMoves: myMoveIds,
+    foe: foeCalc, foeName: foe.mon.name, foeBoosts: snap.boosts.opponent, foeMoves,
+    bench: benchFor(ds, idx, box, snap, rules),
+    foesLeft: foesLeft(ds, idx, match?.variant, snap, npcBench),
+    npcMaySwitch: !!out.npcSwitch,
+    field: fieldFromLog(snap.events, snap.turn, (n) => idx.moves.get(lc(n))?.id),
+  };
+
   // Your moves
   for (const m of snap.moves) {
     const g = idx.moves.get(lc(m.name));
@@ -322,7 +314,9 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
       continue;
     }
     if (g.category === 'Status') {
-      out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: null, reason: 'Status move – not scored. Use it if the effect helps.' });
+      const r = rateSupport(support, g.id);
+      if (r) out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: r.score, reason: r.reason, tag: 'setup' });
+      else out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: null, reason: 'Status move – not scored. Use it if the effect helps.' });
       continue;
     }
     // Moves that fail unless someone is asleep (Snore scored 81 on an awake Snorlax, seen live).
@@ -356,6 +350,14 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
       reason += accMul === 1 ? ` ${baseAcc}% accuracy.` : ` ~${Math.round(hitChance * 100)}% to hit (accuracy/evasion stages).`;
     }
     let score = Math.round(Math.max(0, Math.min(100, p.score + (ko === 'sure' && first !== false ? 10 : 0))));
+    // A sure side effect (Icy Wind's −1 Spe, Nuzzle's paralysis): hit once, then fight with it.
+    if (!ko && supportEffect(ds, g.id)) {
+      const r = rateSupport(support, g.id);
+      if (r?.score != null && r.score > score) {
+        score = r.score;
+        reason = `${r.reason} (${pctTxt(d)} now.)`;
+      }
+    }
     if (SELF_KO_MOVES.has(g.id)) {
       // One use only and you faint too: worth it for a sure KO, otherwise a last resort.
       const name = snap.player.name;
@@ -397,18 +399,33 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
 
   if (!rules.bagItems) notes.push('Bag medicine cannot be used in Battle Towers; HP, status and PP carry over between opponents.');
 
-  // Might the NPC switch out? (Display only.)
-  const npcBench = snap.opponentTeam
-    .filter((r) => !r.active && !r.fainted && (r.hp ?? 1) > 0 && lc(r.name) !== lc(snap.opponent!.name))
-    .map((r) => {
-      const s = foeSet(ds, idx, match?.variant, r);
-      return s && { name: r.name, calc: applyState(npcToCalc(ds, s.mon), r) };
-    })
-    .filter((x): x is NonNullable<typeof x> => !!x);
-  if (npcBench.length) out.npcSwitch = guessNpcSwitch(ds, foeCalc, defenderVsNpc(myCalc, rules), myMoveIds, foeMoves, npcBench, field);
-
   out.actions.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
   if (Object.keys(snap.boosts.player).length || Object.keys(snap.boosts.opponent).length) notes.push('Stat stages come from the battle log and are included.');
+  return out;
+}
+
+/** Your healthy bench as calc Pokémon with their legal attacks (later-Pokémon credit of support moves). */
+function benchFor(ds: Dataset, idx: Idx, box: BoxMon[], snap: BattleSnapshot, rules: BattleRules): BenchMon[] {
+  const out: BenchMon[] = [];
+  for (const r of snap.bench) {
+    if (r.active || r.fainted || (r.hp ?? 1) <= 0) continue;
+    const mine = mySet(idx, box, r, (r.moves ?? []).map((m) => m.name));
+    if (!mine) continue;
+    out.push({ name: r.name, calc: applyState(boxToCalc(ds, mine.mon), r), moves: repeatable(movesForBox(ds, mine.mon).filter((id) => !rules.bannedMoves.has(id))) });
+  }
+  return out;
+}
+
+/** NPC Pokémon still to come: seen on its team bar, plus wiki team members not seen yet (hazards). */
+function foesLeft(ds: Dataset, idx: Idx, v: NpcTeamVariant | undefined, snap: BattleSnapshot, seen: { name: string; calc: CalcPokemon }[]) {
+  const out = [...seen];
+  const shown = new Set([...snap.opponentTeam.map((r) => lc(r.name)), lc(snap.opponent?.name ?? '')]);
+  for (const m of v?.team ?? []) {
+    if (shown.has(lc(m.name))) continue;
+    shown.add(lc(m.name));
+    const s = foeSet(ds, idx, v, { name: m.name, level: m.level });
+    if (s) out.push({ name: m.name, calc: npcToCalc(ds, s.mon) });
+  }
   return out;
 }
 

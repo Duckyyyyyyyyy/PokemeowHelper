@@ -1,9 +1,10 @@
 import type { BoxMon, Dataset, NpcMon, NpcTeamVariant } from '../shared/types';
 import { effectiveness } from './typeChart';
 import { monAbilities, monTypes } from './analysis';
-import { boxToCalc, duel, makeField, npcToCalc, type Duel } from './damage';
+import { boxToCalc, duel, makeField, npcToCalc, repeatable, type Duel } from './damage';
+import { rateSupport, supportEffect } from './supportMoves';
 import type { Pokemon as CalcPokemon } from '@smogon/calc';
-import { abilityVsNpc, type BattleRules } from './rules';
+import { NORMAL_RULES, abilityVsNpc, type BattleRules } from './rules';
 
 /**
  * Team suggestion. Two scorers, both 0–100 per (your Pokémon, NPC Pokémon) pair:
@@ -180,4 +181,40 @@ export function suggestTeam(ds: Dataset, box: BoxMon[], v: NpcTeamVariant, opts:
   const lead = team.length ? [...team].sort((a, b) => (b.pairs[0]?.score ?? 0) - (a.pairs[0]?.score ?? 0))[0] : undefined;
   const coverage = bestPer.length ? Math.round(bestPer.reduce((s, x) => s + x, 0) / bestPer.length) : 0;
   return { team, lead, coverage, ranked };
+}
+
+export interface SupportLead {
+  /** "Setup lead" (boosts itself), "Debuff lead" (drops / status on them), "Support lead" (screens, weather, Tailwind, hazards). */
+  title: 'Setup lead' | 'Debuff lead' | 'Support lead';
+  moveName: string;
+  reason: string;
+  /** Plan B score minus attacking right away (see supportMoves.ts). */
+  gain: number;
+}
+
+/**
+ * Phase 4a for the Team tab: is one of this Pokémon's support moves worth using against the NPC's
+ * lead (its first Pokémon), from full HP? Uses the same plan A / plan B comparison as the Battle tab.
+ * Singles only.
+ */
+export function supportLead(ds: Dataset, mon: BoxMon, v: NpcTeamVariant, opts: SuggestOptions = {}): SupportLead | undefined {
+  const lead = v.team[0];
+  if (!lead || v.format !== 'singles') return undefined;
+  const rules = opts.rules ?? NORMAL_RULES;
+  const own = mon.moves.filter((id) => ds.moves[id]?.category === 'Status' && !rules.bannedMoves.has(id) && supportEffect(ds, id));
+  if (!own.length) return undefined;
+  const me = boxToCalc(ds, mon, opts.levelCap ?? 50);
+  const foe = npcToCalc(ds, lead);
+  const attacks = repeatable(movesForBox(ds, mon).filter((id) => ds.moves[id] && ds.moves[id].category !== 'Status' && !rules.bannedMoves.has(id)));
+  const foesLeft = v.team.slice(1).map((n) => ({ name: n.name, calc: npcToCalc(ds, n) }));
+  let best: SupportLead | undefined;
+  for (const id of own) {
+    const r = rateSupport({ ds, rules, me, myMoves: attacks, foe, foeName: lead.name, foeMoves: lead.moves, foesLeft }, id);
+    if (!r || r.score === null || !r.better) continue;
+    const gain = r.score - r.planA;
+    if (gain < 5 || (best && best.gain >= gain)) continue;
+    const title = r.effect.kind === 'boost' ? 'Setup lead' : r.effect.kind === 'debuff' || r.effect.kind === 'status' ? 'Debuff lead' : 'Support lead';
+    best = { title, moveName: ds.moves[id].name, reason: r.reason, gain };
+  }
+  return best;
 }
