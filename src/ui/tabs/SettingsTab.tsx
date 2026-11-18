@@ -5,6 +5,7 @@ import { BoxSyncCard } from '../components/BoxSync';
 import type { BoxMon } from '../../shared/types';
 import { clearObserved, observed } from '../battleStore';
 import { bag, forgetBag, loadSampleBag } from '../bagStore';
+import { UiModeCard } from '../components/UiModeCard';
 
 type Theme = 'auto' | 'light' | 'dark';
 
@@ -60,6 +61,7 @@ export function SettingsTab() {
 
   return (
     <>
+      <UiModeCard />
       <div class="card">
         <p class="title">Wiki data</p>
         {ds ? (
