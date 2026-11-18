@@ -278,3 +278,14 @@ describe('fainted active Pokémon (live bug: Drake, Charizard at 0 HP still got 
     expect(n.actions.some((x) => x.label === 'Revive on Turtwig')).toBe(false);
   });
 });
+
+describe('forced switch with two of the same species (the user has two Aggrons)', () => {
+  it('the healthy one is still listed when the other fainted', () => {
+    const box: BoxMon[] = [{ uid: 'game:1', gameId: '1', source: 'game', species: 546, level: 18, moves: ['fairywind', 'megadrain'], nature: 'Modest', ivs: iv(20), evs: zero }];
+    const twin = { name: 'Cottonee', level: 17, hp: 40, maxHp: 40, active: false, fainted: false };
+    const bench = [...snap.bench.map((r) => (r.active ? { ...r, hp: 0, fainted: true } : r)), twin];
+    const a = adviseTurn(ds, { ...snap, player: { ...snap.player!, hp: 0 }, bench }, box);
+    expect(a.actions.map((x) => x.label)).toContain('Send in Cottonee');
+    expect(a.actions.filter((x) => x.label === 'Send in Cottonee')).toHaveLength(1);
+  });
+});

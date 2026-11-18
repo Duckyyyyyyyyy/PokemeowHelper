@@ -56,7 +56,7 @@ function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
         <>
           {advice.forcedSwitch && (
             <Tip kind="warn">
-              <b>{snap.player?.name ?? 'Your Pokémon'}</b> fainted. Pick who to send in next{snap.opponent ? <> against <b>{snap.opponent.name}</b></> : ''}: it comes in without taking a hit.
+              <b>{snap.player?.name ?? 'Your Pokémon'}</b> {snap.player?.hp === 0 ? 'fainted' : 'is out'}. Pick who to send in next{snap.opponent ? <> against <b>{snap.opponent.name}</b></> : ''}: it comes in without taking a hit.
             </Tip>
           )}
           {advice.threat && (

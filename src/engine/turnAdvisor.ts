@@ -255,7 +255,7 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
   if (activeFainted(snap)) {
     out.forcedSwitch = true;
     for (const r of snap.bench) {
-      if (r.active || r.fainted || (r.hp ?? 1) <= 0 || lc(r.name) === lc(snap.player.name)) continue;
+      if (r.active || r.fainted || (r.hp ?? 1) <= 0) continue; // a same-species teammate (two Aggrons) still counts
       out.actions.push(switchAdvice(ds, idx, box, r, foeCalc, foeMoves, rules, field, true));
     }
     if (!out.actions.length) notes.push('No healthy Pokémon left to send in.');
@@ -414,7 +414,8 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
 
 /**
  * One switch option. `free`: a replacement after your Pokémon fainted comes in without taking a
- * hit (mainline rule), so no free hit and no "gives up a turn" penalty; the reason then leads
+ * hit (mainline rule; the game's log agrees: "Brock sent out Onix!" right after Geodude fainted closed
+ * that turn with no hit), so no free hit and no "gives up a turn" penalty; the reason then leads
  * with their best hit on it.
  */
 function switchAdvice(ds: Dataset, idx: Idx, box: BoxMon[], r: RosterMon, foeCalc: CalcPokemon, foeMoves: string[], rules: BattleRules, field: ReturnType<typeof makeField>, free = false): ActionAdvice {
