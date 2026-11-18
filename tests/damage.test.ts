@@ -113,3 +113,14 @@ describe('self-KO moves (live bug: "Self-Destruct … wins the 1v1")', () => {
     expect(s.moves.map((m) => m.moveId)).not.toContain('explosion');
   });
 });
+
+describe('how moves are learned (wiki: a level-up move is a one-use chance when its level is crossed)', () => {
+  it('"Ready now" can leave out level-up moves it already passed', () => {
+    const brock = npc('challenge:brock').variants[0];
+    const b = mon('Bulbasaur', 15, ['tackle']);
+    const now = suggestMoveset(ds, b, brock, { allowTM: false, passedLevelUps: false });
+    expect(now.moves.every((m) => m.source === 'known')).toBe(true);
+    const passed = suggestMoveset(ds, b, brock, { allowTM: false });
+    expect(passed.moves.some((m) => m.source === 'level' && !m.later)).toBe(true); // e.g. Razor Leaf (Lv 12)
+  });
+});

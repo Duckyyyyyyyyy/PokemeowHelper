@@ -64,17 +64,19 @@ export interface AdviseOptions {
 
 /**
  * Battle items. Seen live 2026-11-18 (Gym battle): the battle screen has an Items tab, "Choose an
- * item, then its target. Uses one turn." HP amounts are the main-game ones (Gen 7+), not yet
- * checked in this game.
+ * item, then its target. Uses one turn." HP amounts are from the wiki (Balls, Medicine and PP
+ * Recovery). A Berry used from the Bag is spent for good; a HELD Berry comes back after the battle.
  */
 const HEAL_ITEMS: [id: string, name: string, hp: number][] = [
-  ['potion', 'Potion', 20], ['superpotion', 'Super Potion', 60], ['hyperpotion', 'Hyper Potion', 120],
-  ['maxpotion', 'Max Potion', Infinity], ['fullrestore', 'Full Restore', Infinity],
+  ['oranberry', 'Oran Berry', 10], ['potion', 'Potion', 20], ['superpotion', 'Super Potion', 60], ['moomoomilk', 'Moomoo Milk', 100],
+  ['hyperpotion', 'Hyper Potion', 120], ['maxpotion', 'Max Potion', Infinity], ['fullrestore', 'Full Restore', Infinity],
 ];
 const CURE_ITEMS: [id: string, name: string, cures: string[]][] = [
   ['fullheal', 'Full Heal', ['par', 'brn', 'psn', 'tox', 'slp', 'frz']], ['fullrestore', 'Full Restore', ['par', 'brn', 'psn', 'tox', 'slp', 'frz']],
   ['paralyzeheal', 'Paralyze Heal', ['par']], ['burnheal', 'Burn Heal', ['brn']], ['antidote', 'Antidote', ['psn', 'tox']],
   ['awakening', 'Awakening', ['slp']], ['iceheal', 'Ice Heal', ['frz']],
+  ['cheriberry', 'Cheri Berry', ['par']], ['chestoberry', 'Chesto Berry', ['slp']], ['pechaberry', 'Pecha Berry', ['psn', 'tox']],
+  ['rawstberry', 'Rawst Berry', ['brn']], ['aspearberry', 'Aspear Berry', ['frz']], ['lumberry', 'Lum Berry', ['par', 'brn', 'psn', 'tox', 'slp', 'frz']],
 ];
 const REVIVE_ITEMS: [id: string, name: string, frac: number][] = [['revive', 'Revive', 0.5], ['maxrevive', 'Max Revive', 1]];
 
@@ -247,7 +249,7 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
 
   const myCalc = applyState(boxToCalc(ds, me.mon), snap.player, snap.boosts.player);
   const foeCalc = applyState(npcToCalc(ds, foe.mon), snap.opponent, snap.boosts.opponent);
-  const foeMoves = [...foe.mon.moves, ...extra].filter((id) => !rules.bannedMoves.has(id));
+  const foeMoves = [...foe.mon.moves, ...extra]; // the rules only ban YOUR moves
   // Your accuracy vs their evasion (e.g. Kingdra at Evasion +1): lowers expected damage for ranking only.
   const accMul = accuracyStageMul((snap.boosts.player.accuracy ?? 0) - (snap.boosts.opponent.evasion ?? 0));
   const myHp = curPct(myCalc);
@@ -255,13 +257,13 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
   const myMoveIds = repeatable(snap.moves.filter((m) => !m.disabled).map((m) => idx.moves.get(lc(m.name))?.id).filter((x): x is string => !!x && !rules.bannedMoves.has(x)));
   const myBestHit = bestMove(ds, myCalc, foeCalc, myMoveIds, field);
 
-  // Destiny Bond (disabled in League challenges, so already filtered out there). Mainline rules,
-  // not yet checked in this game: it lasts until the user's next move and fails if used twice in a row.
+  // Destiny Bond. The game's own move text: it lasts until the user's next move and "fails if the
+  // user used this move successfully as its last move".
   // A friend saw an NPC use it exactly when their next hit would KO it.
   const hasDB = foeMoves.includes('destinybond');
   const lastFoe = [...(snap.events ?? [])].reverse().find((e) => e.side === 'opponent');
   const dbJustUsed = !!lastFoe && lc(lastFoe.mon) === lc(foe.mon.name) && idx.moves.get(lc(lastFoe.move))?.id === 'destinybond';
-  if (hasDB || dbJustUsed) notes.push(`${foe.mon.name} knows Destiny Bond: if it faints while Destiny Bond is active, your Pokémon faints too. It wears off when it moves again and (in the main games) fails if used twice in a row.`);
+  if (hasDB || dbJustUsed) notes.push(`${foe.mon.name} knows Destiny Bond: if it faints while Destiny Bond is active, your Pokémon faints too. It wears off when it moves again and fails if used twice in a row.`);
 
   out.prediction = predictNpcMove(ds, foeCalc, defenderVsNpc(myCalc, rules), foeMoves, {
     field, myStatus: snap.player.status, myBoosts: snap.boosts.player, foeBoosts: snap.boosts.opponent, usedThisBattle,
@@ -294,7 +296,7 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
       continue;
     }
     if (rules.bannedMoves.has(g.id)) {
-      out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: 0, reason: 'Does nothing under challenge rules.' });
+      out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: 0, reason: 'Fails in World Boss and Mega Chamber battles.' });
       continue;
     }
     if (g.category === 'Status') {
@@ -363,13 +365,15 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
   }
 
   // Items from your bag
-  if (opts.items?.size) out.actions.push(...itemAdvice(ds, idx, box, snap, me.mon, myCalc, foeCalc, myMoveIds, foeMoves, rules, field, opts.items));
+  if (opts.items?.size && rules.bagItems) out.actions.push(...itemAdvice(ds, idx, box, snap, me.mon, myCalc, foeCalc, myMoveIds, foeMoves, rules, field, opts.items));
 
   // Switches
   for (const r of snap.bench) {
     if (r.active || r.fainted || (r.hp ?? 1) <= 0) continue;
     out.actions.push(switchAdvice(ds, idx, box, r, foeCalc, foeMoves, rules, field));
   }
+
+  if (!rules.bagItems) notes.push('Bag medicine cannot be used in Battle Towers; HP, status and PP carry over between opponents.');
 
   // Might the NPC switch out? (Display only.)
   const npcBench = snap.opponentTeam

@@ -51,14 +51,20 @@ export function MovesetPanel({ ds, mon, v, rules }: { ds: Dataset; mon: BoxMon; 
   const cap = v.levelCap ?? NO_CAP_LEVEL;
   const tms = ownedTms.value;
   const steps = useMemo(() => {
-    const now = suggestMoveset(ds, mon, v, { levelCap: v.levelCap, rules, allowTM: false });
+    // How moves are learned (wiki, Learning and Changing Moves): crossing a level while you own it
+    // gives a one-use chance; earlier level-up moves need an unspent chance or a re-learn cost.
+    const now = suggestMoveset(ds, mon, v, { levelCap: v.levelCap, rules, allowTM: false, passedLevelUps: false });
+    const passed = suggestMoveset(ds, mon, v, { levelCap: v.levelCap, rules, allowTM: false });
     const atCap = suggestMoveset(ds, mon, v, { levelCap: v.levelCap, rules, allowTM: false, untilLevel: cap });
     const withTm = suggestMoveset(ds, mon, v, { levelCap: v.levelCap, rules, untilLevel: cap, ownedTms: tms });
     const out: { title: string; note: string; s: MovesetSuggestion }[] = [
-      { title: 'Ready now', note: `Known moves and level-up moves up to Lv ${mon.level ?? '?'}.`, s: now },
+      { title: 'Ready now', note: 'Moves it knows.', s: now },
     ];
-    if ((mon.level ?? 0) < cap && atCap.coverage >= now.coverage + 3)
-      out.push({ title: v.levelCap ? `By Lv ${cap} (level cap)` : 'By leveling up', note: `Adds level-up moves it learns before Lv ${cap}. If it evolves first, its list may change.`, s: atCap });
+    if (passed.coverage >= now.coverage + 3)
+      out.push({ title: 'Re-learn', note: `Level-up moves it already passed (up to Lv ${mon.level ?? '?'}): free if it still has an unspent chance (it leveled up with 4 moves already), otherwise re-learn for a cost such as a Heart Scale. Check My Pokémon → Moves.`, s: passed });
+    const before = out[out.length - 1].s;
+    if ((mon.level ?? 0) < cap && atCap.coverage >= before.coverage + 3)
+      out.push({ title: v.levelCap ? `By Lv ${cap} (level cap)` : 'By leveling up', note: `Free: level-up moves it learns as it levels to ${cap}. If it evolves first, its list may change.`, s: atCap });
     const prev = out[out.length - 1].s;
     if (withTm.coverage >= prev.coverage + 3 && withTm.moves.some((m) => m.source === 'tm'))
       out.push(

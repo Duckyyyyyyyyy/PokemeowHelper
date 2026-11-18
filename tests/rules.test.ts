@@ -4,7 +4,7 @@ import type { BoxMon, Dataset } from '../src/shared/types';
 import { boxToCalc, duel, npcToCalc } from '../src/engine/damage';
 import { scorePair, suggestTeam } from '../src/engine/teamSuggest';
 import { suggestMoveset } from '../src/engine/moveset';
-import { CHALLENGE_RULES, NORMAL_RULES, rulesFor } from '../src/engine/rules';
+import { CHALLENGE_RULES, NORMAL_RULES, TOWER_RULES, rulesFor } from '../src/engine/rules';
 import { teamToText } from '../src/ui/teamPrefs';
 
 const ds = structuredClone(fixture) as unknown as Dataset;
@@ -22,10 +22,13 @@ const v = lance.variants[0];
 const dragonair = v.team[1]; // Hyper Beam (Normal) + Outrage (Dragon): neither is super effective on Bug/Ghost
 
 describe('challenge rules', () => {
-  it('applies only to League challenges', () => {
-    expect(rulesFor('elite-four')).toBe(CHALLENGE_RULES);
-    expect(rulesFor('gym')).toBe(CHALLENGE_RULES);
-    expect(rulesFor('tower')).toBe(NORMAL_RULES);
+  it('follows the wiki: special rules in World Boss and Mega Chamber battles, no Bag medicine in towers', () => {
+    expect(rulesFor('boss')).toBe(CHALLENGE_RULES);
+    expect(rulesFor('mega')).toBe(CHALLENGE_RULES);
+    expect(rulesFor('gym')).toBe(NORMAL_RULES); // not League battles (the old assumption)
+    expect(rulesFor('elite-four')).toBe(NORMAL_RULES);
+    expect(rulesFor('tower')).toBe(TOWER_RULES);
+    expect(TOWER_RULES.bagItems).toBe(false);
     expect(rulesFor(undefined)).toBe(NORMAL_RULES);
   });
 

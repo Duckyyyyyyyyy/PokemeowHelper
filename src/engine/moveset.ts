@@ -32,13 +32,19 @@ export interface MovesetSuggestion {
  * (only TMs in `ownedTms` when your bag is known). Egg moves are only kept if already known.
  * Damage is always computed at its CURRENT level, so the lists compare fairly.
  */
-export function suggestMoveset(ds: Dataset, b: BoxMon, v: NpcTeamVariant, opts: { levelCap?: number; untilLevel?: number; allowTM?: boolean; ownedTms?: ReadonlySet<string> | null; rules?: BattleRules } = {}): MovesetSuggestion {
+export function suggestMoveset(ds: Dataset, b: BoxMon, v: NpcTeamVariant, opts: { levelCap?: number; untilLevel?: number; passedLevelUps?: boolean; allowTM?: boolean; ownedTms?: ReadonlySet<string> | null; rules?: BattleRules } = {}): MovesetSuggestion {
   const s = ds.species[b.species];
   const level = b.level ?? opts.levelCap ?? 50;
   const until = Math.max(level, opts.untilLevel ?? level);
   const sources = new Map<string, { source: MoveSource; level?: number; later?: boolean }>();
   for (const id of b.moves) sources.set(id, { source: 'known' });
-  for (const [id, l] of s?.levelMoves ?? []) if (l <= until && !sources.has(id)) sources.set(id, { source: 'level', level: l, later: l > level || undefined });
+  // Wiki (Learning and Changing Moves): a level-up move is a one-use chance when the Pokémon
+  // CROSSES its level while you own it. Moves below its level are only there if that chance is
+  // unspent, or by re-learning for a cost (e.g. a Heart Scale): `passedLevelUps: false` leaves them out.
+  for (const [id, l] of s?.levelMoves ?? []) {
+    if (l > until || sources.has(id) || (l <= level && opts.passedLevelUps === false)) continue;
+    sources.set(id, { source: 'level', level: l, later: l > level || undefined });
+  }
   // With a bag read from the game, only TMs you own.
   if (opts.allowTM !== false) for (const id of s?.machineMoves ?? []) if (!sources.has(id) && (!opts.ownedTms || opts.ownedTms.has(id))) sources.set(id, { source: 'tm' });
 
