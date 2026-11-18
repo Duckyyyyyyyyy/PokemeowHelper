@@ -6,6 +6,7 @@ import { fromWild, itemExtras, mergeEncounters, wildSpeciesFields } from '../src
 import { filterEncounters, findableSpecies, fightOrCatch, isFindable, wantedSpecies, whereToFind, wildHeldItems } from '../src/engine/explore';
 import { BALL_RULES, ballItems, catchChance, criticalStrength, levelBonus, rankBalls, statusBonus, type BallContext } from '../src/engine/catching';
 import { planCatch, statusImmunity } from '../src/engine/catchPlan';
+import { boxToCalc, moveDamage, npcToCalc } from '../src/engine/damage';
 
 /** wiki-mini + the explore subset, as normalize() would build it. */
 const base = mini as unknown as Dataset;
@@ -146,6 +147,14 @@ describe('catch odds (wiki bonuses, mainline formula)', () => {
     expect(catchChance({ catchRate: 45, hpFrac: 0, level: 30, ballMul: 1 })).toBe(0);
     expect(catchChance({ catchRate: 255, hpFrac: 0.1, level: 30, ballMul: 2 })).toBe(1);
   });
+  it('adds critical captures at 31+ registered species (mainline: min(255,a) × strength / 6 out of 256)', () => {
+    const a = 15; // rate 45, full HP, Poké Ball
+    const shake = Math.pow(a / 255, 3 / 16);
+    const crit = Math.floor((a * 1) / 6) / 256; // 151–300 species → strength ×1
+    const expected = crit * shake + (1 - crit) * Math.pow(shake, 4);
+    expect(catchChance({ catchRate: 45, hpFrac: 1, level: 30, ballMul: 1, dexCount: 200 })).toBeCloseTo(expected, 10);
+    expect(catchChance({ catchRate: 45, hpFrac: 1, level: 30, ballMul: 1, dexCount: 200 })).toBeGreaterThan(catchChance({ catchRate: 45, hpFrac: 1, level: 30, ballMul: 1 }));
+  });
 });
 
 describe('ball choice', () => {
@@ -198,6 +207,19 @@ describe('catch plan: weaken without KO, then status', () => {
     const plan = planCatch(ds, [mon('Pidgey', ['tackle', 'gust'], 12)], { species: sp('Onix'), level: 30 });
     expect(plan.weaken.length).toBeGreaterThan(0);
     expect(plan.weaken.every((w) => w.maxPct < 100)).toBe(true);
+  });
+  it('sizes hits against the worst nature/ability, not a neutral copy', () => {
+    const me = boxToCalc(ds, mon('Machamp', ['karatechop'], 40), 40);
+    const lax = ds.species[sp('Snorlax')];
+    const neutral = moveDamage(ds, me, npcToCalc(ds, { species: lax.id, name: lax.name, level: 40, moves: [], baseStats: lax.baseStats, ivs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 } }), 'karatechop')!;
+    const w = planCatch(ds, [mon('Machamp', ['karatechop'], 40)], { species: lax.id, level: 40 }).weaken.find((x) => x.moveId === 'karatechop')!;
+    expect(w.maxPct).toBeGreaterThan(neutral.maxPct);
+  });
+  it('drops hits that would KO at its current HP', () => {
+    const box = [mon('Scyther', ['falseswipe', 'wingattack', 'quickattack'], 40), mon('Pidgey', ['tackle', 'gust'], 12)];
+    const plan = planCatch(ds, box, { species: sp('Onix'), level: 30 }, { hpPct: 30 });
+    expect(plan.weaken.length).toBeGreaterThan(0);
+    expect(plan.weaken.every((w) => w.safe || w.maxPct < 30)).toBe(true);
   });
   it('False Swipe does nothing to Ghosts', () => {
     const plan = planCatch(ds, [mon('Scyther', ['falseswipe'], 40)], { species: sp('Gastly'), level: 30 });

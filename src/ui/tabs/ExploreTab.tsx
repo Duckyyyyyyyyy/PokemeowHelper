@@ -230,7 +230,7 @@ function EncounterDetail({ ds, t, myLevel }: { ds: Dataset; t: Target; myLevel?:
   const night = nightNow();
   const decision = useMemo(() => fightOrCatch(ds, { species: t.species, level: t.level, item: t.item || null, shiny: t.shiny, goodIvs: t.goodIvs }, box.value, wanted.ids), [ds, t, box.value, wanted]);
   const held = useMemo(() => wildHeldItems(ds, t.species, t.mapId || undefined), [ds, t.species, t.mapId]);
-  const plan = useMemo(() => planCatch(ds, box.value, { species: t.species, level: t.level }), [ds, box.value, t.species, t.level]);
+  const plan = useMemo(() => planCatch(ds, box.value, { species: t.species, level: t.level }, { hpPct: t.hpPct }), [ds, box.value, t.species, t.level, t.hpPct]);
   const dexCount = ownedSpecies(box.value).size;
   const owned = bag.value ? ownedItems.value : null;
   const advice = useMemo(() => rankBalls(ds, {
@@ -290,7 +290,7 @@ function EncounterDetail({ ds, t, myLevel }: { ds: Dataset; t: Target; myLevel?:
               </div>
             ))}
             {!plan.weaken.length && <div class="small muted">No safe hit found in your box. Sync your box (⚙) so MeowHelper knows your Pokémon's moves.</div>}
-            <div class="small muted" style={{ marginTop: '4px' }}>Sized against the weakest possible {s.name} at Lv {t.level}, from full HP. Hit again only while its HP is above the max %.</div>
+            <div class="small muted" style={{ marginTop: '4px' }}>Sized against the weakest possible {s.name} at Lv {t.level} (IV 0, worst nature and ability) at {t.hpPct}% HP. Set its HP in the Ball box below after each hit.</div>
           </div>
           <div class="card">
             <p class="title">2 · Status it</p>

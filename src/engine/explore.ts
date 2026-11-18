@@ -171,7 +171,7 @@ export function fightOrCatch(ds: Dataset, t: WildTarget, box: BoxMon[], wanted: 
   const name = s?.name ?? 'It';
   const owned = ownedSpecies(box).has(t.species);
   const reasons: string[] = [];
-  if (!owned) reasons.push(`${name} is not in your box yet: new Pokédex entry.`);
+  if (!owned) reasons.push(`${name} is not in your box (MeowHelper can't read your Pokédex): likely a new entry.`);
   if (t.shiny) reasons.push('It is shiny.');
   if (wanted.has(t.species) && !owned) reasons.push(`${name} counters the NPC you selected.`);
   if (t.item) {

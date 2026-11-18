@@ -81,7 +81,7 @@ export interface WeakenOption {
   moveName: string;
   /** False Swipe / Hold Back: never KOs. */
   safe: boolean;
-  /** Damage range vs the weakest possible copy, % of its max HP. */
+  /** Damage range vs the weakest possible copy (worst nature/ability), % of its max HP. */
   minPct: number;
   maxPct: number;
   /** Even a critical hit (×1.5) leaves it standing. */
@@ -120,11 +120,30 @@ function knownMoves(ds: Dataset, b: BoxMon): { ids: string[]; guessed: boolean }
 
 const ZERO_IVS = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
 
-export function planCatch(ds: Dataset, box: BoxMon[], wild: { species: number; level: number }, limit = 8): CatchPlan {
+/**
+ * Weakest possible copies of the wild Pokémon: IV 0, the nature that lowers the hit
+ * defence (Lonely −Def / Naughty −SpD), and every ability it may have (max damage wins).
+ */
+function weakestFoes(ds: Dataset, speciesId: number, level: number) {
+  const s = ds.species[speciesId];
+  const abilities: (string | undefined)[] = s.abilities.length ? s.abilities.map((a) => a.name) : [undefined];
+  const make = (nature: string) => abilities.map((ability) => npcToCalc(ds, { species: s.id, name: s.name, level, moves: [], baseStats: s.baseStats, ivs: ZERO_IVS, nature, ability }));
+  return { Physical: make('Lonely'), Special: make('Naughty') };
+}
+
+export interface PlanOptions {
+  /** Its current HP, % of max (default 100). Hits whose max roll reaches it are dropped. */
+  hpPct?: number;
+  limit?: number;
+}
+
+export function planCatch(ds: Dataset, box: BoxMon[], wild: { species: number; level: number }, opts: PlanOptions = {}): CatchPlan {
   const s = ds.species[wild.species];
   const notes: string[] = [];
   if (!s) return { weaken: [], status: [], notes: ['Unknown species.'] };
-  const foe = npcToCalc(ds, { species: s.id, name: s.name, level: wild.level, moves: [], baseStats: s.baseStats, ivs: ZERO_IVS });
+  const hpPct = Math.min(100, Math.max(1, opts.hpPct ?? 100));
+  const limit = opts.limit ?? 8;
+  const foes = weakestFoes(ds, s.id, wild.level);
   const foeAbilities = s.abilities.map((a) => a.name);
   if (s.types.includes('Ghost')) notes.push('Ghost type: False Swipe and Hold Back do nothing to it.');
 
@@ -155,14 +174,18 @@ export function planCatch(ds: Dataset, box: BoxMon[], wild: { species: number; l
         });
       }
       if (mv.category === 'Status' || SELF_KO_MOVES.has(id)) continue;
-      const d = moveDamage(ds, me, foe, id);
+      let d: ReturnType<typeof moveDamage> = null;
+      for (const foe of foes[mv.category]) {
+        const x = moveDamage(ds, me, foe, id);
+        if (x && (!d || x.hi > d.hi || (x.hi === d.hi && x.maxPct > d.maxPct))) d = x;
+      }
       if (!d || d.hi <= 0) continue;
       const safe = FALSE_SWIPE_MOVES.has(id);
-      if (!safe && d.maxPct >= 100) continue; // could KO from full HP
+      if (!safe && d.maxPct >= hpPct) continue; // could KO at its current HP
       weaken.push({
         uid: b.uid, monName, level: b.level, moveId: id, moveName: d.name, safe,
-        minPct: d.minPct, maxPct: Math.min(d.maxPct, safe ? 99 : d.maxPct),
-        critSafe: safe || d.maxPct * 1.5 < 100, guessed,
+        minPct: d.minPct, maxPct: d.maxPct,
+        critSafe: safe || d.maxPct * 1.5 < hpPct, guessed,
       });
     }
   }

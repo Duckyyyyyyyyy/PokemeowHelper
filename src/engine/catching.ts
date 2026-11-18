@@ -52,7 +52,8 @@ export function catchChance(i: CatchInput): number {
   const a = ((3 - 2 * hp) / 3) * Math.max(1, i.catchRate) * i.ballMul * statusBonus(i.status) * levelBonus(i.level);
   if (a >= 255) return 1;
   const shake = Math.pow(a / 255, 3 / 16);
-  const crit = Math.min(1, (Math.min(255, a) * criticalStrength(i.dexCount ?? 0, i.charm)) / 256);
+  // Mainline Gen 5+: critical value = min(255, a) × strength / 6, rolled out of 256.
+  const crit = Math.min(1, Math.floor((Math.min(255, a) * criticalStrength(i.dexCount ?? 0, i.charm)) / 6) / 256);
   return crit * shake + (1 - crit) * Math.pow(shake, 4);
 }
 
