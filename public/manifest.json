@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "MeowHelper – PokeMeowRPG Battle Helper",
   "short_name": "MeowHelper",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "Look up NPC teams and get team suggestions for PokeMeowRPG. Advice only – it never plays for you.",
   "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
   "action": { "default_title": "Open MeowHelper", "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png" } },
