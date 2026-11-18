@@ -132,7 +132,7 @@ function Side({ ds, label, mon, boosts, foe }: { ds: Dataset; label: string; mon
   );
 }
 
-function Action({ a, top }: { a: ActionAdvice; top: boolean }) {
+export function Action({ a, top }: { a: ActionAdvice; top: boolean }) {
   return (
     <div class={`act${top ? ' top' : ''}`}>
       <span class={`score ${scoreClass(a.score ?? 0)}`}>{a.score}</span>

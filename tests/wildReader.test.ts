@@ -52,4 +52,28 @@ describe('wild encounter reader (Doduo intro, Grasslands 3)', () => {
     expect(s).toMatchObject({ view: 'battle', name: 'Doduo', level: 6, gender: 'F', status: 'par', hpPct: 42, inBox: 0 });
     expect(s.lead).toMatchObject({ name: 'Charizard', level: 56, hp: 150, maxHp: 166 });
   });
+
+  it('reads your party from the battle switch cards and your move buttons (battle markup as in Gym battles)', () => {
+    const battle = `<div class="encounter-card"><div class="wild-encounter" data-view="battle">
+      <div class="encounter-opponent"><div class="battle-combatant-name"><strong title="Doduo">Doduo<span class="battle-pokemon-level">Lv. 6</span></strong></div></div>
+      <button class="battle-move-button" aria-label="Flamethrower · Fire · Special · Power 90 · Accuracy 100% · 15/15 PP">Flamethrower</button>
+      <div class="battle-switch-card"><button class="battle-switch-button" aria-label="Active: Charizard, level 56, 150 of 166 HP">Charizard</button></div>
+      <div class="battle-switch-card" data-fainted="true"><button class="battle-switch-button" aria-label="Switch to Pidgey, level 12, 0 of 35 HP, fainted">Pidgey</button></div>
+    </div></div>`;
+    const s = readWild(load(battle))!;
+    expect(s.party).toEqual([
+      expect.objectContaining({ name: 'Charizard', level: 56, hp: 150, maxHp: 166, active: true, fainted: false }),
+      expect.objectContaining({ name: 'Pidgey', level: 12, hp: 0, active: false, fainted: true }),
+    ]);
+    expect(s.moves?.[0]).toMatchObject({ name: 'Flamethrower', type: 'Fire', power: 90, disabled: false });
+  });
+
+  it('reads the Explore team panel before a battle (class names from the stylesheet)', () => {
+    const panel = `<ul class="starter-options"><li data-explore-team-slot="0"><img class="pokemon-sprite" alt="Charizard"><span class="explore-team-level">Lv. 56</span><span>166/166 HP</span></li>
+      <li data-explore-team-slot="1"><img class="pokemon-sprite" alt="Pidgey"><span class="explore-team-level">Lv. 12</span><span>0/35 HP</span></li></ul>`;
+    const s = readWild(load(panel + html))!;
+    expect(s.party?.map((r) => [r.name, r.level, r.hp, r.active, r.fainted])).toEqual([['Charizard', 56, 166, true, false], ['Pidgey', 12, 0, false, true]]);
+    expect(s.moves).toBeUndefined();
+  });
 });
+

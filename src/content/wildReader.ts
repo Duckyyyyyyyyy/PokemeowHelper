@@ -1,4 +1,6 @@
+import type { RosterMon } from '../shared/battle';
 import type { WildBall, WildLead, WildSnapshot } from '../shared/wild';
+import { readBench, readMoves } from './battleReader';
 
 /**
  * Reads the wild encounter card on the Explore page. Pure and READ-ONLY: it never clicks,
@@ -33,6 +35,9 @@ export const WILD_SEL = {
   healthBar: '.health-track > span',
   status: '[data-status], .battle-status',
   shiny: '.encounter-rarity-shiny, .pokemon-name-shiny, .shiny-encounter-reveal, .battle-shiny-sparkles',
+  /** Explore team panel (class names from the game stylesheet; markup not seen live). */
+  teamSlot: '.starter-options > li[data-explore-team-slot]',
+  teamLevel: '.explore-team-level',
 };
 
 const clean = (s?: string | null) => (s ?? '').replace(/\s+/g, ' ').trim();
@@ -95,6 +100,30 @@ function readLead(root: Element | null): WildLead | undefined {
   return { name, level: levelOf(root), hp, maxHp, item: itemOf(root) };
 }
 
+/**
+ * Explore team panel before a battle (NOT verified live: built from the stylesheet's class names).
+ * Name from the sprite's alt text or the slot's first text, level "Lv. 56", HP "30/30 HP". Slot 1 = lead.
+ */
+/** Text with a space between elements, so "Lv. 56" and "166/166 HP" never run together. */
+function spacedText(el: Element): string {
+  const parts: string[] = [];
+  const walk = (n: Node) => (n.nodeType === 3 ? parts.push(n.textContent ?? '') : n.childNodes.forEach(walk));
+  walk(el);
+  return clean(parts.join(' '));
+}
+
+export function readTeamPanel(doc: ParentNode): RosterMon[] {
+  return [...doc.querySelectorAll(WILD_SEL.teamSlot)].map((li, i) => {
+    const alt = clean(li.querySelector('img.pokemon-sprite, img[alt]')?.getAttribute('alt'));
+    const text = spacedText(li);
+    const name = alt || clean(text.split(/\s+Lv\.?\s*\d+/i)[0]).replace(/[♂♀]/g, '').trim();
+    const level = num((clean(li.querySelector(WILD_SEL.teamLevel)?.textContent) || text).match(/Lv\.?\s*(\d+)/i)?.[1]);
+    const hpm = text.match(/(\d+)\s*\/\s*(\d+)\s*HP/i);
+    const hp = num(hpm?.[1]);
+    return { name, level, hp, maxHp: num(hpm?.[2]), active: i === 0, fainted: hp === 0 || li.getAttribute('data-fainted') === 'true' };
+  }).filter((r) => r.name);
+}
+
 export function readWild(doc: ParentNode, now = Date.now()): WildSnapshot | null {
   const card = doc.querySelector(WILD_SEL.card);
   if (!card) return null;
@@ -117,6 +146,10 @@ export function readWild(doc: ParentNode, now = Date.now()): WildSnapshot | null
   const pageTitle = (doc as Document).querySelector?.(WILD_SEL.pageTitle);
   const registered = card.querySelector(WILD_SEL.dexCaught) ? true : card.querySelector(WILD_SEL.dexUncaught) ? false : undefined;
   const { hp, maxHp, hpPct } = opp ? hpOf(opp) : {};
+  // Your team: the battle's switch cards (same markup the battle reader knows), else the Explore team panel.
+  const bench = readBench(card);
+  const party = bench.length ? bench : readTeamPanel(doc);
+  const moves = readMoves(card);
   return {
     v: 1,
     at: now,
@@ -136,5 +169,7 @@ export function readWild(doc: ParentNode, now = Date.now()): WildSnapshot | null
     status: opp ? statusOf(opp) : undefined,
     balls,
     lead: readLead(card.querySelector(WILD_SEL.lead)),
+    ...(party.length ? { party } : {}),
+    ...(moves.length ? { moves } : {}),
   };
 }

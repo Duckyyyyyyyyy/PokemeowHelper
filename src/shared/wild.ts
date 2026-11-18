@@ -3,6 +3,8 @@
  * (chrome.storage.local "mdWild"). Plain JSON. Shape learned from a live encounter
  * (Doduo, Grasslands 3) on 2026-11-18.
  */
+import type { BattleMove, RosterMon } from './battle';
+
 export interface WildBall {
   name: string;
   count: number;
@@ -43,4 +45,8 @@ export interface WildSnapshot {
   /** Quick-catch slots with their bag counts. */
   balls: WildBall[];
   lead?: WildLead;
+  /** Your team: switch cards in the wild battle, or the Explore team panel before it (lead first). */
+  party?: RosterMon[];
+  /** Your active Pokémon's move buttons, once the battle runs. */
+  moves?: BattleMove[];
 }

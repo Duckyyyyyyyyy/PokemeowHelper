@@ -14,6 +14,9 @@ import {
 } from '../../engine/explore';
 import { ballItems, BALL_RULES, isUltraBeast, NOT_AWARDED, rankBalls, type BallAdvice, type BallOption } from '../../engine/catching';
 import { afterPlan, planCatch, STATUS_LABEL } from '../../engine/catchPlan';
+import { defeatPlan } from '../../engine/wildDefeat';
+import { Action } from './BattleTab';
+import type { BoxMon } from '../../shared/types';
 import { matchNpc, lc } from '../../engine/turnAdvisor';
 import { ALL_TYPES } from '../../engine/typeChart';
 
@@ -306,6 +309,7 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
   const s = ds.species[t.species];
   const set = (patch: Partial<Target>) => (target.value = { ...t, ...patch });
   const [adjust, setAdjust] = useState(false);
+  const [modePick, setModePick] = useState<{ key: string; mode: 'catch' | 'defeat' } | null>(null);
   const [moreWeaken, setMoreWeaken] = useState(false);
   const [moreStatus, setMoreStatus] = useState(false);
   const headTop = useHeadHeight();
@@ -337,7 +341,10 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
   if (!s) return null;
   const { main, alt, altLabel } = headlineBalls(advice);
   const afterMain = afterAdvice.bestOwned ?? afterAdvice.best;
-  const catching = decision.verdict === 'catch';
+  // Catch / Defeat: follows the verdict for each new encounter until you pick one yourself.
+  const encKey = t.liveKey ?? `${t.species}|${t.level}`;
+  const mode = modePick?.key === encKey ? modePick.mode : decision.verdict === 'catch' ? 'catch' : 'defeat';
+  const catching = mode === 'catch';
   const hpClass = t.hpPct > 50 ? 'g' : t.hpPct > 20 ? 'y' : 'r';
   const gender = snap?.gender === 'F' ? '♀' : snap?.gender === 'M' ? '♂' : '';
   const rarity = snap?.rarity ?? (s.rarity ? RARITY_LABEL[s.rarity] : undefined);
@@ -354,7 +361,7 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
             <span class="lv"> Lv {t.level}</span>
             {rarity && <span class="chip enc-chip">{rarity}</span>}
           </span>
-          <span class={`enc-verdict ${catching ? 'catch' : 'fight'}`} title={decision.reasons.join(' ')}>{decision.summary}</span>
+          <span class={`enc-verdict ${decision.verdict}`} title={decision.reasons.join(' ')}>{decision.summary}</span>
         </div>
         <div class="row enc-hp">
           <Types types={s.types} />
@@ -389,6 +396,13 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
         <div class="row small enc-foot">
           <span class="grow muted enc-reason" title={decision.reasons.join(' ')}>{decision.reasons[0]}</span>
           <button class="link" onClick={() => setAdjust(!adjust)} aria-expanded={adjust}>{adjust ? 'Done' : 'Adjust'}</button>
+        </div>
+        <div class="seg enc-mode" role="tablist" aria-label="Catch or defeat">
+          {(['catch', 'defeat'] as const).map((m) => (
+            <button class={mode === m ? 'on' : ''} role="tab" aria-selected={mode === m} onClick={() => setModePick({ key: encKey, mode: m })}>
+              {m === 'catch' ? '◓ Catch it' : '⚔ Defeat it (EXP)'}
+            </button>
+          ))}
         </div>
       </section>
 
@@ -453,6 +467,8 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
         </div>
       )}
 
+      {!catching && <DefeatView ds={ds} t={t} snap={snap} />}
+
       {(held.length > 0 || ((s.rarity === 'legendary' || isUltraBeast(s.id)) && s.spawnRequirement)) && (
         <div class="small muted" style={{ padding: '0 4px' }}>
           {held.length > 0 && <>May hold: {held.map((h, i) => <>{i > 0 && ' · '}{h.name} {pct(h.chance)}</>)}{t.mapId ? '' : ' (depends on the map)'}</>}
@@ -479,6 +495,55 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
         <p>After a failed 2nd throw it can flee (5%, then 10%, 20%); sleep or freeze stops that. {night ? 'It is night (UTC): Dusk Ball ×3.' : 'Daytime (UTC).'}</p>
       </details>
     </>
+  );
+}
+
+/** No live card: the wild Pokémon from the manual fields, and your strongest box Pokémon as the team. */
+function manualWild(ds: Dataset, t: Target, boxMons: BoxMon[]): WildSnapshot {
+  const top = [...boxMons].filter((b) => b.level).sort((a, b) => (b.level ?? 0) - (a.level ?? 0)).slice(0, 6);
+  return {
+    v: 1, at: 0, view: 'manual', name: ds.species[t.species]?.name ?? '', level: t.level, shiny: t.shiny, balls: [],
+    hpPct: t.hpPct, status: t.status || undefined,
+    party: top.map((b, i) => ({ name: ds.species[b.species]?.name ?? '?', level: b.level, active: i === 0, fainted: false })),
+  };
+}
+
+/** "Defeat it": the Battle tab's move ranking for each healthy team member vs this wild Pokémon. */
+function DefeatView({ ds, t, snap }: { ds: Dataset; t: Target; snap: WildSnapshot | null }) {
+  const w = useMemo(() => (snap ? { ...snap, hpPct: snap.hp !== undefined ? undefined : t.hpPct, status: snap.status ?? (t.status || undefined), level: snap.level ?? t.level } : manualWild(ds, t, box.value)), [ds, snap, t, box.value]);
+  const plan = useMemo(() => defeatPlan(ds, box.value, w), [ds, box.value, w]);
+  const [all, setAll] = useState(false);
+  const shown = plan.options.slice(0, all ? 6 : 3);
+  return (
+    <div class="card">
+      <p class="title">Defeat it<span class="r small muted">{snap ? 'your team' : 'your strongest box Pokémon'}</span></p>
+      {shown.map((o, i) => (
+        <div class="enc-member">
+          <div class="row small">
+            <b class="grow">{o.member.name}{o.member.level ? <span class="muted"> Lv {o.member.level}</span> : ''}{o.member.active ? <span class="chip on enc-chip">active</span> : ''}{o.guessed && o.moves.length ? <span class="muted small"> · moves guessed (not in your box)</span> : ''}</b>
+            {o.member.hp !== undefined && o.member.maxHp ? <span class="lv">{o.member.hp}/{o.member.maxHp} HP</span> : null}
+          </div>
+          {o.moves.map((a, j) => (
+            <Action top={i === 0 && j === 0} a={{
+              ...a,
+              label: a.eff && a.eff !== '×1' ? `${a.label} ${a.eff}` : a.label,
+              // Way past its HP (a Lv 56 vs a Lv 6): the KO chip says it all.
+              ...((a.minPct ?? 0) >= 100 ? { minPct: undefined, maxPct: undefined } : {}),
+            }} />
+          ))}
+          {!o.moves.length && <div class="small muted">No known damaging moves{o.guessed ? ' (not found in your box: sync it in ⚙)' : ''}.</div>}
+          {o.threat && (
+            <div class={`small ${o.threat.ko ? 'c-y' : 'muted'}`}>
+              Its best hit: {o.threat.name} {Math.round(o.threat.minPct)}–{Math.round(o.threat.maxPct)}%{o.threat.ko === 'sure' ? ' – KOs it' : o.threat.ko ? ' – can KO it' : ''}
+              {o.threat.youFirst === null ? ' · speed tie' : o.threat.youFirst ? ' · you move first' : ' · it moves first'}
+            </div>
+          )}
+        </div>
+      ))}
+      {plan.options.length > 3 && <button class="link small" onClick={() => setAll(!all)}>{all ? 'less' : `more (${plan.options.length - 3})`}</button>}
+      {!plan.options.length && <div class="small muted">No healthy Pokémon to fight with.</div>}
+      {plan.notes.map((n) => <div class="small muted">• {n}</div>)}
+    </div>
   );
 }
 

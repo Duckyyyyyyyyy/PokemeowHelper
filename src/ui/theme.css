@@ -189,3 +189,6 @@ details.card > summary::-webkit-details-marker { display: none; }
 .enc-opt { padding: 2px 0 2px 24px; display: block; }
 .enc-more summary { cursor: pointer; }
 .enc-more p { margin: 6px 0 0; }
+.enc-mode { margin-top: 2px; }
+.enc-member { padding: 6px 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; }
+.enc-member:first-of-type { border-top: 0; padding-top: 0; }
