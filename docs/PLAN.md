@@ -335,6 +335,7 @@ Xem mockup: **[`docs/design/ui-mockup.html`](design/ui-mockup.html)**
 - ✅ **0.7.0 (2026-11-18)**: cửa sổ nổi / side panel chỉ trên tab game, Worth grinding, sửa gợi ý khi Pokémon của mình đã ngất (chỉ xếp hạng Pokémon còn sống để đổi vào), tab **Explore** (bản đồ, FIGHT/CATCH, kế hoạch bắt, gợi ý bóng, đọc thẻ gặp Pokémon hoang dã trực tiếp, header bóng + % bắt, chế độ Catch / Defeat).
 - ✅ **0.7.1**: Defeat it (tab Explore) đọc cả Pokémon starter (slot 1 nằm ở khối riêng phía trên slot 2–6); Pokémon đứng đầu trên thẻ gặp hoang dã được đánh dấu active.
 - ✅ **0.8.0 (2026-11-19)**: Giai đoạn 4a — chấm điểm move hỗ trợ (buff/debuff/trạng thái/màn-thời tiết) trong tab Battle với nhãn Setup; tab Team đánh dấu lead dựng thế / hạ chỉ số. Xem mục 4a.
+- ✅ **0.8.1**: trận hoang dã — Pokémon trên thẻ trận của game là active sau khi đổi (move chỉ gắn cho nó), Pokémon rút ra giữ HP.
 - Chưa: đọc số lượng item ngay trên màn trận (hiện dùng số từ lần mở Bag gần nhất); Ether khi hết PP; berry dùng trong trận.
 
 #### 4a — Chấm điểm move hỗ trợ (buff/debuff, mở đường cho Pokémon sau) ✅ (code + test 2026-11-19; chưa chạy thử trong trận thật)
