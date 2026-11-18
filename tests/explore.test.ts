@@ -3,7 +3,7 @@ import mini from './fixtures/wiki-mini.json';
 import raw from './fixtures/wiki-explore-raw.json';
 import type { BoxMon, Dataset } from '../src/shared/types';
 import { fromWild, itemExtras, mergeEncounters, wildSpeciesFields } from '../src/data/normalize';
-import { filterEncounters, findableSpecies, fightOrCatch, isFindable, wantedSpecies, whereToFind, wildHeldItems } from '../src/engine/explore';
+import { filterEncounters, findableSpecies, fightOrCatch, mapForCard, speciesByCardName, isFindable, wantedSpecies, whereToFind, wildHeldItems } from '../src/engine/explore';
 import { BALL_RULES, ballItems, catchChance, criticalStrength, levelBonus, rankBalls, statusBonus, type BallContext } from '../src/engine/catching';
 import { planCatch, statusImmunity } from '../src/engine/catchPlan';
 import { boxToCalc, moveDamage, npcToCalc } from '../src/engine/damage';
@@ -111,6 +111,11 @@ describe('fight or catch', () => {
   it('fights an owned species with nothing special', () => {
     const d = fightOrCatch(ds, { species: rattata, level: 5 }, [mon('Rattata', [])]);
     expect(d.verdict).toBe('fight');
+  });
+  it('trusts the game card: in-box count and Pokédex icon beat the synced box', () => {
+    expect(fightOrCatch(ds, { species: rattata, inBox: 2, registered: true }, []).verdict).toBe('fight');
+    expect(fightOrCatch(ds, { species: rattata, inBox: 0, registered: true }, [mon('Rattata', [])]).reasons.join(' ')).toMatch(/in box: 0/);
+    expect(fightOrCatch(ds, { species: rattata, inBox: 0, registered: false }, []).reasons.join(' ')).toMatch(/not in your Pokédex/);
   });
   it('catches an owned species that holds a worthwhile item, is wanted-but-not-owned, shiny or has good IVs', () => {
     const owned = [mon('Pikachu', [])];
@@ -241,5 +246,18 @@ describe('catch plan: weaken without KO, then status', () => {
   it('warns when its ability may block the status', () => {
     const plan = planCatch(ds, [mon('Parasect', ['spore'], 40)], { species: sp('Drowzee'), level: 20 });
     expect(plan.status[0].mayFail).toMatch(/Insomnia/);
+  });
+});
+
+describe('matching the game encounter card', () => {
+  it('finds the species from the card name, forms either way round', () => {
+    expect(speciesByCardName(ds, 'Doduo')?.id).toBe(sp('Doduo'));
+    expect(speciesByCardName(ds, 'Nidoran♀')?.id).toBe(sp('Nidoran♀'));
+    expect(speciesByCardName(ds, 'Not A Mon')).toBeUndefined();
+  });
+  it('maps the page title to the explore map where it spawns', () => {
+    const m = mapForCard(ds, 'Grasslands 3', sp('Doduo'));
+    expect(m?.mapId).toBe('verdant-trail');
+    expect(mapForCard(ds, 'Power Plant 2', sp('Pikachu'))?.mapId).toBe('power-plant');
   });
 });

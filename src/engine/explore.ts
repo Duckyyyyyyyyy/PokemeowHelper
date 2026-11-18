@@ -154,6 +154,10 @@ export interface WildTarget {
   shiny?: boolean;
   /** The user says its IVs look good. */
   goodIvs?: boolean;
+  /** From the game's encounter card: "[in box: N]" (owned now, team and reserved included). */
+  inBox?: number;
+  /** From the game's encounter card: Pokédex icon (registered as obtained). */
+  registered?: boolean;
 }
 
 export interface CatchDecision {
@@ -169,9 +173,12 @@ const CHEAP_ITEMS: ReadonlySet<string> = new Set(['potion', 'oranberry', 'berryj
 export function fightOrCatch(ds: Dataset, t: WildTarget, box: BoxMon[], wanted: ReadonlySet<number> = new Set()): CatchDecision {
   const s = ds.species[t.species];
   const name = s?.name ?? 'It';
-  const owned = ownedSpecies(box).has(t.species);
+  // The game's own count beats MeowHelper's copy of your box.
+  const owned = t.inBox !== undefined ? t.inBox > 0 : ownedSpecies(box).has(t.species);
   const reasons: string[] = [];
-  if (!owned) reasons.push(`${name} is not in your box (MeowHelper can't read your Pokédex): likely a new entry.`);
+  if (t.registered === false) reasons.push(`${name} is not in your Pokédex yet: new entry.`);
+  else if (!owned && t.inBox !== undefined) reasons.push(`You own no ${name} right now (in box: 0).`);
+  else if (!owned) reasons.push(`${name} is not in your box (MeowHelper can't read your Pokédex): likely a new entry.`);
   if (t.shiny) reasons.push('It is shiny.');
   if (wanted.has(t.species) && !owned) reasons.push(`${name} counters the NPC you selected.`);
   if (t.item) {
@@ -187,4 +194,27 @@ export function fightOrCatch(ds: Dataset, t: WildTarget, box: BoxMon[], wanted: 
     reasons: [`You already own ${name}, it holds nothing worth keeping: defeat it for EXP.`],
     summary: 'FIGHT',
   };
+}
+
+/* ---------- matching the game's encounter card ---------- */
+
+/** Species from the card name; forms may read "Deerling-Autumn" or "Autumn Deerling". */
+export function speciesByCardName(ds: Dataset, name: string) {
+  const all = Object.values(ds.species);
+  const words = name.split(/\s+/);
+  const cands = [name, words.length > 1 ? `${words.slice(1).join(' ')}-${words[0]}` : '', name.replace(/\s+/g, '-')].filter(Boolean).map(norm);
+  for (const c of cands) {
+    const hit = all.find((x) => norm(x.name) === c);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/** Explore map for the page title ("Grasslands 3" → Grasslands), preferring one where this species spawns. */
+export function mapForCard(ds: Dataset, title: string | undefined, speciesId: number) {
+  const where = whereToFind(ds, speciesId);
+  const t = norm(title ?? '');
+  const byTitle = where.filter((w) => t && t.startsWith(norm(w.map.name))).sort((a, b) => b.map.name.length - a.map.name.length);
+  const pick = byTitle.find((w) => w.enc.method === 'walking') ?? byTitle[0] ?? where[0];
+  return pick ? { mapId: pick.map.id, method: pick.enc.method, top: pick.enc.levels[1] } : undefined;
 }
