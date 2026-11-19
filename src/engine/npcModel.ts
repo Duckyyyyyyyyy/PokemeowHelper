@@ -37,6 +37,11 @@ const RAISES_USER: [RegExp, keyof Boosts][] = [
   [/user's evasi/i, 'evasion'],
 ];
 
+/** Weight of one NPC attack (before normalising): strong hits and KOs preferred. Shared with lookahead.ts. */
+export function npcAttackWeight(expectedPct: number, minPct: number, maxPct: number, myHp: number): number {
+  return expectedPct <= 0 ? 0.05 : 1 + 6 * Math.min(1, expectedPct / Math.max(1, myHp)) + (minPct >= myHp ? 6 : maxPct >= myHp ? 2 : 0);
+}
+
 export function predictNpcMove(
   ds: Dataset,
   foe: CalcPokemon,
@@ -55,8 +60,7 @@ export function predictNpcMove(
     let dmg: ReturnType<typeof moveDamage> = null;
     if (mv.category !== 'Status') {
       dmg = moveDamage(ds, foe, me, id, ctx.field);
-      const exp = dmg?.expectedPct ?? 0;
-      w = exp <= 0 ? 0.05 : 1 + 6 * Math.min(1, exp / Math.max(1, myHp)) + (dmg!.minPct >= myHp ? 6 : dmg!.maxPct >= myHp ? 2 : 0);
+      w = npcAttackWeight(dmg?.expectedPct ?? 0, dmg?.minPct ?? 0, dmg?.maxPct ?? 0, myHp);
     } else {
       const d = mv.description;
       w = 1.2;

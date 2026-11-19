@@ -53,6 +53,18 @@ describe('turn advice (Brock, turn 3: Cottonee vs paralyzed Onix)', () => {
     expect(a.actions.find((x) => x.label === 'Stun Spore')!.score).toBeNull();
   });
 
+  it('Battle tab looks ahead (KO odds incl. crits, their KO risk); the cheap path for Explore does not', () => {
+    expect(a.threat?.koChance).toBeTypeOf('number');
+    expect(a.threat?.critKo).toBeTypeOf('number');
+    const md = a.actions.find((x) => x.label === 'Mega Drain')!;
+    expect(md.koChance).toBeGreaterThan(0.99);
+    expect(md.reason).toMatch(/Heals ~\d+%/);
+    const cheap = adviseTurn(ds, snap, box, { lookahead: 0 });
+    expect(cheap.threat?.koChance).toBeUndefined();
+    expect(cheap.actions.every((x) => x.line === undefined && x.koChance === undefined)).toBe(true);
+    expect(cheap.actions[0].label).toBe(a.actions[0].label);
+  });
+
   it('lists every healthy bench Pokémon as a switch option', () => {
     expect(a.actions.filter((x) => x.kind === 'switch').map((x) => x.label).sort()).toEqual(
       ['Switch to Flapple', 'Switch to Pancham', 'Switch to Timburr', 'Switch to Turtwig'],

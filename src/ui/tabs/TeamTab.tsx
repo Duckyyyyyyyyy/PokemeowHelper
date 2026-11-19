@@ -7,11 +7,32 @@ import { formatMult } from '../../engine/typeChart';
 import { NoData } from './shared';
 import { BoxSyncCard } from '../components/BoxSync';
 import { DuelDetail, MovesetPanel, duelSummary } from '../components/DamageViews';
-import { rulesFor } from '../../engine/rules';
+import { dsFor, rulesFor } from '../../engine/rules';
+import { facilityOf, frontierEntry, itemClause } from '../../engine/frontier';
+import { gen3Item } from '../../engine/gen3';
+import { towerEndurance } from '../../engine/towerPlan';
+import { LevelModeSeg } from '../components/FacilityRules';
+import { frontierVariant, levelMode } from '../frontierPrefs';
 import { excludedUids, lockedUids, resetTeamPrefs, teamToText, toggleExclude, toggleLock } from '../teamPrefs';
 import { assignHeldItems, suggestHeldItems } from '../../engine/heldItems';
 import { bag, ownedItems } from '../bagStore';
 import { GrindCard } from '../components/GrindCard';
+import { leadPairs } from '../../engine/leadPairs';
+
+/** Battle Frontier entry problems: who can't enter, what changes under Gen III rules, item clause. */
+function FrontierNotes({ ds, team, entries, blocked, ownTeam }: { ds: Dataset; team: BoxMon[]; entries: Map<string, { blocking: string[]; notes: string[] }>; blocked: string[]; ownTeam: boolean }) {
+  const dupItems = itemClause(ds, team);
+  const notes = team.flatMap((m) => (entries.get(m.uid)?.notes ?? []).map((n) => `${ds.species[m.species]?.name ?? '?'}: ${n}`));
+  return (
+    <Tip kind={dupItems.length || notes.length ? 'warn' : 'info'}>
+      {!ownTeam && <div>This facility uses rental Pokémon: the suggestion below is only a reference.</div>}
+      {blocked.length > 0 && <div><b>Can't enter ({blocked.length}):</b> {blocked.slice(0, 4).join('; ')}{blocked.length > 4 ? '…' : ''}</div>}
+      {dupItems.length > 0 && <div><b>Item clause:</b> {dupItems.join(', ')} is held twice; only one of each item can enter.</div>}
+      {notes.slice(0, 6).map((n) => <div>{n}</div>)}
+      <div class="bad-t">Hardcore runs: your own Pokémon that faint in the Frontier are lost for good.</div>
+    </Tip>
+  );
+}
 
 export function TeamTab() {
   const ds = dataset.value;
@@ -27,17 +48,42 @@ export function TeamTab() {
 
 /* ---------------- suggestion ---------------- */
 
-function Suggestion({ ds }: { ds: Dataset }) {
+function Suggestion({ ds: base }: { ds: Dataset }) {
   const npc = selectedNpc.value;
-  const v = npc ? npc.variants[Math.min(selectedVariant.value, npc.variants.length - 1)] : null;
+  const v0 = npc ? npc.variants[Math.min(selectedVariant.value, npc.variants.length - 1)] : null;
   const rules = rulesFor(npc?.category);
+  // Battle Frontier: Gen III data, the Brain's real level, eligibility, 3-Pokémon teams and clauses.
+  const ds = dsFor(base, rules);
+  const facility = facilityOf(npc);
+  const mode = levelMode.value;
+  const fr = useMemo(() => (npc && v0 && facility ? frontierVariant(base, box.value, npc, v0, mode) : null), [base, box.value, npc, v0, mode]);
+  const v = fr?.v ?? v0;
+  const entries = useMemo(
+    () => (facility ? new Map(box.value.map((m) => [m.uid, frontierEntry(base, m, facility, mode)])) : null),
+    [base, box.value, facility, mode],
+  );
+  const tower = npc?.category === 'tower';
   const locked = lockedUids.value;
   const excluded = excludedUids.value;
-  const res = useMemo(
-    () => (v ? suggestTeam(ds, box.value, v, { levelCap: v.levelCap, rules, locked, excluded }) : null),
-    [ds, v, box.value, npc, locked, excluded],
+  const res = useMemo(() => {
+    if (!v) return null;
+    const blocked = entries ? new Map([...entries].filter(([, e]) => e.blocking.length).map(([uid, e]) => [uid, e.blocking[0]])) : undefined;
+    // Pyramid: registered without held items, so score them without one.
+    const mons = facility && !facility.heldItems ? box.value.map((m) => ({ ...m, item: null })) : box.value;
+    return suggestTeam(ds, mons, v, { levelCap: v.levelCap, rules, locked, excluded, blocked, uniqueSpecies: !!facility, size: facility?.register });
+  }, [ds, v, box.value, npc, locked, excluded, entries]);
+  // Frontier: Pokémon that can never enter stay out of the grind plan too.
+  const grindExcluded = useMemo(
+    () => (entries ? [...excluded, ...[...entries].filter(([, e]) => e.blocking.length).map(([uid]) => uid)] : excluded),
+    [entries, excluded],
   );
-  const owned = ownedItems.value;
+  const endurance = useMemo(() => (tower && res && v ? towerEndurance(res.team, v) : null), [tower, res, v]);
+  const allOwned = ownedItems.value;
+  // Frontier: only Gen III held items (none at all in the Pyramid).
+  const owned = useMemo(
+    () => (facility ? new Map([...allOwned].filter(([id]) => facility.heldItems && !!gen3Item(id))) : allOwned),
+    [allOwned, facility],
+  );
   // One held item per team member from your bag (needs the Bag page read once).
   const held = useMemo(() => {
     if (!res || !v || !bag.value) return null;
@@ -49,6 +95,8 @@ function Suggestion({ ds }: { ds: Dataset }) {
     if (!res || !v) return null;
     return new Map(res.team.map((c) => [c.mon.uid, supportLead(ds, c.mon, v, { levelCap: v.levelCap, rules })]));
   }, [ds, res, v]);
+  // Phase 4b: doubles NPCs open with two Pokémon, so rate lead PAIRS.
+  const pairs = useMemo(() => (res && v?.format === 'doubles' ? leadPairs(ds, res.team, v, v.levelCap) : []), [ds, res, v]);
   const [copied, setCopied] = useState<string | null>(null);
   useEffect(() => setCopied(null), [res]); // the copied text belongs to the old team
   const bench = res ? res.ranked.filter((c) => c.eligible && !res.team.includes(c)) : [];
@@ -56,7 +104,7 @@ function Suggestion({ ds }: { ds: Dataset }) {
 
   async function exportTeam() {
     if (!res || !npc || !v) return;
-    const text = teamToText(ds, res.team.map((c) => c.mon), `MeowHelper team vs ${v.trainerName ?? npc.name}${npc.variants.length > 1 ? ` (${v.label})` : ''}`);
+    const text = teamToText(base, res.team.map((c) => c.mon), `MeowHelper team vs ${v.trainerName ?? npc.name}${npc.variants.length > 1 ? ` (${v.label})` : ''}`);
     try {
       await navigator.clipboard.writeText(text);
       setCopied('Team copied to the clipboard.');
@@ -74,7 +122,7 @@ function Suggestion({ ds }: { ds: Dataset }) {
         <div class="grow">
           <div class="title" style={{ margin: 0 }}>Opponent</div>
           <b>{npc ? `${v!.trainerName ?? npc.name}${npc.variants.length > 1 ? ` · ${v!.label}` : ''}` : 'No NPC selected'}</b>
-          {v && <div class="small muted">{v.format === 'doubles' ? 'Doubles' : 'Singles'} · {v.levelCap ? `Cap Lv ${v.levelCap}` : 'No level cap'}</div>}
+          {v && <div class="small muted">{facility ? `${facility.name} · Gen III rules · register ${facility.register}` : tower ? `One battle vs ${v.team.length} · HP/PP carry over · bring up to 6` : `${v.format === 'doubles' ? 'Doubles' : 'Singles'} · ${v.levelCap ? `Cap Lv ${v.levelCap}` : 'No level cap'}`}</div>}
         </div>
         <button class="btn sm" onClick={() => (activeTab.value = 'npc')}>{npc ? 'Change' : 'Pick NPC'}</button>
       </div>
@@ -85,6 +133,15 @@ function Suggestion({ ds }: { ds: Dataset }) {
         <Tip>Add the Pokémon you own to “Your box” below to get suggestions.</Tip>
       ) : res && (
         <>
+          {fr && <LevelModeSeg level={fr.level} estimated={fr.estimated} />}
+          {facility && entries && <FrontierNotes ds={base} team={res.team.map((c) => c.mon)} entries={entries} blocked={res.ranked.filter((c) => entries.get(c.mon.uid)?.blocking.length).map((c) => `${name(c)} (${entries.get(c.mon.uid)!.blocking[0]})`)} ownTeam={facility.ownTeam} />}
+          {endurance && (
+            <Tip kind={endurance.total > endurance.budget || endurance.losses ? 'warn' : 'ok'}>
+              <b>Endurance:</b> answering each of the {v!.team.length} with its best counter costs about {endurance.total}% HP of the team's {endurance.budget}%
+              {endurance.losses ? ` and ${endurance.losses} have no 1v1 answer` : ''}. Per Pokémon: {res.team.map((c, i) => `${name(c)} ${endurance.spent[i]}%`).join(', ')}.
+              <div class="small muted">Rough: ignores healing (Leftovers, recovery), switch-in damage, status and PP. Scores here favour HP kept and sustain, since nothing heals between opponents.</div>
+            </Tip>
+          )}
           <div class="card">
             <p class="title">Suggested team · ready now <span class="r">Coverage {res.coverage}/100</span></p>
             {res.team.map((c) => {
@@ -149,7 +206,10 @@ function Suggestion({ ds }: { ds: Dataset }) {
             <Tip kind="warn">Locked but not on the team: {lockedOut.map((c) => `${name(c)} (${c.reason ?? 'team is full'})`).join(', ')}</Tip>
           )}
 
-          <GrindCard ds={ds} v={v} ready={res} rules={rules} locked={locked} excluded={excluded} />
+          {/* Open Level Brains scale to your highest level, so grinding gains nothing there. */}
+          {!(facility && mode === 'open') && (
+            <GrindCard ds={ds} v={v} ready={res} rules={rules} locked={locked} size={facility?.register} excluded={grindExcluded} />
+          )}
 
           {res.team.length > 0 && (
             <div class="card">
@@ -176,7 +236,7 @@ function Suggestion({ ds }: { ds: Dataset }) {
                   </>
                 ))}
               </div>
-              <div class="small muted" style={{ marginTop: '6px' }}>Tap a cell for the damage numbers. 55+ = you win the 1v1.</div>
+              <div class="small muted" style={{ marginTop: '6px' }}>Tap a cell for the damage numbers. {tower ? 'Endurance score: 35+ = you win the 1v1, higher = more HP kept (+ sustain).' : '55+ = you win the 1v1.'}</div>
               {cell && (() => {
                 const c = res.team.find((t) => t.mon.uid === cell.uid);
                 const p = c?.pairs[cell.j];
@@ -185,7 +245,22 @@ function Suggestion({ ds }: { ds: Dataset }) {
             </div>
           )}
 
-          {res.lead && (
+          {pairs.length > 0 && (
+            <div class="card">
+              <p class="title">Lead pair · Doubles <span class="r small muted">vs {v.team.slice(0, 2).map((m) => m.name).join(' + ')}</span></p>
+              {pairs.map((p, i) => (
+                <div class={`act${i === 0 ? ' top' : ''}`}>
+                  <span class={`score ${scoreClass(p.score)}`}>{p.score}</span>
+                  <div class="grow">
+                    <b>{name(p.a)} + {name(p.b)}</b>
+                    <div class="small muted">{p.why.length ? p.why.join(' · ') : 'No special teamwork found.'}</div>
+                  </div>
+                </div>
+              ))}
+              <div class="small muted" style={{ marginTop: '4px' }}>Score = how well the pair answers both NPC leads (1v1 view) + teamwork rules of thumb (spread moves vs your partner, Fake Out, Follow Me, Helping Hand, Tailwind / Trick Room, KO together).</div>
+            </div>
+          )}
+          {res.lead && v.format !== 'doubles' && (
             <Tip kind="info">
               Lead with <b>{name(res.lead)}</b>: scores {res.lead.pairs[0]?.score} vs the NPC's first Pokémon ({v.team[0]?.name}).
             </Tip>

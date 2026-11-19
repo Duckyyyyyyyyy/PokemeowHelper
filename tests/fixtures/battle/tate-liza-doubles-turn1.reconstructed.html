@@ -1,0 +1,151 @@
+<!--
+  RECONSTRUCTION, not a saved page. Rebuilt by hand from the structure read (read-only) in the user's
+  Chrome during a real Double Battle against Tate & Liza on 2026-11-19, turn 1, before any move was
+  chosen. Classes, data attributes, aria-labels and text are as seen; images/SVGs, EXP bars and
+  decorative wrappers are left out, player name replaced.
+  Seen live:
+  - arena data-format="doubles"; .battle-turn reads "Double Battle · Turn 1 · 4/4 left".
+  - ONE .battle-player-stats / .battle-opponent-stats per side (class double-active-stats), each holding
+    two .double-active-card with a .double-position-label ("Position 1", "Opponent 2") and the usual
+    .battle-combatant markup.
+  - The scene has .battle-scene-active[data-position] groups ("Your field position 1: Slowbro").
+  - Commands: .double-battle-controls with an ordered .double-command-summary (one button per position,
+    aria-pressed on the one being edited) and ONE .double-command-editor ("Choose for Slowbro · Position 1")
+    holding the moves of that position only. Move button aria-label is "Surf, Water, Special, 15 of 15 PP"
+    (no power/accuracy), title is the move description. Targets are chosen after the move (not seen:
+    clicking is not allowed). No .battle-switch-card is in the DOM while the Moves mode is shown.
+  - Opponent roster: both active rows have data-active="true".
+  - Log at turn 1 only has the send-outs (no move uses seen yet).
+-->
+<section class="battle-arena" data-kind="gym" data-map-shortcuts="ignore" data-log-layout="side" data-format="doubles" data-status="active" aria-label="Battle against Tate &amp; Liza">
+  <div class="battle-arena-columns">
+    <div class="battle-main-panel">
+      <div class="battle-panel-heading">
+        <h2>
+          <span class="battle-title-trainer" title="Player"><span class="player-display-name"><span class="player-display-name-text">Player</span></span></span>
+          <span class="battle-title-versus">vs.</span>
+          <span class="battle-title-trainer" title="Tate &amp; Liza"><span class="battle-title-name">Tate &amp; Liza</span></span>
+        </h2>
+        <div class="battle-heading-actions"><span class="battle-turn">Double Battle · Turn 1 · 4/4 left</span></div>
+      </div>
+      <div class="battle-scene">
+        <div class="battle-scene-actives">
+          <div class="battle-scene-active" role="group" data-position="1" aria-label="Your field position 1: Slowbro"></div>
+          <div class="battle-scene-active" role="group" data-position="2" aria-label="Your field position 2: Scrafty"></div>
+        </div>
+        <div class="battle-scene-actives">
+          <div class="battle-scene-active" role="group" data-position="1" aria-label="Opponent field position 1: Claydol"></div>
+          <div class="battle-scene-active" role="group" data-position="2" aria-label="Opponent field position 2: Xatu"></div>
+        </div>
+      </div>
+      <div class="battle-player-side" aria-label="Your battle team and actions">
+        <div class="battle-player-stats double-active-stats" aria-label="Your active Pokémon">
+          <div class="double-active-card">
+            <span class="double-position-label">Position 1</span>
+            <div class="battle-combatant battle-combatant-player battle-combatant-stats-only">
+              <div class="battle-combatant-details">
+                <div class="battle-combatant-heading">
+                  <div class="battle-combatant-name">
+                    <strong title="Slowbro">Slowbro<span class="battle-capture-ball" role="img" aria-label="Dusk Ball" title="Dusk Ball"></span></strong>
+                    <span class="battle-pokemon-level">Lv. 45<button type="button" class="item-info-link item-info-link-icon battle-held-item" aria-label="Held item: Psychic Gem. View item information" title="About Psychic Gem"></button></span>
+                  </div>
+                  <span class="battle-hp-numbers">144/144 HP</span>
+                </div>
+                <div class="battle-hp hp-drop-bar"><div class="battle-hp-track" role="progressbar" aria-label="Slowbro HP" aria-valuemin="0" aria-valuemax="144" aria-valuenow="144"><span></span></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="double-active-card">
+            <span class="double-position-label">Position 2</span>
+            <div class="battle-combatant battle-combatant-player battle-combatant-stats-only">
+              <div class="battle-combatant-details">
+                <div class="battle-combatant-heading">
+                  <div class="battle-combatant-name">
+                    <strong title="Scrafty">Scrafty<span class="battle-capture-ball" role="img" aria-label="Ultra Ball" title="Ultra Ball"></span></strong>
+                    <span class="battle-pokemon-level">Lv. 45</span>
+                  </div>
+                  <span class="battle-hp-numbers">122/122 HP</span>
+                </div>
+                <div class="battle-hp hp-drop-bar"><div class="battle-hp-track" role="progressbar" aria-label="Scrafty HP" aria-valuemin="0" aria-valuemax="122" aria-valuenow="122"><span></span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="double-battle-controls battle-choices" data-map-shortcuts="ignore" aria-label="Double Battle commands">
+          <p id="_r_4v_" class="double-command-hint">Choose moves and targets. Your final choice sends the turn automatically.</p>
+          <ol class="double-command-summary" aria-label="Planned commands">
+            <li><button type="button" aria-pressed="true" aria-controls="_r_4u_"><strong><span>Position 1 · Slowbro</span></strong><span>Choose a command</span></button></li>
+            <li><button type="button" aria-pressed="false" aria-controls="_r_4u_"><strong><span>Position 2 · Scrafty</span></strong><span>Choose a command</span></button></li>
+          </ol>
+          <section id="_r_4u_" class="double-command-editor" aria-label="Command for position 1" aria-describedby="_r_4v_">
+            <h4 class="double-command-heading" tabindex="-1">Choose for Slowbro<small>· Position 1</small></h4>
+            <div class="double-command-modes" role="group" aria-label="Position 1 command type">
+              <button type="button" aria-pressed="true">Moves</button>
+              <button type="button" aria-pressed="false">Switch</button>
+              <button type="button" aria-pressed="false">Bag</button>
+            </div>
+            <div class="battle-move-grid">
+              <div class="battle-move-slot" data-has-info="true"><button type="button" class="battle-move-button" title="Raises the user's Sp. Atk and Sp. Def by 1." aria-label="Calm Mind, Psychic, Status, 20 of 20 PP"><strong class="battle-move-name"><span>Calm Mind</span></strong><span class="battle-move-meta"><span class="battle-move-pp">20 / 20 PP</span></span></button><button type="button" class="battle-move-info-button" aria-label="Info about Calm Mind"></button></div>
+              <div class="battle-move-slot" data-has-info="true"><button type="button" class="battle-move-button" title="Hits adjacent Pokemon. Double damage on Dive." aria-label="Surf, Water, Special, 15 of 15 PP"><strong class="battle-move-name"><span>Surf</span></strong><span class="battle-move-meta"><span class="battle-move-pp">15 / 15 PP</span></span></button><button type="button" class="battle-move-info-button" aria-label="Info about Surf"></button></div>
+              <div class="battle-move-slot" data-has-info="true"><button type="button" class="battle-move-button" aria-label="Slack Off, Normal, Status, 5 of 5 PP"><strong class="battle-move-name"><span>Slack Off</span></strong><span class="battle-move-meta"><span class="battle-move-pp">5 / 5 PP</span></span></button><button type="button" class="battle-move-info-button" aria-label="Info about Slack Off"></button></div>
+              <div class="battle-move-slot" data-has-info="true"><button type="button" class="battle-move-button" aria-label="Psychic, Psychic, Special, 10 of 10 PP"><strong class="battle-move-name"><span>Psychic</span></strong><span class="battle-move-meta"><span class="battle-move-pp">10 / 10 PP</span></span></button><button type="button" class="battle-move-info-button" aria-label="Info about Psychic"></button></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+    <aside class="battle-opponent-side" aria-label="Tate &amp; Liza's team">
+      <div class="battle-opponent-stats double-active-stats" aria-label="Opposing active Pokémon">
+        <div class="double-active-card">
+          <span class="double-position-label">Opponent 1</span>
+          <div class="battle-combatant battle-combatant-opponent battle-combatant-stats-only">
+            <div class="battle-combatant-details">
+              <div class="battle-combatant-heading">
+                <div class="battle-combatant-name">
+                  <strong title="Claydol">Claydol<span class="battle-capture-ball" role="img" aria-label="Poké Ball"></span><button type="button" class="battle-weakness-button" aria-label="Weaknesses of Claydol" title="Weaknesses" data-active="true"></button></strong>
+                  <span class="battle-pokemon-level">Lv. 41</span>
+                </div>
+                <span class="battle-hp-numbers">112/112 HP</span>
+              </div>
+              <div class="battle-hp hp-drop-bar"><div class="battle-hp-track" role="progressbar" aria-label="Claydol HP" aria-valuemin="0" aria-valuemax="112" aria-valuenow="112"><span></span></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="double-active-card">
+          <span class="double-position-label">Opponent 2</span>
+          <div class="battle-combatant battle-combatant-opponent battle-combatant-stats-only">
+            <div class="battle-combatant-details">
+              <div class="battle-combatant-heading">
+                <div class="battle-combatant-name">
+                  <strong title="Xatu">Xatu<span class="battle-capture-ball" role="img" aria-label="Poké Ball"></span><button type="button" class="battle-weakness-button" aria-label="Weaknesses of Xatu" title="Weaknesses"></button></strong>
+                  <span class="battle-pokemon-level">Lv. 41</span>
+                </div>
+                <span class="battle-hp-numbers">117/117 HP</span>
+              </div>
+              <div class="battle-hp hp-drop-bar"><div class="battle-hp-track" role="progressbar" aria-label="Xatu HP" aria-valuemin="0" aria-valuemax="117" aria-valuenow="117"><span></span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="battle-opponent-support">
+        <div class="battle-opponent-roster">
+          <div class="battle-opponent-team-summary"><span class="battle-opponent-balls" aria-label="Opponent team Poké Balls"><span class="battle-opponent-ball" aria-label="Slot 1: Remaining"></span><span class="battle-opponent-ball" aria-label="Slot 2: Remaining"></span><span class="battle-opponent-ball" aria-label="Slot 3: Remaining"></span><span class="battle-opponent-ball" aria-label="Slot 4: Remaining"></span></span>4/4 left</div>
+          <ol>
+            <li data-active="true"><div class="battle-opponent-row-details"><div class="battle-opponent-row-heading"><strong>Claydol</strong><span>Lv. 41</span><span>Active</span></div><div class="battle-opponent-row-health"><div class="battle-hp-track" aria-label="Claydol HP"></div><span>112/112 HP</span></div></div></li>
+            <li data-active="true"><div class="battle-opponent-row-details"><div class="battle-opponent-row-heading"><strong>Xatu</strong><span>Lv. 41</span><span>Active</span></div><div class="battle-opponent-row-health"><div class="battle-hp-track" aria-label="Xatu HP"></div><span>117/117 HP</span></div></div></li>
+            <li><div class="battle-opponent-row-details"><div class="battle-opponent-row-heading"><strong>Lunatone</strong><span>Lv. 42</span></div><div class="battle-opponent-row-health"><div class="battle-hp-track" aria-label="Lunatone HP"></div><span>140/140 HP</span></div></div></li>
+            <li><div class="battle-opponent-row-details"><div class="battle-opponent-row-heading"><strong>Solrock</strong><span>Lv. 42</span></div><div class="battle-opponent-row-health"><div class="battle-hp-track" aria-label="Solrock HP"></div><span>140/140 HP</span></div></div></li>
+          </ol>
+        </div>
+      </div>
+    </aside>
+  </div>
+  <div class="battle-log-column"><div class="battle-log-panel">
+    <ol class="battle-log battle-log-grouped" aria-label="Battle log">
+      <li><div class="battle-log-turn">Battle start</div>Go, <span class="battle-log-pokemon"><button type="button" class="battle-log-move-link battle-log-pokemon-link" aria-label="Slowbro. View Pokédex entry"><strong>Slowbro</strong></button></span>!</li>
+      <li>Go, <span class="battle-log-pokemon"><button type="button" class="battle-log-move-link battle-log-pokemon-link" aria-label="Scrafty. View Pokédex entry"><strong>Scrafty</strong></button></span>!</li>
+      <li><span class="battle-log-trainer"><strong>Tate &amp; Liza</strong></span> sent out <span class="battle-log-pokemon"><button type="button" class="battle-log-move-link battle-log-pokemon-link" aria-label="Claydol. View Pokédex entry"><strong>Claydol</strong></button></span>!</li>
+      <li><span class="battle-log-trainer"><strong>Tate &amp; Liza</strong></span> sent out <span class="battle-log-pokemon"><button type="button" class="battle-log-move-link battle-log-pokemon-link" aria-label="Xatu. View Pokédex entry"><strong>Xatu</strong></button></span>!</li>
+    </ol>
+  </div></div>
+</section>

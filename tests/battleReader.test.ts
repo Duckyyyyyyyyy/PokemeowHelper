@@ -79,12 +79,12 @@ describe('text parsers', () => {
   });
 
   it('stat-stage lines (real wording from the game, plus mainline variants)', () => {
-    expect(parseBoostLine("Your Timburr's Defense fell harshly!")).toEqual({ side: 'player', stats: ['def'], delta: -2 });
-    expect(parseBoostLine("Your Turtwig's Speed fell!")).toEqual({ side: 'player', stats: ['spe'], delta: -1 });
-    expect(parseBoostLine("Opponent’s Onix's Attack rose sharply!")).toEqual({ side: 'opponent', stats: ['atk'], delta: 2 });
-    expect(parseBoostLine("Opponent’s Gyarados's Attack and Speed rose!")).toEqual({ side: 'opponent', stats: ['atk', 'spe'], delta: 1 });
-    expect(parseBoostLine("Your Lapras's Sp. Atk rose drastically!")).toEqual({ side: 'player', stats: ['spa'], delta: 3 });
-    expect(parseBoostLine("Your Lapras's Special Defense fell severely!")).toEqual({ side: 'player', stats: ['spd'], delta: -3 });
+    expect(parseBoostLine("Your Timburr's Defense fell harshly!")).toEqual({ side: 'player', mon: 'Timburr', stats: ['def'], delta: -2 });
+    expect(parseBoostLine("Your Turtwig's Speed fell!")).toMatchObject({ side: 'player', stats: ['spe'], delta: -1 });
+    expect(parseBoostLine("Opponent’s Onix's Attack rose sharply!")).toMatchObject({ side: 'opponent', stats: ['atk'], delta: 2 });
+    expect(parseBoostLine("Opponent’s Gyarados's Attack and Speed rose!")).toMatchObject({ side: 'opponent', stats: ['atk', 'spe'], delta: 1 });
+    expect(parseBoostLine("Your Lapras's Sp. Atk rose drastically!")).toMatchObject({ side: 'player', stats: ['spa'], delta: 3 });
+    expect(parseBoostLine("Your Lapras's Special Defense fell severely!")).toMatchObject({ side: 'player', stats: ['spd'], delta: -3 });
     expect(parseBoostLine('Opponent’s Onix used Rock Tomb! It dealt 12 damage.')).toBeNull();
     expect(parseBoostLine("Your Onix's Attack won't go any higher!")).toBeNull();
   });
@@ -147,9 +147,13 @@ describe('log events (real lines from two Brock battles, 2026-11-18)', () => {
     expect(r.events.map((e) => [e.move, !!e.missed, e.damage ?? null])).toEqual([['Stun Spore', true, null], ['Rock Tomb', false, 9]]);
   });
 
-  it('flags wording it does not model, and accepts straight apostrophes', () => {
+  it('labels critical hits (same line or a later one), flags wording it does not model, accepts straight apostrophes', () => {
     const r = parseLog([{ text: "Opponent's Onix used Rock Throw! A critical hit! It dealt 20 damage." }]);
-    expect(r.events[0]).toMatchObject({ side: 'opponent', mon: 'Onix', move: 'Rock Throw', damage: 20, unusual: true });
+    expect(r.events[0]).toMatchObject({ side: 'opponent', mon: 'Onix', move: 'Rock Throw', damage: 20, crit: true });
+    expect(r.events[0].unusual).toBeUndefined();
+    const later = parseLog([{ text: "Opponent's Onix used Rock Throw!" }, { text: 'It dealt 20 damage.' }, { text: 'A critical hit!' }, { text: "Opponent's Onix used Tackle!" }]);
+    expect(later.events.map((e) => !!e.crit)).toEqual([true, false]);
+    expect(parseLog([{ text: "Opponent's Onix used Double Kick! It hit 2 times!" }]).events[0].unusual).toBe(true);
   });
 
   it('new log wording (seen live, Lt. Surge battle 2): trainer’s name for theirs, no prefix for yours', () => {

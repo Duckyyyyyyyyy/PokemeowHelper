@@ -1,6 +1,7 @@
 import { calculate, Field, Generations, Move as CalcMove, Pokemon as CalcPokemon, toID } from '@smogon/calc';
 import type { BoxMon, Dataset, NpcMon, StatTable } from '../shared/types';
 import type { BattleRules } from './rules';
+import { GEN3, gen3AbilityFor } from './gen3';
 
 /**
  * Damage layer on top of @smogon/calc (Gen 9 mechanics).
@@ -11,26 +12,37 @@ import type { BattleRules } from './rules';
  * data, so the game's own changes and custom Pokémon are respected.
  */
 export const gen = Generations.get(9);
+type Gen = typeof gen;
 
-/** Default level used for NPC sets that have none (Frontier Brains). */
+/** Calc generation for a dataset: gen 3 for the Battle Frontier view (engine/gen3.ts), else gen 9. */
+export function calcGen(ds: Dataset): Gen {
+  return ds.ruleset === 'gen3' ? (GEN3 as Gen) : gen;
+}
+
+/**
+ * Level used for NPC sets that have none: Frontier Brains. Wiki (each facility page, read
+ * 2026-11-19): Brains are level 50 in the Level 50 category; in Open Level they match your highest
+ * registered level, minimum 60 (engine/frontier.ts sets that level before scoring).
+ */
 export const ASSUMED_NPC_LEVEL = 50;
 const PERFECT: StatTable = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 };
 
-function speciesName(ds: Dataset, id: number, fallbackName: string): { name: string; known: boolean } {
+function speciesName(ds: Dataset, id: number, fallbackName: string, g: Gen = gen): { name: string; known: boolean } {
   const s = ds.species[id];
   const name = s?.name ?? fallbackName;
-  for (const cand of [name, name.replace(/\s+/g, '-')]) {
-    const sp = gen.species.get(toID(cand));
+  const fixed = name.replace(/♀/g, '-F').replace(/♂/g, '-M'); // Nidoran♀ → Nidoran-F (calc dex name)
+  for (const cand of [fixed, fixed.replace(/\s+/g, '-')]) {
+    const sp = g.species.get(toID(cand));
     if (sp) return { name: sp.name, known: true };
   }
   return { name: 'Mew', known: false };
 }
 
-function validAbility(name?: string) {
-  return name && gen.abilities.get(toID(name)) ? name : undefined;
+function validAbility(name?: string, g: Gen = gen) {
+  return name && g.abilities.get(toID(name)) ? name : undefined;
 }
-function validItem(id?: string | null) {
-  const it = id ? gen.items.get(toID(id)) : undefined;
+function validItem(id?: string | null, g: Gen = gen) {
+  const it = id ? g.items.get(toID(id)) : undefined;
   return it?.name;
 }
 
@@ -48,12 +60,15 @@ interface MonInput {
 
 function build(ds: Dataset, m: MonInput): CalcPokemon {
   const s = ds.species[m.species];
-  const { name } = speciesName(ds, m.species, m.name);
-  return new CalcPokemon(gen, name, {
+  const g = calcGen(ds);
+  const { name } = speciesName(ds, m.species, m.name, g);
+  // Gen III: a later ability becomes one of the species' Gen III abilities; later items do nothing.
+  const ability = g.num === 3 ? gen3AbilityFor(s?.name ?? m.name, m.ability) : m.ability;
+  return new CalcPokemon(g, name, {
     level: m.level,
     nature: m.nature,
-    ability: validAbility(m.ability),
-    item: validItem(m.item),
+    ability: validAbility(ability, g),
+    item: validItem(m.item, g),
     ivs: { ...PERFECT, ...(m.ivs ?? {}) },
     evs: m.evs ?? {},
     gender: m.gender === 'F' ? 'F' : m.gender === 'M' ? 'M' : undefined,
@@ -91,11 +106,30 @@ export function boxToCalc(ds: Dataset, b: BoxMon, defaultLevel = 50): CalcPokemo
   });
 }
 
-function calcMove(ds: Dataset, id: string): CalcMove | null {
+/**
+ * `cg`: the calc generation (Gen III in Frontier battles). `singleTarget`: doubles, a spread move
+ * with only one target left (no spread reduction).
+ */
+function calcMove(ds: Dataset, id: string, cg: Gen = gen, singleTarget = false): CalcMove | null {
   const g = ds.moves[id];
   if (!g || g.category === 'Status') return null;
+  if (cg.num === 3) {
+    // Gen III data as-is: its power/type, and the type decides physical/special. No game overrides
+    // (they would undo the split), and no Tackle stand-in for a move Gen III doesn't have.
+    const g3 = cg.moves.get(toID(id));
+    if (!g3) return null;
+    const spread = g3.target === 'allAdjacent' || g3.target === 'allAdjacentFoes';
+    try {
+      return new CalcMove(cg, g3.name, singleTarget && spread ? { overrides: { target: 'normal' } as any } : undefined);
+    } catch {
+      return null;
+    }
+  }
   const known = gen.moves.get(toID(id));
   const overrides: Record<string, unknown> = {};
+  // Doubles: a spread move with one target left gets no spread reduction (the calc keys it on the
+  // move's target, and clones the move from its overrides, so it must be set here).
+  if (singleTarget && known && (known.target === 'allAdjacent' || known.target === 'allAdjacentFoes')) overrides.target = 'normal';
   if (!known || known.type !== g.type) overrides.type = g.type;
   if (!known || known.category !== g.category) overrides.category = g.category;
   // Fixed/variable-power moves have power 0 in the game data – keep the calc's logic for those.
@@ -130,12 +164,18 @@ const accOf = (ds: Dataset, id: string) => {
   return a === true || a === undefined ? 1 : a / 100;
 };
 
-export function moveDamage(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, moveId: string, field?: Field): MoveDamage | null {
-  const mv = calcMove(ds, moveId);
+/**
+ * The ruleset reaches the calc two ways: the generation follows the attacker (built from the Gen III
+ * view in Frontier battles), and the game type (singles/doubles, spread moves) follows `field`.
+ * `opts.singleTarget`: doubles, a spread move with only one target left.
+ */
+export function moveDamage(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, moveId: string, field?: Field, opts?: { singleTarget?: boolean }): MoveDamage | null {
+  const cg = atk.gen as Gen;
+  const mv = calcMove(ds, moveId, cg, !!opts?.singleTarget);
   if (!mv) return null;
   let r;
   try {
-    r = calculate(gen, atk, def, mv, field);
+    r = calculate(cg, atk, def, mv, field);
   } catch {
     return null;
   }
@@ -163,6 +203,31 @@ export function moveDamage(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, move
     priority: ds.moves[moveId]?.priority ?? 0,
     koText,
   };
+}
+
+/**
+ * The 16 damage rolls (raw HP, ascending; multi-hit moves summed per roll) without the KO text,
+ * for the lookahead. `crit`: force a critical hit. null when the move does nothing we can compute.
+ */
+export function damageRolls(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, moveId: string, field?: Field, crit = false): number[] | null {
+  // Same generation rule as moveDamage: follow the attacker (Gen III in Frontier battles).
+  const cg = atk.gen as Gen;
+  const mv = calcMove(ds, moveId, cg);
+  if (!mv) return null;
+  if (crit) mv.isCrit = true;
+  let d: number | number[] | number[][];
+  try {
+    d = calculate(cg, atk, def, mv, field).damage as number | number[] | number[][];
+  } catch {
+    return null;
+  }
+  if (typeof d === 'number') return [d];
+  if (!d.length) return [0];
+  if (Array.isArray(d[0])) {
+    const hits = d as number[][];
+    return hits[0].map((_, i) => hits.reduce((s, h) => s + (h[i] ?? h[h.length - 1]), 0)).sort((a, b) => a - b);
+  }
+  return [...(d as number[])].sort((a, b) => a - b);
 }
 
 /** Moves that make the user faint: they can't be repeated, so they never "win a 1v1" by spamming. */
