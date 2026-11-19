@@ -5,7 +5,7 @@ import { ASSUMED_NPC_LEVEL, SELF_KO_MOVES, bestMove, boxToCalc, calcErrorCount, 
 import { battleRulesFor, dsFor, type BattleRules } from './rules';
 import { movesForBox } from './teamSuggest';
 import { guessNpcSwitch, predictNpcMove, type NpcGuess, type NpcSwitchGuess } from './npcModel';
-import { npcKey, observedMoves, type ObservedStore } from './observed';
+import { npcKey, observedMoves, seenFor, type ObservedStore } from './observed';
 import { accuracyStageMul, battleSpeed, order, project } from './projection';
 import { itemAdvice, itemsAllowed, resolveItems } from './itemAdvisor';
 import { fieldFromLog, rateSupport, supportBlocked, supportEffect, type BenchMon, type SupportContext } from './supportMoves';
@@ -141,9 +141,25 @@ export function matchNpc(ds: Dataset, snap: BattleSnapshot): { npc: Npc; variant
   return best && { npc: best.npc, variant: best.variant };
 }
 
-export function foeSet(ds: Dataset, idx: Idx, v: NpcTeamVariant | undefined, b: BattleMon): { mon: NpcMon; known: boolean } | undefined {
+/**
+ * The wiki set of a Pokémon on the battle screen. Teams can hold the same species twice at the same
+ * level (Lance's two Lv 54 Dragonair): then `ctx` picks the right one, first by which same-name row
+ * of the opponent's roster is active (the roster lists the team in order), else by the moves it used
+ * since it came in.
+ */
+export function foeSet(ds: Dataset, idx: Idx, v: NpcTeamVariant | undefined, b: BattleMon, ctx?: { roster?: RosterMon[]; used?: string[] }): { mon: NpcMon; known: boolean } | undefined {
   const named = v?.team.filter((m) => lc(m.name) === lc(b.name)) ?? [];
-  const hit = named.find((m) => m.level === b.level) ?? named[0];
+  const sameLevel = named.filter((m) => m.level === b.level);
+  let hit = sameLevel[0] ?? named[0];
+  if (sameLevel.length > 1 && ctx) {
+    const rows = (ctx.roster ?? []).filter((r) => lc(r.name) === lc(b.name) && (r.level === undefined || r.level === b.level));
+    const at = rows.length === sameLevel.length ? rows.findIndex((r) => r.active && !r.fainted) : -1;
+    if (at >= 0) hit = sameLevel[at];
+    else if (ctx.used?.length) {
+      const fit = (m: NpcMon) => ctx.used!.filter((id) => m.moves.includes(id)).length;
+      hit = sameLevel.reduce((best, m) => (fit(m) > fit(best) ? m : best), sameLevel[0]);
+    }
+  }
   if (hit) return { mon: { ...hit, level: b.level ?? hit.level ?? ASSUMED_NPC_LEVEL }, known: true };
   const s = idx.species.get(lc(b.name));
   if (!s) return undefined;
@@ -219,19 +235,23 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
     return out;
   }
 
-  const foe = foeSet(ds, idx, match?.variant, snap.opponent);
+  const sinceInIds = sinceIn(snap, 'opponent', snap.opponent.name).map((e) => idx.moves.get(lc(e.move))?.id).filter((x): x is string => !!x);
+  const foe = foeSet(ds, idx, match?.variant, snap.opponent, { roster: snap.opponentTeam, used: sinceInIds });
   out.foe = foe;
   if (!foe) {
     notes.push(`Unknown Pokémon: ${snap.opponent.name}.`);
     return out;
   }
   // Moves this opponent Pokémon has used in this battle (from the log).
-  const usedThisBattle = (snap.events ?? [])
+  // A move since it came in is certainly its own; earlier uses by the same name may be a twin's.
+  const usedThisBattle = [...new Set([...sinceInIds, ...seenFor((snap.events ?? [])
     .filter((e) => e.side === 'opponent' && lc(e.mon) === lc(foe.mon.name))
     .map((e) => idx.moves.get(lc(e.move))?.id)
-    .filter((x): x is string => !!x);
+    .filter((x): x is string => !!x), foe.mon, match?.variant.team ?? [])])];
   // Moves it used in earlier battles against this trainer + team (battle-observed).
-  const seenBefore = opts.observed ? observedMoves(opts.observed, npcKey(match, snap), snap.opponent.name, snap.opponent.level) : [];
+  // Two of the same species and level share one record: keep only what fits this one (seenFor).
+  const team = match?.variant.team ?? [];
+  const seenBefore = opts.observed ? seenFor(observedMoves(opts.observed, npcKey(match, snap), snap.opponent.name, snap.opponent.level), foe.mon, team) : [];
   // The store also holds this battle's moves (recorded as they happen): show only the earlier ones.
   const earlier = seenBefore.filter((id) => !usedThisBattle.includes(id));
   if (earlier.length) out.seenBefore = earlier;

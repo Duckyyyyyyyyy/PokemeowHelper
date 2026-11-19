@@ -1,5 +1,5 @@
 import type { BattleSnapshot } from '../shared/battle';
-import type { Dataset, Npc, NpcTeamVariant } from '../shared/types';
+import type { Dataset, Npc, NpcMon, NpcTeamVariant } from '../shared/types';
 import { indexes, lc, matchNpc, type Idx } from './turnAdvisor';
 
 /**
@@ -87,6 +87,18 @@ export function observedMoves(store: ObservedStore, npc: string, name: string, l
   const prefix = `${npc}|${lc(name)}|`;
   const any = Object.entries(store).filter(([k]) => k.startsWith(prefix)).flatMap(([, v]) => allMoves(v));
   return [...new Set(any)];
+}
+
+/**
+ * Seen moves that belong to `mon`. The store keys a Pokémon by NPC + name + level, so twins (two
+ * Lv 54 Dragonair on one team) share a record: a move goes to the twin(s) whose wiki set has it,
+ * and only a move none of them has stays on all of them (shown as "not in wiki").
+ */
+export function seenFor(seen: string[], mon: Pick<NpcMon, 'name' | 'level' | 'moves'>, team: readonly NpcMon[], anyLevel = false): string[] {
+  // anyLevel: the NPC tab merges records by name over all levels.
+  const twins = team.filter((t) => lc(t.name) === lc(mon.name) && (anyLevel || t.level === mon.level));
+  if (twins.length < 2) return seen;
+  return seen.filter((id) => mon.moves.includes(id) || !twins.some((t) => t.moves.includes(id)));
 }
 
 /** Own moves first, then moves only other players saw. */
