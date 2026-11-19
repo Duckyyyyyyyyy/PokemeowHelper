@@ -65,6 +65,19 @@ describe('turn advice (Brock, turn 3: Cottonee vs paralyzed Onix)', () => {
     expect(cheap.actions[0].label).toBe(a.actions[0].label);
   });
 
+  it('move rows keep the game’s move-grid order (slot) and carry plain facts', () => {
+    const moves = a.actions.filter((x) => x.kind === 'move');
+    expect(moves.map((x) => [x.slot, x.label]).sort((p, q) => p[0]! as number - (q[0] as number))).toEqual(
+      snap.moves.map((m, i) => [i, m.name]),
+    );
+    const drain = moves.find((x) => x.label === 'Mega Drain')!;
+    expect(drain.facts).toMatchObject({ koNow: 'sure', movesFirst: true });
+    const leaf = moves.find((x) => x.label === 'Razor Leaf')!;
+    expect(leaf.facts?.hitsToKo).toBe(2);
+    expect(leaf.facts?.accuracy).toBe(95);
+    expect(moves.find((x) => x.label === 'Stun Spore')!.facts).toBeUndefined(); // status move: no damage facts
+  });
+
   it('lists every healthy bench Pokémon as a switch option', () => {
     expect(a.actions.filter((x) => x.kind === 'switch').map((x) => x.label).sort()).toEqual(
       ['Switch to Flapple', 'Switch to Pancham', 'Switch to Timburr', 'Switch to Turtwig'],
@@ -257,8 +270,17 @@ describe('fainted active Pokémon (live bug: Drake, Charizard at 0 HP still got 
     const normal = adviseTurn(ds, snap, box);
     for (const x of a.actions) {
       const mid = normal.actions.find((y) => y.label === x.label.replace('Send in', 'Switch to'))!;
-      expect(x.score!).toBeGreaterThanOrEqual(mid.score!);
+      if (x.unknownMoves) expect(mid.unknownMoves).toBe(true); // both unrated, not a low number
+      else expect(x.score!).toBeGreaterThanOrEqual(mid.score!);
       expect(x.reason).not.toMatch(/switching in/);
+    }
+  });
+
+  it('switch-ins not in your box: moves unknown, flagged and not scored (no misleading 0 or 5)', () => {
+    for (const x of a.actions) {
+      expect(x.unknownMoves).toBe(true);
+      expect(x.score).toBeNull();
+      expect(x.reason).toMatch(/moves are unknown/);
     }
   });
 
