@@ -54,6 +54,8 @@ export interface DoublesAction {
   hits?: DoublesHit[];
   /** Spread move that also hits your own ally (not immune): shown as a warning. */
   allyHit?: DoublesHit;
+  /** Spread move that hits your ally whose set is unknown (damage not computed). */
+  allyUnknown?: string;
   /** Teamwork note (Helping Hand on X, Protect + partner's Earthquake…). */
   combo?: string;
   /** Internal: Helping Hand scored with this partner action in mind (moveId|target). */
@@ -254,7 +256,7 @@ export function adviseDoubles(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], 
         continue;
       }
       if (SPREAD_TARGETS.has(mv.target)) {
-        actions.push(spreadAction(ds, field, me, mine, theirs, id, danger));
+        actions.push(spreadAction(ds, field, me, mine, theirs, id, danger, myMons.filter((m) => m !== me.mon && !mine.some((u) => u.mon === m)).map((m) => m.name)));
         continue;
       }
       if (FLINCH_FIRST_TURN.has(id) && !firstTurnOut(snap, me.mon.name)) {
@@ -343,7 +345,7 @@ function singleAction(ds: Dataset, f: FieldState, me: Unit, foe: Unit, id: strin
   };
 }
 
-function spreadAction(ds: Dataset, f: FieldState, me: Unit, mine: Unit[], theirs: Unit[], id: string, danger: (u: Unit) => number): DoublesAction {
+function spreadAction(ds: Dataset, f: FieldState, me: Unit, mine: Unit[], theirs: Unit[], id: string, danger: (u: Unit) => number, unknownAllies: string[] = []): DoublesAction {
   const mv = ds.moves[id];
   const targets = spreadTargets(ds, id, me, mine, theirs);
   const n = targets.length;
@@ -377,6 +379,7 @@ function spreadAction(ds: Dataset, f: FieldState, me: Unit, mine: Unit[], theirs
   const foesHit = hits.filter((h) => h.side === 'opponent' && !h.immune).length;
   if (foesHit > 1) score *= 0.8;
   if (!foesHit) bits.push('no effect on their Pokémon');
+  if (ds.moves[id]?.target === 'allAdjacent') for (const n of unknownAllies) bits.push(`also hits your ${n} (its set is unknown)`);
   if (allyHit) bits.push(`also hits your ${allyHit.name} for ${pct(allyHit)}${allyHit.ko === 'sure' ? ' and KOs it!' : allyHit.ko === 'chance' ? ' and can KO it!' : ''}`);
   if (SELF_KO_MOVES.has(id)) {
     score -= 25;
@@ -385,6 +388,7 @@ function spreadAction(ds: Dataset, f: FieldState, me: Unit, mine: Unit[], theirs
   return {
     user: me.mon.name, kind: 'move', label: mv.name, moveId: id, spread: true, score: clamp(score), reason: bits.join('; ') + '.', hits, allyHit,
     ...(immuneAlly ? { combo: `${immuneAlly} is immune, so it hits only their side` } : {}),
+    ...(ds.moves[id]?.target === 'allAdjacent' && unknownAllies.length ? { allyUnknown: unknownAllies[0] } : {}),
   };
 }
 

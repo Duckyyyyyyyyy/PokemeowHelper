@@ -153,11 +153,13 @@ export function initBattle() {
   });
 }
 
-/** Dev harness only: the reconstructed Brock battle, so the tab can be previewed outside Chrome. */
-export async function loadSampleBattle() {
+/** Dev harness only: a reconstructed battle (Brock singles, or Tate & Liza doubles), so the tab can be previewed outside Chrome. */
+export async function loadSampleBattle(kind: 'singles' | 'doubles' = 'singles') {
   if (!import.meta.env.DEV) return;
   const [{ default: html }, { readBattle }] = await Promise.all([
-    import('../../tests/fixtures/battle/brock-turn3.reconstructed.html?raw'),
+    kind === 'doubles'
+      ? import('../../tests/fixtures/battle/tate-liza-doubles-turn1.reconstructed.html?raw')
+      : import('../../tests/fixtures/battle/brock-turn3.reconstructed.html?raw'),
     import('../content/battleReader'),
   ]);
   onSnapshot(readBattle(new DOMParser().parseFromString(html, 'text/html')));
