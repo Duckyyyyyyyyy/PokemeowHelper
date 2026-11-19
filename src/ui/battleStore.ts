@@ -8,6 +8,7 @@ import { updateRun, type RunState } from '../engine/towerPlan';
 import { recordObserved, type ObservedStore } from '../engine/observed';
 import { applyImports, type ImportLedger } from '../engine/share';
 import { box, dataset, isExtension } from './store';
+import { bossMovesById } from './bossStore';
 
 /** Latest battle screen read by the content script (chrome.storage.local key "mdBattle"). */
 export const battle = signal<BattleSnapshot | null>(null);
@@ -148,7 +149,7 @@ function judge(prev: BattleSnapshot | null, next: BattleSnapshot) {
 
   const npcMoves = fresh.filter((e) => e.side === 'opponent' && prev.opponent && lc(e.mon) === lc(prev.opponent.name));
   if (npcMoves.length && prev.status === 'active') {
-    const top = adviseTurn(base, prev, box.value, { observed: observed.value, gen3: forceGen3.value, lookahead: 0 }).prediction?.[0];
+    const top = adviseTurn(base, prev, box.value, { observed: observed.value, gen3: forceGen3.value, lookahead: 0, bossMoves: bossMovesById.value }).prediction?.[0];
     if (top) {
       const hit = lc(npcMoves[0].move) === lc(top.name);
       guessScore.value = { hit: guessScore.value.hit + (hit ? 1 : 0), total: guessScore.value.total + 1 };

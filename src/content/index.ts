@@ -2,15 +2,17 @@ import { readBattle } from './battleReader';
 import { mergeBag, readBag } from './bagReader';
 import { readWild } from './wildReader';
 import { carryTeamHp } from '../shared/wildTeam';
+import { lobbySig, mergeBossLobby, readBossLobby } from './bossLobbyReader';
 
 /**
  * MeowRPGAdvisor content script (pokemeowrpg.com). READ-ONLY by design (game rule: "Play yourself"):
- * it watches the page, reads the battle screen, the Bag page or the Explore encounter card when one is open, and stores a
+ * it watches the page, reads the battle screen, the Bag page the Explore encounter card or the World Boss page when one is open, and stores a
  * snapshot for the side panel. It never clicks, types, changes the page, or calls the game's API.
  */
 const KEY = 'mdBattle';
 const BAG_KEY = 'mdBag';
 const WILD_KEY = 'mdWild';
+const LOBBY_KEY = 'mdBossLobby';
 // Starts as 'none' so a game tab without a battle never wipes a battle another tab is showing.
 let last = 'none';
 let lastBag = '';
@@ -19,6 +21,8 @@ let lastWild = 'none';
 /** Last published encounter, so a Pokémon switched out keeps its HP (the team panel shows none). */
 let lastWildSnap: ReturnType<typeof readWild> = null;
 let timer: number | undefined;
+// The World Boss page: only published while it is open, never cleared (its moves are needed in the battle).
+let lastLobby = 'none';
 
 function publishBag() {
   const read = readBag(document);
@@ -43,11 +47,24 @@ function publishWild() {
   chrome.storage.local.set({ [WILD_KEY]: snap }).catch(() => observer.disconnect());
 }
 
+/** The World Boss page: next boss and the details dialog's moves (read-only). */
+function publishLobby() {
+  const read = readBossLobby(document);
+  const sig = lobbySig(read);
+  if (!read || sig === lastLobby) return;
+  lastLobby = sig;
+  chrome.storage.local
+    .get(LOBBY_KEY)
+    .then((r) => chrome.storage.local.set({ [LOBBY_KEY]: mergeBossLobby(r[LOBBY_KEY], read) }))
+    .catch(() => observer.disconnect());
+}
+
 function publish() {
   timer = undefined;
   try {
     publishBag();
     publishWild();
+    publishLobby();
   } catch {
     observer.disconnect();
     return;
@@ -68,5 +85,5 @@ function publish() {
 const observer = new MutationObserver(() => {
   if (timer === undefined) timer = window.setTimeout(publish, 300);
 });
-observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['data-view', 'style', 'data-status', 'data-fainted', 'data-active', 'disabled', 'aria-label'] });
+observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['data-view', 'data-staff', 'datetime', 'style', 'data-status', 'data-fainted', 'data-active', 'disabled', 'aria-label'] });
 publish();

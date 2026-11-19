@@ -12,6 +12,7 @@ import { runSummary } from '../../engine/towerPlan';
 import { adviseDoubles, type DoublesAction, type DoublesAdvice, type DoublesMonAdvice } from '../../engine/doublesAdvisor';
 import { activeTab, box, dataset, isExtension } from '../store';
 import { NoData } from './shared';
+import { bossMovesById } from '../bossStore';
 import { timeAgo } from '../boxStore';
 
 export function BattleTab() {
@@ -57,7 +58,7 @@ function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
   const [forceSingles, setForceSingles] = useState(false);
   // Singles advice in a doubles battle would look right and be wrong: hide it unless asked for.
   const hideAdvice = !!doubles && !forceSingles;
-  const advice = useMemo(() => (snap.status === 'active' && !hideAdvice ? adviseTurn(ds, snap, box.value, { observed: observed.value, items: ownedItems.value, gen3 }) : null), [ds, snap, box.value, observed.value, ownedItems.value, gen3, hideAdvice]);
+  const advice = useMemo(() => (snap.status === 'active' && !hideAdvice ? adviseTurn(ds, snap, box.value, { observed: observed.value, items: ownedItems.value, gen3, bossMoves: bossMovesById.value }) : null), [ds, snap, box.value, observed.value, ownedItems.value, gen3, hideAdvice, bossMovesById.value]);
   const ended = snap.status === 'won' || snap.status === 'lost';
   const variant = advice?.variant && advice.npc && advice.npc.variants.length > 1 ? advice.variant.label : undefined;
 
