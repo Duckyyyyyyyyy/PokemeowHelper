@@ -281,7 +281,9 @@ function subjectLine(text: string, re: RegExp, who: Who): { side: Side; mon: str
 }
 
 /** Wording we have not seen in a real battle yet: keep those hits out of damage checks. */
-const UNUSUAL = /critical hit|hit \d+ times?|times!|recoil|restored|had its energy drained|substitute/i;
+const UNUSUAL = /hit \d+ times?|times!|recoil|restored|had its energy drained|substitute/i;
+/** A critical hit ("A critical hit!" in mainline; the game's exact wording is a guess): checked against the crit range. */
+const CRIT = /critical hit/i;
 
 interface LogLine {
   text: string;
@@ -306,6 +308,7 @@ export function parseLog(lines: LogLine[], trainer?: string): { boosts: BattleSn
       events.push({
         idx, turn, side: use.side, mon: use.mon, move: use.move, target: active[other(use.side)], damage: use.damage,
         unusual: UNUSUAL.test(text) || undefined,
+        crit: CRIT.test(text) || undefined,
         stages: { attacker: { ...boosts[use.side] }, target: { ...boosts[other(use.side)] } },
       });
       return;
@@ -319,6 +322,8 @@ export function parseLog(lines: LogLine[], trainer?: string): { boosts: BattleSn
       const dmg = text.match(/^It dealt (\d+) damage/i);
       if (dmg && last.damage === undefined) last.damage = parseInt(dmg[1], 10);
       if (UNUSUAL.test(text) && idx === last.idx + 1) last.unusual = true;
+      // The crit line may come after "It dealt N damage.": any line up to the next move use counts.
+      if (CRIT.test(text)) last.crit = true;
       const fainted = subjectLine(text, /^(.+?)\s+fainted/i, who);
       if (fainted && fainted.side !== last.side && fainted.mon === last.target) last.targetFainted = true;
     }

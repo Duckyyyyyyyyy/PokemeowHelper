@@ -7,18 +7,24 @@ import { movesForBox } from './teamSuggest';
 import { guessNpcSwitch, predictNpcMove, type NpcGuess, type NpcSwitchGuess } from './npcModel';
 import { npcKey, observedMoves, type ObservedStore } from './observed';
 import { accuracyStageMul, battleSpeed, order, project } from './projection';
-import { fieldFromLog, rateSupport, supportEffect, type BenchMon, type SupportContext } from './supportMoves';
+import { fieldFromLog, rateSupport, supportBlocked, supportEffect, type BenchMon, type SupportContext } from './supportMoves';
+import { SETUP_TIEBREAK, runLookahead, searchable, type LookMon, type Lookahead, type RootValue } from './lookahead';
+import { fxNotes } from './moveEffects';
 
 export { accuracyStageMul, battleSpeed };
 
 /**
  * Phase 3 turn advice for SINGLES, from a battle snapshot (content script) + game data + your box.
- * Each action (your 4 moves, each switch) gets a 0–100 score from a short 1v1 projection that
- * starts at the CURRENT HP, status and stat stages:
+ * Each action (your 4 moves, each switch) gets a 0–100 score. Cheap path (`lookahead: 0`, used by
+ * Explore's Defeat it and the guess tracker): a short 1v1 projection from the CURRENT HP, status
+ * and stat stages:
  *   - both sides keep using their best move; priority, then speed (stages, paralysis, Scarf) set the order;
  *   - a switch takes one free hit from the NPC's best move first.
- * Accuracy/evasion stages scale expected damage (ranking only). It is a ranking aid, not a full
- * simulator: no crits, no secondary effects; NPC switching is only a displayed guess.
+ * Default (Battle tab): the lookahead in lookahead.ts plays 2–3 turns (your options, the NPC's
+ * likely reply, damage rolls, crits, secondary effects) and scores the leaf with the same
+ * projection, so the scale (55+ = you win the 1v1) is unchanged. Attack reasons add the KO chance
+ * incl. crits ("KO 6% via crit") and effects ("30% flinch – you're faster").
+ * Accuracy/evasion stages scale expected damage. NPC switching is only a displayed guess.
  */
 
 export interface ActionAdvice {
@@ -35,6 +41,11 @@ export interface ActionAdvice {
   threat?: ThreatInfo;
   /** Support move scored as setup (stat boost, drop, status, screen, weather, hazard): see supportMoves.ts. */
   tag?: 'setup';
+  /** Lookahead: chance (0–1) this move KOs this turn, and the part only a critical hit gives. */
+  koChance?: number;
+  critKo?: number;
+  /** Lookahead: line of play, e.g. "Swords Dance → Earthquake KOs both remaining". */
+  line?: string;
 }
 
 export interface ThreatInfo {
@@ -44,6 +55,9 @@ export interface ThreatInfo {
   /** Their best hit KOs you from your current HP. */
   ko?: 'sure' | 'chance';
   youFirst: boolean | null;
+  /** Lookahead: chance (0–1) they KO you this turn with their likely moves, and the part only a crit gives. */
+  koChance?: number;
+  critKo?: number;
 }
 
 export interface TurnAdvice {
@@ -70,6 +84,11 @@ export interface AdviseOptions {
   observed?: ObservedStore;
   /** Items in your bag (id → count), from the game's Bag page. Enables item advice. */
   items?: ReadonlyMap<string, number>;
+  /**
+   * Turns the lookahead plays out (default 2, deepened to 3 when the tree is small).
+   * 0 = the cheap one-turn projection (Explore's Defeat it, the guess tracker).
+   */
+  lookahead?: number;
 }
 
 /**
@@ -226,9 +245,15 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
   // No moves, no items (not even a Revive on it), no "KOs you" line for a Pokémon already down.
   if (activeFainted(snap)) {
     out.forcedSwitch = true;
+    const bench = benchFor(ds, idx, box, snap, rules);
+    const look = (opts.lookahead ?? 2) > 0 && bench.length
+      ? lookFor(ds, idx, snap, field, rules, null, bench, foe.mon.name, foeCalc, foeMoves, foesLeft(ds, idx, match?.variant, snap, npcBenchOf(ds, idx, match?.variant, snap)), undefined, opts.lookahead)
+      : undefined;
     for (const r of snap.bench) {
       if (r.active || r.fainted || (r.hp ?? 1) <= 0) continue; // a same-species teammate (two Aggrons) still counts
-      out.actions.push(switchAdvice(ds, idx, box, r, foeCalc, foeMoves, rules, field, true));
+      const adv = switchAdvice(ds, idx, box, r, foeCalc, foeMoves, rules, field, true);
+      if (look) applySwitchLook(adv, look, bench.findIndex((b) => b.row === r) + 1);
+      out.actions.push(adv);
     }
     if (!out.actions.length) notes.push('No healthy Pokémon left to send in.');
     out.actions.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
@@ -279,13 +304,7 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
   }
 
   // Might the NPC switch out? (Display, and stage drops on it would be lost.)
-  const npcBench = snap.opponentTeam
-    .filter((r) => !r.active && !r.fainted && (r.hp ?? 1) > 0 && lc(r.name) !== lc(snap.opponent!.name))
-    .map((r) => {
-      const s = foeSet(ds, idx, match?.variant, r);
-      return s && { name: r.name, calc: applyState(npcToCalc(ds, s.mon), r), moves: s.mon.moves };
-    })
-    .filter((x): x is NonNullable<typeof x> => !!x);
+  const npcBench = npcBenchOf(ds, idx, match?.variant, snap);
   if (npcBench.length) out.npcSwitch = guessNpcSwitch(ds, foeCalc, defenderVsNpc(myCalc, rules), myMoveIds, foeMoves, npcBench, field);
 
   // Support moves (Phase 4a): plan A (attack now) vs plan B (support move, then attack).
@@ -297,6 +316,20 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
     npcMaySwitch: !!out.npcSwitch,
     field: fieldFromLog(snap.events, snap.turn, (n) => idx.moves.get(lc(n))?.id),
   };
+
+  // Lookahead (default): a few turns of expectimax; the cheap path keeps the one-turn projection.
+  const myLegal = myMoveIds.filter((id) => ds.moves[id]?.category !== 'Status' || (searchable(ds, id) && !supportBlocked(support, id)));
+  const look = (opts.lookahead ?? 2) > 0
+    ? lookFor(ds, idx, snap, field, rules, { name: snap.player.name, calc: myCalc, moves: myLegal }, support.bench as BenchRow[], foe.mon.name, foeCalc, foeMoves, support.foesLeft ?? [], out.prediction, opts.lookahead)
+    : undefined;
+  if (look && out.threat) {
+    const t = look.engine.threatOdds();
+    out.threat.koChance = t.ko;
+    out.threat.critKo = t.critKo;
+  }
+  const lookMove = (id: string) => look?.values.find((v) => v.action.kind === 'move' && v.action.moveId === id);
+  const attackLooks = look?.values.filter((v) => v.action.kind === 'move' && ds.moves[v.action.moveId]?.category !== 'Status').map((v) => v.score) ?? [];
+  const bestAttackLook = attackLooks.length ? Math.max(...attackLooks) : -1;
 
   // Your moves
   for (const m of snap.moves) {
@@ -315,7 +348,13 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
     }
     if (g.category === 'Status') {
       const r = rateSupport(support, g.id);
-      if (r) out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: r.score, reason: r.reason, tag: 'setup' });
+      const lv = lookMove(g.id);
+      if (r && lv && r.score !== null) {
+        // One model: the lookahead plays the setup out (what plan B did, over more turns).
+        const score = Math.round(Math.max(0, Math.min(100, lv.score - (lv.score >= 55 ? SETUP_TIEBREAK : 0))));
+        const vs = bestAttackLook >= 0 && score > bestAttackLook ? ' Beats attacking now.' : '';
+        out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score, reason: `${r.reason}${vs}`, tag: 'setup', line: planLine(lv) });
+      } else if (r) out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: r.score, reason: r.reason, tag: 'setup' });
       else out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: null, reason: 'Status move – not scored. Use it if the effect helps.' });
       continue;
     }
@@ -350,8 +389,27 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
       reason += accMul === 1 ? ` ${baseAcc}% accuracy.` : ` ~${Math.round(hitChance * 100)}% to hit (accuracy/evasion stages).`;
     }
     let score = Math.round(Math.max(0, Math.min(100, p.score + (ko === 'sure' && first !== false ? 10 : 0))));
+    let koChance: number | undefined;
+    let critKo: number | undefined;
+    let line: string | undefined;
+    const lv = lookMove(g.id);
+    if (look && lv) {
+      score = Math.round(lv.score);
+      const odds = look.engine.hitOdds(0, g.id);
+      if (odds) {
+        koChance = odds.ko;
+        critKo = odds.critKo;
+        reason += koText(odds, ko);
+      }
+      const fx = fxNotes(ds, g.id, {
+        atk: myCalc, def: foeCalc, youFirst: look.engine.youFirst(g.id, out.prediction?.[0]?.moveId), dmgPct: Math.min(foeHp, avg(d)),
+        defStatus: snap.opponent.status, firstTurn: firstOnField(snap, 'player', snap.player.name), attackerMaxHp: myCalc.maxHP(), defMaxHp: foeCalc.maxHP(),
+      });
+      if (fx.length) reason += ` ${cap(fx.join(', '))}.`;
+      line = planLine(lv);
+    }
     // A sure side effect (Icy Wind's −1 Spe, Nuzzle's paralysis): hit once, then fight with it.
-    if (!ko && supportEffect(ds, g.id)) {
+    if (!look && !ko && supportEffect(ds, g.id)) {
       const r = rateSupport(support, g.id);
       if (r?.score != null && r.score > score) {
         score = r.score;
@@ -385,16 +443,19 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
         reason += ' You hit before it can use Destiny Bond.';
       }
     }
-    out.actions.push({ kind: 'move', label: m.name, moveId: g.id, minPct: d.minPct, maxPct: d.maxPct, ko, score, reason });
+    out.actions.push({ kind: 'move', label: m.name, moveId: g.id, minPct: d.minPct, maxPct: d.maxPct, ko, score, reason, koChance, critKo, line });
   }
 
   // Items from your bag
   if (opts.items?.size && rules.bagItems) out.actions.push(...itemAdvice(ds, idx, box, snap, me.mon, myCalc, foeCalc, myMoveIds, foeMoves, rules, field, opts.items));
 
   // Switches
+  const benchRows = (support.bench ?? []) as BenchRow[];
   for (const r of snap.bench) {
     if (r.active || r.fainted || (r.hp ?? 1) <= 0) continue;
-    out.actions.push(switchAdvice(ds, idx, box, r, foeCalc, foeMoves, rules, field));
+    const adv = switchAdvice(ds, idx, box, r, foeCalc, foeMoves, rules, field);
+    if (look) applySwitchLook(adv, look, benchRows.findIndex((b) => b.row === r) + 1);
+    out.actions.push(adv);
   }
 
   if (!rules.bagItems) notes.push('Bag medicine cannot be used in Battle Towers; HP, status and PP carry over between opponents.');
@@ -405,15 +466,106 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
 }
 
 /** Your healthy bench as calc Pokémon with their legal attacks (later-Pokémon credit of support moves). */
-function benchFor(ds: Dataset, idx: Idx, box: BoxMon[], snap: BattleSnapshot, rules: BattleRules): BenchMon[] {
-  const out: BenchMon[] = [];
+function benchFor(ds: Dataset, idx: Idx, box: BoxMon[], snap: BattleSnapshot, rules: BattleRules): BenchRow[] {
+  const out: BenchRow[] = [];
   for (const r of snap.bench) {
     if (r.active || r.fainted || (r.hp ?? 1) <= 0) continue;
     const mine = mySet(idx, box, r, (r.moves ?? []).map((m) => m.name));
     if (!mine) continue;
-    out.push({ name: r.name, calc: applyState(boxToCalc(ds, mine.mon), r), moves: repeatable(movesForBox(ds, mine.mon).filter((id) => !rules.bannedMoves.has(id))) });
+    out.push({ row: r, name: r.name, calc: applyState(boxToCalc(ds, mine.mon), r), moves: repeatable(movesForBox(ds, mine.mon).filter((id) => !rules.bannedMoves.has(id))) });
   }
   return out;
+}
+
+type BenchRow = BenchMon & { row: RosterMon };
+
+/** The NPC's healthy Pokémon on its team bar (not the active one). */
+function npcBenchOf(ds: Dataset, idx: Idx, v: NpcTeamVariant | undefined, snap: BattleSnapshot) {
+  return snap.opponentTeam
+    .filter((r) => !r.active && !r.fainted && (r.hp ?? 1) > 0 && lc(r.name) !== lc(snap.opponent!.name))
+    .map((r) => {
+      const s = foeSet(ds, idx, v, r);
+      return s && { name: r.name, calc: applyState(npcToCalc(ds, s.mon), r), moves: s.mon.moves };
+    })
+    .filter((x): x is NonNullable<typeof x> => !!x);
+}
+
+/** Log events of this side since `name` last came in (approximation: since another Pokémon of that side last moved). */
+function sinceIn(snap: BattleSnapshot, side: 'player' | 'opponent', name: string) {
+  const ev = snap.events ?? [];
+  let lastOther = -1;
+  for (const e of ev) if (e.side === side && lc(e.mon) !== lc(name)) lastOther = e.idx;
+  return ev.filter((e) => e.side === side && lc(e.mon) === lc(name) && e.idx > lastOther);
+}
+
+/** It has not moved since it came in: Fake Out / First Impression still work. */
+const firstOnField = (snap: BattleSnapshot, side: 'player' | 'opponent', name: string) => sinceIn(snap, side, name).length === 0;
+
+/** Focus Energy used since it came in (from the log; the screen doesn't show it). */
+const usedFocusEnergy = (snap: BattleSnapshot, side: 'player' | 'opponent', name: string, idx: Idx) =>
+  sinceIn(snap, side, name).some((e) => !e.missed && idx.moves.get(lc(e.move))?.id === 'focusenergy');
+
+type Look = { engine: Lookahead; values: RootValue[]; depth: number };
+
+function lookFor(
+  ds: Dataset, idx: Idx, snap: BattleSnapshot, field: ReturnType<typeof makeField>, rules: BattleRules, me: LookMon | null, bench: BenchRow[],
+  foeName: string, foeCalc: CalcPokemon, foeMoves: string[], left: { name: string; calc: CalcPokemon; moves: string[] }[],
+  prediction: NpcGuess[] | undefined, depth: number | undefined,
+): Look | undefined {
+  let active = me;
+  if (!active) {
+    if (!bench.length) return undefined;
+    // Forced switch: a fainted placeholder in the active slot; only the switch-ins are scored.
+    const c = bench[0].calc.clone();
+    c.originalCurHP = 0;
+    active = { name: snap.player?.name ?? 'Fainted', calc: c, moves: [] };
+  }
+  const mine: LookMon[] = [
+    { ...active, asDefender: defenderVsNpc(active.calc, rules) },
+    ...bench.map((b) => ({ name: b.name, calc: b.calc, asDefender: defenderVsNpc(b.calc, rules), moves: b.moves })),
+  ];
+  const foes: LookMon[] = [{ name: foeName, calc: foeCalc, moves: repeatable(foeMoves) }, ...left.map((f) => ({ name: f.name, calc: f.calc, moves: repeatable(f.moves) }))];
+  return runLookahead({
+    ds, field, mine, foes,
+    myBoosts: me ? snap.boosts.player : undefined, foeBoosts: snap.boosts.opponent,
+    focusEnergy: {
+      me: !!me && !!snap.player && usedFocusEnergy(snap, 'player', snap.player.name, idx),
+      foe: !!snap.opponent && usedFocusEnergy(snap, 'opponent', snap.opponent.name, idx),
+    },
+    firstTurn: {
+      me: !!me && !!snap.player && firstOnField(snap, 'player', snap.player.name),
+      foe: !!snap.opponent && firstOnField(snap, 'opponent', snap.opponent.name),
+    },
+    prediction: me ? prediction?.map((g) => ({ moveId: g.moveId, prob: g.prob })) : undefined,
+    depth,
+  });
+}
+
+/** Replaces a switch row's score with the lookahead's, adds the line of play and their KO odds on it. */
+function applySwitchLook(adv: ActionAdvice, look: Look, to: number) {
+  if (to <= 0 || adv.score === null) return;
+  const v = look.values.find((x) => x.action.kind === 'switch' && x.action.to === to);
+  if (!v) return;
+  adv.score = Math.round(v.score);
+  adv.line = planLine(v);
+  if (adv.threat) {
+    const t = look.engine.threatOdds(to);
+    adv.threat.koChance = t.ko;
+    adv.threat.critKo = t.critKo;
+  }
+}
+
+/** The line of play is shown when it says more than the move itself (two steps or more, or a tail). */
+const planLine = (v: RootValue) => (v.line && (v.line.includes('→') || v.line.includes(', then')) ? v.line : undefined);
+
+const pctOf = (x: number) => (x >= 0.995 ? '100%' : x > 0 && x < 0.01 ? '<1%' : `${Math.round(x * 100)}%`);
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** "KO 6% via crit" / "~40% to KO now (5% via crit)". */
+function koText(o: { ko: number; critKo: number }, ko: 'sure' | 'chance' | undefined): string {
+  if (o.ko < 0.005 || (ko === 'sure' && o.ko >= 0.995)) return '';
+  if (o.critKo >= 0.9 * o.ko) return ` KO ${pctOf(o.critKo)} via crit.`;
+  return ` ~${pctOf(o.ko)} to KO now${o.critKo >= 0.005 ? ` (${pctOf(o.critKo)} via crit)` : ''}.`;
 }
 
 /** NPC Pokémon still to come: seen on its team bar, plus wiki team members not seen yet (hazards). */

@@ -76,7 +76,7 @@ function judge(prev: BattleSnapshot | null, next: BattleSnapshot) {
 
   const npcMoves = fresh.filter((e) => e.side === 'opponent' && prev.opponent && lc(e.mon) === lc(prev.opponent.name));
   if (npcMoves.length && prev.status === 'active') {
-    const top = adviseTurn(ds, prev, box.value, { observed: observed.value }).prediction?.[0];
+    const top = adviseTurn(ds, prev, box.value, { observed: observed.value, lookahead: 0 }).prediction?.[0];
     if (top) {
       const hit = lc(npcMoves[0].move) === lc(top.name);
       guessScore.value = { hit: guessScore.value.hit + (hit ? 1 : 0), total: guessScore.value.total + 1 };

@@ -423,6 +423,12 @@ function blocked(ctx: SupportContext, moveId: string, e: SupportEffect, foeTypes
   }
 }
 
+/** Why this support move can't work now (immunity, ability, already maxed, field already up…), or undefined. */
+export function supportBlocked(ctx: SupportContext, moveId: string): string | undefined {
+  const e = supportEffect(ctx.ds, moveId);
+  return e ? blocked(ctx, moveId, e, ctx.foe.types as string[]) : undefined;
+}
+
 /** State after the effect lands. `turnsUsed` = turns of a timed effect already spent (incl. this one). */
 function applyEffect(st: State, e: SupportEffect, fx: Fx, turnsUsed: number): { st: State; fx: Fx } {
   const me = st.me.clone();
