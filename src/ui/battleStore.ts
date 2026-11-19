@@ -1,7 +1,7 @@
 import { effect, signal } from '@preact/signals';
-import type { BattleSnapshot } from '../shared/battle';
+import { doublesReason, type BattleSnapshot } from '../shared/battle';
 import { checkEvent, newEvents, type DamageCheck } from '../engine/damageCheck';
-import { adviseTurn, lc } from '../engine/turnAdvisor';
+import { adviseTurn, lc, matchNpc } from '../engine/turnAdvisor';
 import { recordObserved, type ObservedStore } from '../engine/observed';
 import { box, dataset, isExtension } from './store';
 
@@ -70,6 +70,8 @@ function judge(prev: BattleSnapshot | null, next: BattleSnapshot) {
   const fresh = newEvents(prev, next);
   const ds = dataset.value;
   if (!ds || !prev || !fresh.length) return;
+  // Doubles: the log's target and the 1v1 guess assume one Pokémon per side, so they would be judged wrongly.
+  if (doublesReason(prev, matchNpc(ds, prev)?.variant.format)) return;
 
   const checks = fresh.map((e) => checkEvent(ds, box.value, prev, e)).filter((c): c is DamageCheck => !!c);
   if (checks.length) damageChecks.value = [...damageChecks.value, ...checks].slice(-30);

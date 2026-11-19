@@ -1,9 +1,9 @@
-import { useMemo } from 'preact/hooks';
+import { useMemo, useState } from 'preact/hooks';
 import { ownedItems } from '../bagStore';
-import type { BattleMon, BattleSnapshot, Boosts } from '../../shared/battle';
+import { doublesReason, type BattleMon, type BattleSnapshot, type Boosts } from '../../shared/battle';
 import type { Dataset } from '../../shared/types';
 import { Empty, Tip, Types, scoreClass } from '../components/common';
-import { adviseTurn, type ActionAdvice } from '../../engine/turnAdvisor';
+import { adviseTurn, matchNpc, type ActionAdvice } from '../../engine/turnAdvisor';
 import { battle, damageChecks, guessScore, loadSampleBattle, observed } from '../battleStore';
 import { box, dataset, isExtension } from '../store';
 import { NoData } from './shared';
@@ -32,7 +32,11 @@ export function BattleTab() {
 }
 
 function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
-  const advice = useMemo(() => (snap.status === 'active' ? adviseTurn(ds, snap, box.value, { observed: observed.value, items: ownedItems.value }) : null), [ds, snap, box.value, observed.value, ownedItems.value]);
+  const doubles = useMemo(() => doublesReason(snap, matchNpc(ds, snap)?.variant.format), [ds, snap]);
+  const [forceSingles, setForceSingles] = useState(false);
+  // Singles advice in a doubles battle would look right and be wrong: hide it unless asked for.
+  const hideAdvice = !!doubles && !forceSingles;
+  const advice = useMemo(() => (snap.status === 'active' && !hideAdvice ? adviseTurn(ds, snap, box.value, { observed: observed.value, items: ownedItems.value }) : null), [ds, snap, box.value, observed.value, ownedItems.value, hideAdvice]);
   const ended = snap.status === 'won' || snap.status === 'lost';
   const ranked = advice?.actions.filter((a) => a.score !== null) ?? [];
   const unscored = advice?.actions.filter((a) => a.score === null) ?? [];
@@ -48,6 +52,14 @@ function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
         {snap.opponent && <Side ds={ds} label="Them" mon={snap.opponent} boosts={snap.boosts.opponent} foe />}
       </div>
 
+      {doubles && !ended && (
+        <Tip kind="warn">
+          <b>Doubles: not fully supported yet.</b> MeowHelper only reads one Pokémon per side and scores a 1v1, so its advice would be wrong here ({doubles}).{' '}
+          {hideAdvice
+            ? <button class="btn" style={{ marginTop: '6px' }} onClick={() => setForceSingles(true)}>Show 1v1 advice anyway</button>
+            : <>Showing 1v1 advice for the first Pokémon on each side – treat it as a rough guide. <button class="btn" style={{ marginTop: '6px' }} onClick={() => setForceSingles(false)}>Hide it</button></>}
+        </Tip>
+      )}
       {ended ? (
         <Tip kind={snap.status === 'won' ? 'ok' : 'danger'}>{snap.status === 'won' ? 'You won the battle!' : 'You lost this one.'} Pick the next NPC in the NPC tab to plan a team.</Tip>
       ) : snap.status !== 'active' ? (

@@ -95,6 +95,39 @@ export interface BattleSnapshot {
    * only a switch-in can be picked. Missing in older snapshots: use activeFainted().
    */
   forcedSwitch?: boolean;
+  /**
+   * How many combatant stat boxes each side shows (2 per side would mean a doubles battle).
+   * Not checked against a live doubles battle yet: see doublesReason().
+   */
+  sides?: { player: number; opponent: number };
+}
+
+/**
+ * Why this battle looks like a doubles battle, or null for singles. The Battle tab's advice is
+ * singles-only (a 1v1 projection), so in doubles it must not show it as if it were right.
+ * Signals: the arena's data-format, two stat boxes on a side, two Pokémon marked active on the
+ * switch cards or the opponent roster, two different Pokémon of one side using moves in the same
+ * turn of the log, or the matched NPC team's wiki format (passed in by the caller).
+ */
+export function doublesReason(snap: BattleSnapshot, npcFormat?: string): string | null {
+  const f = (snap.format ?? '').toLowerCase();
+  if (f && f !== 'singles') return `the battle screen says the format is “${snap.format}”`;
+  if (snap.sides && (snap.sides.player > 1 || snap.sides.opponent > 1)) return 'two Pokémon are on the field on one side';
+  if (snap.bench.filter((r) => r.active && !r.fainted).length > 1) return 'two of your Pokémon are marked active';
+  if (snap.opponentTeam.filter((r) => r.active && !r.fainted).length > 1) return 'two of their Pokémon are marked active';
+  if (npcFormat === 'doubles') return 'this NPC battles in Doubles (wiki data)';
+  // Needs two such turns: a rare singles quirk (e.g. a switch effect) must not hide singles advice.
+  const seen = new Map<string, Set<string>>();
+  const doubleTurns = new Set<string>();
+  for (const e of snap.events ?? []) {
+    if (e.turn === undefined) continue;
+    const key = `${e.turn}|${e.side}`;
+    const mons = seen.get(key) ?? new Set<string>();
+    mons.add(e.mon.toLowerCase());
+    seen.set(key, mons);
+    if (mons.size > 1) doubleTurns.add(key);
+  }
+  return doubleTurns.size > 1 ? 'two Pokémon of one side moved in the same turn (battle log)' : null;
 }
 
 /**

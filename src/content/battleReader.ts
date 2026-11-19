@@ -371,5 +371,7 @@ export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | 
     log: log.lines,
     events: log.events,
     ...(forcedSwitch ? { forcedSwitch: true } : {}),
+    // Two stat boxes on one side = doubles (the reader still only reads the first one of each).
+    sides: { player: arena.querySelectorAll(SEL.playerStats).length, opponent: arena.querySelectorAll(SEL.opponentStats).length },
   };
 }
