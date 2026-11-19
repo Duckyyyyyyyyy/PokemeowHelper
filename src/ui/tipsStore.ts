@@ -33,12 +33,12 @@ export function toggleDone(id: string) {
 /** Jump to the Tips tab showing one tip. */
 export function openTip(id: string) {
   focusTipId.value = id;
-  activeTab.value = 'tips';
+  activeTab.value = 'guide';
 }
 
 /** Jump to the Tips tab with a search. */
 export function searchTipsFor(query: string) {
   focusTipId.value = null;
   tipsQuery.value = query;
-  activeTab.value = 'tips';
+  activeTab.value = 'guide';
 }

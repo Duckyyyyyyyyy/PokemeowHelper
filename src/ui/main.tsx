@@ -1,8 +1,9 @@
 import { render } from 'preact';
-import '@fontsource/nunito/500.css';
-import '@fontsource/nunito/700.css';
-import '@fontsource/nunito/800.css';
-import '@fontsource/nunito/900.css';
+import '@fontsource/barlow/500.css';
+import '@fontsource/barlow/600.css';
+import '@fontsource/barlow/700.css';
+import '@fontsource/barlow-condensed/700.css';
+import '@fontsource/barlow-condensed/800.css';
 import './theme.css';
 import { App } from './App';
 import { init } from './store';
@@ -11,6 +12,7 @@ import { initBoxSync, maybeAutoSyncBox } from './boxStore';
 import { initBattle } from './battleStore';
 import { initBag } from './bagStore';
 import { initWild } from './wildStore';
+import { initAutoTab } from './autoTab';
 
 applyTheme(savedTheme());
 render(<App />, document.getElementById('app')!);
@@ -18,3 +20,4 @@ Promise.all([init(), initBoxSync()]).then(maybeAutoSyncBox);
 initBattle();
 initBag();
 initWild();
+initAutoTab();

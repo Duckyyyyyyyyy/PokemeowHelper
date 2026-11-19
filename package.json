@@ -13,7 +13,8 @@
     "package": "npm run build && tsx scripts/package.ts"
   },
   "dependencies": {
-    "@fontsource/nunito": "5.1.0",
+    "@fontsource/barlow": "5.2.8",
+    "@fontsource/barlow-condensed": "5.2.8",
     "@preact/signals": "1.3.0",
     "@smogon/calc": "^0.12.0",
     "acorn": "8.12.1",

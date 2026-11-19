@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { dangerOf, factsLine, factsTag, rate } from '../src/engine/plain';
 
 describe('plain words', () => {
-  it('rates scores in words; near-ties with the top option all read "Best"', () => {
+  it('rates scores in words; only the top option reads "Best"', () => {
     expect(rate(99, 99).label).toBe('Best');
-    expect(rate(97, 99).label).toBe('Best');
+    expect(rate(97, 99).label).toBe('Good');
+    expect(rate(52, 54).label).toBe('Good'); // near-tie
     expect(rate(90, 99).label).toBe('Good');
     expect(rate(50, 99).label).toBe('OK');
     expect(rate(20, 99).label).toBe('Weak');

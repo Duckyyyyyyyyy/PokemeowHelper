@@ -204,7 +204,7 @@ function Maps({ ds }: { ds: Dataset }) {
           </div>
         </div>
       ) : (
-        <div class="small muted">Pick an NPC in the NPC tab to highlight species that counter it.</div>
+        <div class="small muted">Pick an NPC in Prep to highlight species that counter it.</div>
       )}
 
       <div class="card">
@@ -311,6 +311,42 @@ function headlineBalls(adv: BallAdvice): { main: BallOption | null; alt: BallOpt
 
 const STATUS_SHORT: Record<string, string> = { slp: 'SLP', frz: 'FRZ', par: 'PAR', brn: 'BRN', psn: 'PSN', tox: 'TOX' };
 
+/** One chance as a bar with its % beside it (never under it, so nothing gets clipped). */
+function PctBar({ x, after }: { x: number | undefined; after?: boolean }) {
+  if (x === undefined) return <span class="muted small">–</span>;
+  return (
+    <span class={`pbar${after ? ' after' : ''}`}>
+      <span class="tr" aria-hidden="true"><i style={{ width: `${Math.max(2, Math.min(100, x * 100))}%` }} /></span>
+      <b>{pct(x)}</b>
+    </span>
+  );
+}
+
+/** Balls to throw: chance per throw now, and after the catch plan (when the plan helps). */
+function BallTable({ ds, rows, altLabel, after, afterLabel }: {
+  ds: Dataset; rows: (BallOption | null | undefined)[]; altLabel: string; after: BallAdvice | null; afterLabel?: string;
+}) {
+  const list = rows.filter((r): r is BallOption => !!r);
+  return (
+    <div class="btable" style={after ? undefined : { gridTemplateColumns: 'minmax(0, 1.25fr) minmax(0, 1.2fr)' }} role="table" aria-label="Catch chance per throw">
+      <span class="bh" role="columnheader">Ball</span>
+      <span class="bh" role="columnheader">Now</span>
+      {after && <span class="bh" role="columnheader" title={`After ${afterLabel}`}>After plan</span>}
+      {list.map((o, i) => (
+        <>
+          <span class={`bn${i === 0 ? ' main' : ''}`} role="cell" title={i === 1 ? altLabel : undefined}>
+            <BallIcon ds={ds} id={o.id} size={18} />
+            <span>{o.name}</span>
+            {o.count !== undefined && <small>×{o.count}</small>}
+          </span>
+          <span role="cell"><PctBar x={o.chance} /></span>
+          {after && <span role="cell"><PctBar x={after.ranked.find((r) => r.id === o.id)?.chance} after /></span>}
+        </>
+      ))}
+    </div>
+  );
+}
+
 function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; myLevel?: number; isLive: boolean }) {
   const s = ds.species[t.species];
   const set = (patch: Partial<Target>) => (target.value = { ...t, ...patch });
@@ -369,7 +405,7 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
             <span class="lv"> Lv {t.level}</span>
             {rarity && <span class="chip enc-chip">{rarity}</span>}
           </span>
-          <span class={`enc-verdict ${decision.verdict}`} title={decision.reasons.join(' ')}>{decision.summary}</span>
+          <span class={`stamp ${decision.verdict}`} title={decision.reasons.join(' ')}>{decision.summary}</span>
         </div>
         <div class="row enc-hp">
           <Types types={s.types} />
@@ -378,29 +414,10 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
           {t.status && <span class={`enc-status st-${t.status}`}>{STATUS_SHORT[t.status] ?? t.status}</span>}
         </div>
         {main ? (
-          <div class="row enc-ball">
-            <BallIcon ds={ds} id={main.id} size={30} />
-            <span class="grow">
-              <b>{main.name}</b>{main.count !== undefined && <span class="muted"> · {main.count ? `${main.count} in bag` : 'none in bag'}</span>}
-              <div class="small muted">{main.effect.why}</div>
-            </span>
-            <span class="enc-pct" title="Estimated chance per throw">{pct(main.chance)}</span>
-          </div>
+          <BallTable ds={ds} rows={[main, alt, afterMain && afterMain.id !== main.id && afterMain.id !== alt?.id ? afterMain : null]} altLabel={altLabel}
+            after={catching && after.label && afterMain && afterMain.chance > main.chance + 0.005 ? afterAdvice : null} afterLabel={after.label} />
         ) : <div class="small muted">No usable ball found.</div>}
-        {alt && (
-          <div class="row small enc-alt">
-            <span class="muted">{altLabel}:</span>
-            <BallIcon ds={ds} id={alt.id} size={16} />
-            <span class="grow">{alt.name}{alt.count !== undefined && <span class="muted"> · {alt.count ? `${alt.count} in bag` : 'none in bag'}</span>}</span>
-            <b>{pct(alt.chance)}</b>
-          </div>
-        )}
-        {catching && main && afterMain && after.label && afterMain.chance > main.chance + 0.005 && (
-          <div class="small enc-outlook">
-            <b>{pct(main.chance)}</b> now → <b class="ok-t">{pct(afterMain.chance)}</b> after {after.label}
-            {afterMain.id !== main.id ? <> with {afterMain.name}</> : null}
-          </div>
-        )}
+        {main && <div class="small muted">{main.name}: {main.effect.why}</div>}
         <div class="row small enc-foot">
           <span class="grow muted enc-reason" title={decision.reasons.join(' ')}>{decision.reasons[0]}</span>
           <button class="link" onClick={() => setAdjust(!adjust)} aria-expanded={adjust}>{adjust ? 'Done' : 'Adjust'}</button>
@@ -411,7 +428,7 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
         <div class="seg enc-mode" role="tablist" aria-label="Catch or defeat">
           {(['catch', 'defeat'] as const).map((m) => (
             <button class={mode === m ? 'on' : ''} role="tab" aria-selected={mode === m} onClick={() => setModePick({ key: encKey, mode: m })}>
-              {m === 'catch' ? '◓ Catch it' : '⚔ Defeat it (EXP)'}
+              {m === 'catch' ? 'Catch it' : 'Defeat it (EXP)'}
             </button>
           ))}
         </div>
@@ -587,7 +604,7 @@ function DefeatView({ ds, t, snap }: { ds: Dataset; t: Target; snap: WildSnapsho
 function useHeadHeight(): number {
   const [h, setH] = useState(0);
   useEffect(() => {
-    const head = document.querySelector('.head') as HTMLElement | null;
+    const head = document.querySelector('.hud') as HTMLElement | null;
     if (!head) return;
     const update = () => setH(head.offsetHeight);
     update();

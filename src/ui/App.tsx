@@ -1,51 +1,55 @@
 import type { ComponentType } from 'preact';
 import { activeTab, dataset, type TabId } from './store';
-import { NpcTab } from './tabs/NpcTab';
-import { TeamTab } from './tabs/TeamTab';
 import { BattleTab } from './tabs/BattleTab';
 import { SettingsTab } from './tabs/SettingsTab';
 import { ExploreTab } from './tabs/ExploreTab';
 import { TipsTab } from './tabs/TipsTab';
+import { PrepTab } from './tabs/PrepTab';
+import { battle } from './battleStore';
+import { wild } from './wildStore';
+import { Icon } from './components/hud';
 
-/** Tab registry: add a tab here to extend the panel. */
+/** Tab registry: the four HUD tabs; Settings sits behind the gear. */
 export interface TabDef {
   id: TabId;
   label: string;
-  aria?: string;
+  icon: string;
   component: ComponentType;
 }
 
 export const TABS: TabDef[] = [
-  { id: 'npc', label: 'NPC', component: NpcTab },
-  { id: 'team', label: 'Team', component: TeamTab },
-  { id: 'battle', label: 'Battle', component: BattleTab },
-  { id: 'explore', label: 'Explore', component: ExploreTab },
-  { id: 'tips', label: 'Tips', component: TipsTab },
-  { id: 'settings', label: '⚙', aria: 'Settings', component: SettingsTab },
+  { id: 'battle', label: 'Battle', icon: 'battle', component: BattleTab },
+  { id: 'wild', label: 'Wild', icon: 'wild', component: ExploreTab },
+  { id: 'prep', label: 'Prep', icon: 'prep', component: PrepTab },
+  { id: 'guide', label: 'Guide', icon: 'guide', component: TipsTab },
 ];
 
 export function App() {
-  const current = TABS.find((t) => t.id === activeTab.value) ?? TABS[0];
-  const Body = current.component;
+  const id = activeTab.value;
+  const Body = id === 'settings' ? SettingsTab : (TABS.find((t) => t.id === id) ?? TABS[2]).component;
   const ds = dataset.value;
+  // Red dot: something live is going on in that tab.
+  const live: Partial<Record<TabId, boolean>> = { battle: battle.value?.status === 'active', wild: !!wild.value };
   return (
     <>
-      <header class="head">
-        <div class="brandrow">
+      <header class="hud">
+        <span class="logo" title={ds ? `MeowRPGAdvisor · data ${ds.version} · ${ds.npcs.length} NPCs` : 'MeowRPGAdvisor · no data yet'}>
           <span class="ball lg" aria-hidden="true" />
-          <span class="brand">Meow<span>Helper</span></span>
-          <span class="status" title={ds ? `Data: ${ds.version}` : 'No data yet'}>
-            <i class={`dot${ds ? '' : ' off'}`} />
-            {ds ? `${ds.npcs.length} NPCs` : 'No data yet'}
-          </span>
-        </div>
-        <nav class="tabs" role="tablist">
+          <span class="name">MeowRPG<b>Advisor</b></span>
+          <span class={`datadot${ds ? '' : ' off'}`} aria-hidden="true" />
+        </span>
+        <nav role="tablist" aria-label="MeowRPGAdvisor">
           {TABS.map((t) => (
-            <button class={`tab${t.id === current.id ? ' on' : ''}`} role="tab" aria-selected={t.id === current.id} aria-label={t.aria} onClick={() => (activeTab.value = t.id)}>
-              {t.label}
+            <button class={t.id === id ? 'on' : ''} role="tab" aria-selected={t.id === id} onClick={() => (activeTab.value = t.id)}>
+              <Icon name={t.icon} size={17} />
+              <span>{t.label}</span>
+              {live[t.id] && <i class="live" aria-label="live" />}
             </button>
           ))}
         </nav>
+        <button class={`gear${id === 'settings' ? ' on' : ''}`} aria-label="Settings" aria-pressed={id === 'settings'} onClick={() => (activeTab.value = 'settings')}>
+          <Icon name="gear" size={19} />
+        </button>
       </header>
       <main class="body">
         <Body />

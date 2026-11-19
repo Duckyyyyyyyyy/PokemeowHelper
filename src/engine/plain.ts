@@ -11,14 +11,14 @@ export interface Rating {
 }
 
 /**
- * Rating for one option. `top` = the best score among the options shown together: the top one (and
- * anything within 3 points of it) is "Best" when it is at least OK, so near-ties read as ties.
+ * Rating for one option. `top` = the best score among the options shown together: only the top one is
+ * "Best" (when it is at least OK); a near-tie (within 3 points) reads "Good", so there is one clear pick.
  */
 export function rate(score: number | null | undefined, top?: number | null): Rating {
   if (score === null || score === undefined) return { label: 'Not rated', tone: 'none' };
   if (score <= 0) return { label: 'Avoid', tone: 'weak' };
-  if (top !== undefined && top !== null && score >= 45 && score >= top - 3) return { label: 'Best', tone: 'best' };
-  if (score >= 70) return { label: 'Good', tone: 'good' };
+  if (top !== undefined && top !== null && score >= 45 && score >= top) return { label: 'Best', tone: 'best' };
+  if (score >= 70 || (top != null && score >= 45 && score >= top - 3)) return { label: 'Good', tone: 'good' };
   if (score >= 45) return { label: 'OK', tone: 'ok' };
   return { label: 'Weak', tone: 'weak' };
 }

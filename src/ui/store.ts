@@ -3,11 +3,20 @@ import type { BoxMon, Dataset } from '../shared/types';
 import { clearDataset, loadBox, loadDataset, saveBox, saveDataset } from '../data/db';
 import { syncDataset } from '../data/sync';
 
-export type TabId = 'npc' | 'team' | 'battle' | 'explore' | 'tips' | 'settings';
+/** Top tabs: Battle / Wild / Prep / Guide, plus Settings (gear). Prep holds the NPC → Team → Hunt & grind steps. */
+export type TabId = 'battle' | 'wild' | 'prep' | 'guide' | 'settings';
+export type PrepStep = 'npc' | 'team' | 'hunt';
 
 export const dataset = signal<Dataset | null>(null);
 export const box = signal<BoxMon[]>([]);
-export const activeTab = signal<TabId>('npc');
+export const activeTab = signal<TabId>('prep');
+export const prepStep = signal<PrepStep>('npc');
+
+/** Open Prep at one of its steps. */
+export function goPrep(step: PrepStep) {
+  prepStep.value = step;
+  activeTab.value = 'prep';
+}
 export const selectedNpcId = signal<string | null>(null);
 export const selectedVariant = signal(0);
 export const loading = signal(true);
@@ -51,6 +60,7 @@ export async function loadDevFixture() {
     const mod = await import('../../tests/fixtures/wiki-mini.json');
     const ds = { ...(mod.default as unknown as Dataset), version: 'dev-fixture', syncedAt: Date.now() };
     await addDevExplore(ds);
+    addSampleBattleSpecies(ds);
     await saveDataset(ds);
     dataset.value = ds;
   }
@@ -70,7 +80,23 @@ export async function setBox(next: BoxMon[]) {
 export function openNpc(id: string) {
   selectedNpcId.value = id;
   selectedVariant.value = 0;
-  activeTab.value = 'npc';
+  goPrep('npc');
+}
+
+/**
+ * Dev harness only: the sample battle (Brock turn 3) uses Pokémon the trimmed fixture lacks.
+ * Same mainline base stats the tests add (tests/turnAdvisor.test.ts).
+ */
+function addSampleBattleSpecies(ds: Dataset) {
+  const add = (id: number, name: string, types: string[], b: number[]) => {
+    if (ds.species[id]) return;
+    ds.species[id] = { id, name, types, baseStats: { hp: b[0], atk: b[1], def: b[2], spa: b[3], spd: b[4], spe: b[5] }, abilities: [], levelMoves: [], machineMoves: [], eggMoves: [] } as unknown as Dataset['species'][number];
+  };
+  add(546, 'Cottonee', ['Grass', 'Fairy'], [40, 27, 60, 37, 50, 66]);
+  add(387, 'Turtwig', ['Grass'], [55, 68, 64, 45, 55, 31]);
+  add(532, 'Timburr', ['Fighting'], [75, 80, 55, 25, 35, 35]);
+  add(674, 'Pancham', ['Fighting'], [67, 82, 62, 46, 48, 43]);
+  add(841, 'Flapple', ['Grass', 'Dragon'], [70, 110, 80, 95, 60, 70]);
 }
 
 /** Dev harness only: adds the explore-map subset (tests/fixtures/wiki-explore-raw.json). */

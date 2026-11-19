@@ -1,3 +1,4 @@
+import { autoTab, setAutoTab } from '../autoTab';
 import { useState } from 'preact/hooks';
 import { box, dataset, isExtension, loadDevFixture, resetDataset, runSync, setBox, sync } from '../store';
 import { Tip } from '../components/common';
@@ -112,6 +113,13 @@ export function SettingsTab() {
 
   return (
     <>
+      <div class="card">
+        <p class="title">While you play</p>
+        <label class="row" style={{ alignItems: 'flex-start' }}>
+          <input type="checkbox" checked={autoTab.value} onChange={(e) => setAutoTab((e.target as HTMLInputElement).checked)} style={{ marginTop: '4px' }} />
+          <span><b>Switch tabs by itself</b><div class="small muted">Opens Battle when a battle starts and Wild when a wild Pokémon appears. A tab you pick yourself stays until the next one starts.</div></span>
+        </label>
+      </div>
       <UiModeCard />
       <div class="card">
         <p class="title">Wiki data</p>

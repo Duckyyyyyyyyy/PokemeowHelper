@@ -2,7 +2,8 @@ import { signal } from '@preact/signals';
 import { useMemo, useState } from 'preact/hooks';
 import type { Dataset, GameTip, TipCategory } from '../../shared/types';
 import { Tip } from '../components/common';
-import { activeTab, box, dataset, loading, selectedNpcId, selectedVariant } from '../store';
+import { METHOD_LABEL, whereToFind } from '../../engine/explore';
+import { box, dataset, goPrep, loading, selectedNpcId, selectedVariant } from '../store';
 import { doneTips, focusTipId, openTip, searchTipsFor, tipsQuery, toggleDone } from '../tipsStore';
 import {
   allTips, CATEGORIES, CATEGORY_LABEL, mapNeeds, progressPath, searchTips, sourceLabel, sourceUrl, tipsForMap,
@@ -36,11 +37,12 @@ export function TipsTab() {
         <input
           value={tipsQuery.value}
           onInput={(e) => (tipsQuery.value = e.currentTarget.value)}
-          placeholder="How do I get… (item, map, move, NPC)"
+          placeholder="Where is… / How do I get… (Pokémon, NPC, item, map)"
           aria-label="Search tips"
         />
         {tipsQuery.value && <button class="link" onClick={() => (tipsQuery.value = '')} aria-label="Clear search">✕</button>}
       </label>
+      {ds && <QuickHits ds={ds} q={tipsQuery.value} />}
       <div class="seg" role="tablist">
         <button class={view.value === 'all' ? 'on' : ''} role="tab" aria-selected={view.value === 'all'} onClick={() => (view.value = 'all')}>All tips</button>
         <button class={view.value === 'path' ? 'on' : ''} role="tab" aria-selected={view.value === 'path'} onClick={() => (view.value = 'path')}>Progress path</button>
@@ -53,6 +55,37 @@ export function TipsTab() {
       {view.value === 'all' ? <AllTips ds={ds} tips={tips} /> : <PathView ds={ds} tips={tips} />}
       <div class="foot">Tips summarise the game wiki; each links its source. "Unconfirmed" marks our own inference.</div>
     </>
+  );
+}
+
+/** One search box for the whole Guide: NPCs and Pokémon (where to find them) above the matching tips. */
+function QuickHits({ ds, q }: { ds: Dataset; q: string }) {
+  const needle = q.trim().toLowerCase();
+  const hits = useMemo(() => {
+    if (needle.length < 2) return null;
+    const npcs = ds.npcs.filter((n) => n.name.toLowerCase().includes(needle)).slice(0, 3);
+    const species = Object.values(ds.species).filter((s) => s.name.toLowerCase().includes(needle)).slice(0, 3)
+      .map((s) => ({ s, where: ds.wild ? whereToFind(ds, s.id)[0] : undefined }));
+    return { npcs, species };
+  }, [ds, needle]);
+  if (!hits || (!hits.npcs.length && !hits.species.length)) return null;
+  return (
+    <div class="card">
+      {hits.npcs.map((n) => (
+        <button class="res" onClick={() => { selectedNpcId.value = n.id; selectedVariant.value = 0; goPrep('npc'); }}>
+          <span class="grow"><span class="k">NPC · open in Prep</span><b>{n.name}</b> <span class="muted small">{n.title}</span></span>
+        </button>
+      ))}
+      {hits.species.map(({ s, where }) => (
+        <div class="res">
+          <span class="grow">
+            <span class="k">Pokémon · where to find</span>
+            <b>{s.name}</b>{' '}
+            <span class="muted small">{where ? `${where.map.name} · ${METHOD_LABEL[where.enc.method] ?? where.enc.method} · Lv ${where.enc.levels[0]}–${where.enc.levels[1]}` : ds.wild ? 'not found in the wild' : 'sync the wiki data for maps'}</span>
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -153,7 +186,7 @@ function TipBody({ ds, tip }: { ds: Dataset | null; tip: GameTip }) {
           {tip.maps?.slice(0, 8).map((id) => <button class="chip sm" title="Search tips for this map" onClick={() => searchTipsFor(mapName(id))}>🗺 {mapName(id)}</button>)}
           {tip.npcs?.slice(0, 6).map((id) => {
             const n = ds?.npcs.find((x) => x.id === id);
-            return n ? <button class="chip sm" title="Open in the NPC tab" onClick={() => { selectedNpcId.value = id; selectedVariant.value = 0; activeTab.value = 'npc'; }}>⚔ {n.name}</button> : null;
+            return n ? <button class="chip sm" title="Open in Prep" onClick={() => { selectedNpcId.value = id; selectedVariant.value = 0; goPrep('npc'); }}>⚔ {n.name}</button> : null;
           })}
           {tip.items && tip.items.length <= 6 && tip.items.map((id) => {
             const name = ds?.items[id]?.name;
