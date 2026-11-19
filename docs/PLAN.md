@@ -344,6 +344,7 @@ Xem mockup: **[`docs/design/ui-mockup.html`](design/ui-mockup.html)**
 - ✅ **0.8.2**: Worth grinding hiện đội luyện đủ 6 con (chọn tham lam theo độ phủ như suggestTeam, con yếu được đánh dấu filler) + danh sách "More candidates".
 - ✅ **0.9.0 (2026-11-19)**: tab Explore — kế hoạch bắt (Weaken/Status) lấy từ đội đang mang (active trước, bỏ con đã ngất, báo rõ khi không có đòn an toàn / gợi ý đổi Pokémon); gợi ý từ box thu gọn "From your box". Luật FIGHT/CATCH mới: chỉ CATCH khi có trong Catchlist tuần này hoặc chưa đăng ký Pokédex; shiny/item/IV/khắc chế NPC chỉ là gợi ý dưới FIGHT. (Dấu Catchlist lấy theo stylesheet, chưa thấy trên thẻ thật.)
 - ✅ **0.10.0**: tab **Tips** — 151 mẹo (106 sinh từ wiki data khi Sync, 45 viết tay từ trang wiki, có link nguồn), tìm kiếm, lọc theo nhóm, Progress path có ô đánh dấu; liên kết từ Explore và NPC. SCHEMA_VERSION 5 → cần Sync lại.
+- ✅ **0.11.0**: nhìn trước 2–3 lượt (expectimax), tỉ lệ crit, hiệu ứng phụ; Doubles (đối chiếu trận Tate & Liza thật); Battle Frontier (luật Gen III) + Battle Tower (giữ HP/trạng thái/PP giữa các đối thủ); item trong trận (đếm từ bảng Items, Ether/Elixir, berry trong túi); chia sẻ dữ liệu NPC bằng file JSON.
 - Chưa: đọc số lượng item ngay trên màn trận (hiện dùng số từ lần mở Bag gần nhất); Ether khi hết PP; berry dùng trong trận.
 
 #### 4a — Chấm điểm move hỗ trợ (buff/debuff, mở đường cho Pokémon sau) ✅ (code + test 2026-11-19; chưa chạy thử trong trận thật)
