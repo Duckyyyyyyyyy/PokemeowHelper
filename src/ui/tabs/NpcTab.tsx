@@ -6,7 +6,7 @@ import { bestAttackTypes, bestDefensiveTypes, monTypes, teamNotes } from '../../
 import { RULES_TEXT, rulesFor } from '../../engine/rules';
 import { NoData } from './shared';
 import { ASSUMED_NPC_LEVEL, npcToCalc } from '../../engine/damage';
-import { observedForNpc } from '../../engine/observed';
+import { observedByOthersForNpc, observedForNpc } from '../../engine/observed';
 import { lc } from '../../engine/turnAdvisor';
 import { observed } from '../battleStore';
 import { allTips, tipsForNpc } from '../../engine/tips';
@@ -104,7 +104,7 @@ function NpcList({ ds }: { ds: Dataset }) {
   );
 }
 
-function MonRow({ ds, m, seen }: { ds: Dataset; m: NpcMon; seen?: string[] }) {
+function MonRow({ ds, m, seen, others }: { ds: Dataset; m: NpcMon; seen?: string[]; others?: Record<string, number> }) {
   const types = monTypes(ds, m);
   const item = m.item ? ds.items[m.item]?.name ?? m.item : null;
   const ability = m.ability ?? (m.possibleAbilities ? m.possibleAbilities.join(' / ') : null);
@@ -124,7 +124,7 @@ function MonRow({ ds, m, seen }: { ds: Dataset; m: NpcMon; seen?: string[] }) {
       <div class="full">{m.moves.map((id) => <MoveChip ds={ds} id={id} />)}</div>
       {seen && seen.length > 0 && (
         <div class="full small muted" title="Moves this Pokémon actually used in your battles">
-          Seen in battle: {seen.map((id, i) => <>{i > 0 && ', '}{m.moves.includes(id) ? (ds.moves[id]?.name ?? id) : <b class="bad-t">{ds.moves[id]?.name ?? id} (not in wiki)</b>}</>)}
+          Seen in battle: {seen.map((id, i) => <>{i > 0 && ', '}{m.moves.includes(id) ? (ds.moves[id]?.name ?? id) : <b class="bad-t">{ds.moves[id]?.name ?? id} (not in wiki)</b>}{others?.[id] ? ` (seen by others ${others[id]})` : ''}</>)}
         </div>
       )}
       <div class="full small muted">
@@ -148,6 +148,7 @@ function NpcDetail({ ds, npc }: { ds: Dataset; npc: Npc }) {
   const goodHits = attack.filter((a) => a.score > 0).slice(0, 6);
   const avoid = attack.filter((a) => a.score < 0).slice(-4).reverse();
   const seen = observedForNpc(observed.value, npc, v);
+  const seenOthers = observedByOthersForNpc(observed.value, npc, v);
 
   return (
     <>
@@ -174,7 +175,7 @@ function NpcDetail({ ds, npc }: { ds: Dataset; npc: Npc }) {
           {v.trainerName ? `${v.trainerName}'s team` : 'Team'}
           <span class="r">{v.team.length} Pokémon · {v.format === 'doubles' ? 'Doubles' : 'Singles'}{v.levelCap ? ` · Cap Lv ${v.levelCap}` : npc.variants.length > 1 && v.label === 'Rematch' ? ' · No cap' : ''}</span>
         </p>
-        {v.team.map((m) => <MonRow ds={ds} m={m} seen={seen.get(lc(m.name))} />)}
+        {v.team.map((m) => <MonRow ds={ds} m={m} seen={seen.get(lc(m.name))} others={seenOthers.get(lc(m.name))} />)}
       </div>
 
       <div class="card">

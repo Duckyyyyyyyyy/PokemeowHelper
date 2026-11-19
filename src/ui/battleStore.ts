@@ -3,6 +3,7 @@ import type { BattleSnapshot } from '../shared/battle';
 import { checkEvent, newEvents, type DamageCheck } from '../engine/damageCheck';
 import { adviseTurn, lc } from '../engine/turnAdvisor';
 import { recordObserved, type ObservedStore } from '../engine/observed';
+import { applyImports, type ImportLedger } from '../engine/share';
 import { box, dataset, isExtension } from './store';
 
 /** Latest battle screen read by the content script (chrome.storage.local key "mdBattle"). */
@@ -35,11 +36,23 @@ function record(snap: BattleSnapshot) {
   if (isExtension && chrome.storage?.local) chrome.storage.local.set({ [OBS_KEY]: next }).catch(() => {});
 }
 
+/** Files imported from other players (chrome.storage.local key "mdImports"); see engine/share.ts. */
+export const importLedger = signal<ImportLedger>({});
+export const LEDGER_KEY = 'mdImports';
+
+/** Replaces the store (used by import / undo) and persists it. */
+export function setObserved(next: ObservedStore, ledger: ImportLedger) {
+  observed.value = next;
+  importLedger.value = ledger;
+  if (isExtension && chrome.storage?.local) chrome.storage.local.set({ [OBS_KEY]: next, [LEDGER_KEY]: ledger }).catch(() => {});
+}
+
 export async function clearObserved() {
-  observed.value = {};
+  // "Forget" clears what YOU saw; imported data stays (it has its own "Remove imported data").
+  observed.value = applyImports({}, importLedger.peek());
   clearedAt = Math.max(Date.now(), battle.peek()?.at ?? 0);
   if (isExtension && chrome.storage?.local) {
-    await chrome.storage.local.remove(OBS_KEY).catch(() => {});
+    await chrome.storage.local.set({ [OBS_KEY]: observed.peek() }).catch(() => {});
     await chrome.storage.local.set({ [CLEARED_KEY]: clearedAt }).catch(() => {});
   }
 }
@@ -89,7 +102,8 @@ export function initBattle() {
     obsLoaded = true;
     return;
   }
-  chrome.storage.local.get([OBS_KEY, CLEARED_KEY]).then((r) => {
+  chrome.storage.local.get([OBS_KEY, CLEARED_KEY, LEDGER_KEY]).then((r) => {
+    importLedger.value = (r[LEDGER_KEY] as ImportLedger | undefined) ?? {};
     observed.value = (r[OBS_KEY] as ObservedStore | undefined) ?? {};
     clearedAt = (r[CLEARED_KEY] as number | undefined) ?? 0;
   }).catch(() => {}).finally(() => {
