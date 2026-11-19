@@ -346,6 +346,7 @@ Xem mockup: **[`docs/design/ui-mockup.html`](design/ui-mockup.html)**
 - ✅ **0.10.0**: tab **Tips** — 151 mẹo (106 sinh từ wiki data khi Sync, 45 viết tay từ trang wiki, có link nguồn), tìm kiếm, lọc theo nhóm, Progress path có ô đánh dấu; liên kết từ Explore và NPC. SCHEMA_VERSION 5 → cần Sync lại.
 - ✅ **0.11.0**: nhìn trước 2–3 lượt (expectimax), tỉ lệ crit, hiệu ứng phụ; Doubles (đối chiếu trận Tate & Liza thật); Battle Frontier (luật Gen III) + Battle Tower (giữ HP/trạng thái/PP giữa các đối thủ); item trong trận (đếm từ bảng Items, Ether/Elixir, berry trong túi); chia sẻ dữ liệu NPC bằng file JSON.
 - ✅ **0.11.1**: sửa lỗi mọi move hiện 0 "No effect" (nature lạ làm calc lỗi và bị nuốt thành 0) — nature lạ → trung tính; lỗi calc hiện "Calc error" thay vì 0.
+- ✅ **0.12.0**: đổi tên thành **MeowRPGAdvisor**; giao diện mới hướng C "Arena HUD" (tab Battle / Wild / Prep / Guide, tự chuyển khi vào trận/gặp Pokémon hoang dã, 4 ô move theo thứ tự của game, đòn của đối thủ vẽ lên thanh HP, chữ thường thay điểm số). Tên IndexedDB và key lưu trữ giữ nguyên.
 - Chưa: đọc số lượng item ngay trên màn trận (hiện dùng số từ lần mở Bag gần nhất); Ether khi hết PP; berry dùng trong trận.
 
 #### 4a — Chấm điểm move hỗ trợ (buff/debuff, mở đường cho Pokémon sau) ✅ (code + test 2026-11-19; chưa chạy thử trong trận thật)
