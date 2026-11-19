@@ -1,3 +1,4 @@
+import { generateTips } from './tipsGen';
 import type {
   Ability, Dataset, ExploreMap, Item, Move, Npc, NpcMon, NpcTeamVariant, Species, StatTable, TypeInfo, WildData, WildEncounter,
 } from '../shared/types';
@@ -66,6 +67,8 @@ export function fromChallenges(list: Raw[]): Npc[] {
       requirements: c.requirements ?? [],
       trainerSprite: c.trainerSprite || undefined,
       variants,
+      badge: c.badge || undefined,
+      rewardItems: Array.isArray(c.rewardItems) && c.rewardItems.length ? c.rewardItems : undefined,
     } satisfies Npc;
   });
 }
@@ -217,7 +220,7 @@ export function normalizeDataset(raw: Raw, version: string, syncedAt = Date.now(
     ...fromWorldBosses(raw.worldBosses ?? []),
   ];
 
-  return { version, syncedAt, types, species, moves, abilities, items, npcs, wild: fromWild(raw) };
+  return { version, syncedAt, types, species, moves, abilities, items, npcs, wild: fromWild(raw), tips: generateTips(raw) };
 }
 
 /* ---------- explore maps and wild data (schema 4) ---------- */

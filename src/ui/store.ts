@@ -3,7 +3,7 @@ import type { BoxMon, Dataset } from '../shared/types';
 import { clearDataset, loadBox, loadDataset, saveBox, saveDataset } from '../data/db';
 import { syncDataset } from '../data/sync';
 
-export type TabId = 'npc' | 'team' | 'battle' | 'explore' | 'settings';
+export type TabId = 'npc' | 'team' | 'battle' | 'explore' | 'tips' | 'settings';
 
 export const dataset = signal<Dataset | null>(null);
 export const box = signal<BoxMon[]>([]);

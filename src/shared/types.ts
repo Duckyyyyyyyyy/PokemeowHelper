@@ -159,10 +159,14 @@ export interface Npc {
   requirements: string[];
   trainerSprite?: string;
   variants: NpcTeamVariant[];
+  /** League challenges: badge earned on the first win (schema 5+). */
+  badge?: string;
+  /** League challenges: item ids this trainer can reward (TMs, HMs, Key Items; schema 5+). */
+  rewardItems?: string[];
 }
 
 /** Bump when normalize() output changes, so cached data is rebuilt on next sync. */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export interface Dataset {
   /** `${SCHEMA_VERSION}:${hashed wiki data file name}` – changes on every game deploy or schema change. */
@@ -176,6 +180,48 @@ export interface Dataset {
   npcs: Npc[];
   /** Explore maps and wild data (schema 4+; undefined until the user syncs again). */
   wild?: WildData;
+  /** Progression tips built from the wiki data at sync time (schema 5+). */
+  tips?: GameTip[];
+}
+
+// ---------- Tips (progression guide) ----------
+
+export type TipCategory = 'start' | 'hm' | 'key' | 'maps' | 'catching' | 'battling' | 'daily' | 'evolution';
+
+/** Where a tip comes from: a wiki page (hash path under pokemeowrpg.com/wiki/) or a wiki data field. */
+export interface TipSource {
+  kind: 'page' | 'data';
+  /** Page: "#/maps/field-moves". Data: "items[].keyItemSource". */
+  ref: string;
+}
+
+export interface GameTip {
+  /** Stable id (also the key for the ticked state): "hm:hmsurf", "map:caves"… */
+  id: string;
+  title: string;
+  category: TipCategory;
+  steps: string[];
+  /** What you need first, in words ("Defeat Hoenn Champion Wallace"). */
+  requires?: string[];
+  /** Related explore map ids, item ids, NPC ids (Npc.id) and move ids. */
+  maps?: string[];
+  items?: string[];
+  npcs?: string[];
+  moves?: string[];
+  /** Species ids this tip is about (spawn unlocks, evolutions). */
+  species?: number[];
+  source: TipSource[];
+  /** Inferred rather than stated by the wiki. */
+  unconfirmed?: boolean;
+  /**
+   * Progress path position (suggested order, not a game rule): 0 = getting started,
+   * n = after the n-th region's Champion (region order of the wiki). Undefined = not on the path.
+   */
+  stage?: number;
+  /** Order inside a stage (lower first). */
+  order?: number;
+  /** Extra search words. */
+  keywords?: string[];
 }
 
 // ---------- The user's own Pokémon (synced from the game or entered by hand) ----------
