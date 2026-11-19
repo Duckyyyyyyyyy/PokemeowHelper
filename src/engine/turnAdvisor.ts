@@ -1,7 +1,7 @@
 import type { Pokemon as CalcPokemon } from '@smogon/calc';
 import { activeFainted, doublesReason, type BattleMon, type BattleSnapshot, type Boosts, type RosterMon } from '../shared/battle';
 import type { BoxMon, Dataset, Npc, NpcMon, NpcTeamVariant } from '../shared/types';
-import { ASSUMED_NPC_LEVEL, SELF_KO_MOVES, bestMove, boxToCalc, defenderVsNpc, makeField, moveDamage, npcToCalc, repeatable, type MoveDamage } from './damage';
+import { ASSUMED_NPC_LEVEL, SELF_KO_MOVES, bestMove, boxToCalc, calcErrorCount, defenderVsNpc, makeField, npcToCalc, repeatable, takeCalcErrors, tryMoveDamage, type CalcError, type MoveDamage } from './damage';
 import { battleRulesFor, dsFor, type BattleRules } from './rules';
 import { movesForBox } from './teamSuggest';
 import { guessNpcSwitch, predictNpcMove, type NpcGuess, type NpcSwitchGuess } from './npcModel';
@@ -47,6 +47,8 @@ export interface ActionAdvice {
   critKo?: number;
   /** Lookahead: line of play, e.g. "Swords Dance → Earthquake KOs both remaining". */
   line?: string;
+  /** The damage calc threw for this row: its numbers are missing or incomplete (shown as "calc error"). */
+  calcError?: boolean;
 }
 
 export interface ThreatInfo {
@@ -58,6 +60,8 @@ export interface ThreatInfo {
   youFirst: boolean | null;
   /** Lookahead: chance (0–1) they KO you this turn with their likely moves, and the part only a crit gives. */
   koChance?: number;
+  /** The damage calc threw for some of their moves: this may not be their best hit. */
+  calcError?: boolean;
   critKo?: number;
 }
 
@@ -78,6 +82,8 @@ export interface TurnAdvice {
   notes: string[];
   /** Your active Pokémon fainted: actions are only switch-ins (no moves, no items, no top-level threat). */
   forcedSwitch?: boolean;
+  /** Damage calc calls that threw this turn (also logged to the console). */
+  calcErrors?: CalcError[];
 }
 
 export interface AdviseOptions {
@@ -182,6 +188,18 @@ const avg = (d: MoveDamage | null) => (d ? (d.minPct + d.maxPct) / 2 : 0);
 const pctTxt = (d: { minPct: number; maxPct: number }) => `${Math.round(d.minPct)}–${Math.round(d.maxPct)}%`;
 
 export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts: AdviseOptions = {}): TurnAdvice {
+  takeCalcErrors(); // start the turn clean
+  const out = adviseTurnInner(ds, snap, box, opts);
+  const errs = takeCalcErrors();
+  if (errs.length) {
+    out.calcErrors = errs;
+    const e = errs[0];
+    out.notes.unshift(`Calc error: the damage calc failed ${errs.length}× this turn (first: ${e.attacker} ${ds.moves[e.moveId]?.name ?? e.moveId} → ${e.defender}: ${e.message}). Rows marked "calc error" are not real results. Please report this.`);
+  }
+  return out;
+}
+
+function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts: AdviseOptions): TurnAdvice {
   const notes: string[] = [];
   const match = matchNpc(ds, snap);
   const rules: BattleRules = battleRulesFor(match?.npc.category, snap.kind, opts.gen3);
@@ -282,7 +300,9 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
     lastMove: lastFoe && lc(lastFoe.mon) === lc(foe.mon.name) ? idx.moves.get(lc(lastFoe.move))?.id : undefined,
   });
 
+  const errBefore = calcErrorCount();
   const threat = bestMove(ds, foeCalc, defenderVsNpc(myCalc, rules), foeMoves, field);
+  const threatError = calcErrorCount() !== errBefore;
   const theirHit = avg(threat);
   if (threat) {
     const first = order(myCalc, foeCalc, 0, threat.priority);
@@ -290,6 +310,7 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
       name: threat.name, minPct: threat.minPct, maxPct: threat.maxPct,
       ko: threat.minPct >= myHp ? 'sure' : threat.maxPct >= myHp ? 'chance' : undefined,
       youFirst: first,
+      ...(threatError ? { calcError: true } : {}),
     };
   }
 
@@ -366,7 +387,11 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
       out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: 0, reason: 'Fails: the target must be asleep.' });
       continue;
     }
-    const d = moveDamage(ds, myCalc, foeCalc, g.id, field);
+    const { d, error } = tryMoveDamage(ds, myCalc, foeCalc, g.id, field);
+    if (error) {
+      out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: null, reason: `Calc error: ${error}. Not scored.`, calcError: true });
+      continue;
+    }
     if (!d || d.maxPct <= 0) {
       out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: 0, reason: 'No effect on this target.' });
       continue;
@@ -605,6 +630,16 @@ function foesLeft(ds: Dataset, idx: Idx, v: NpcTeamVariant | undefined, snap: Ba
  * with their best hit on it.
  */
 function switchAdvice(ds: Dataset, idx: Idx, box: BoxMon[], r: RosterMon, foeCalc: CalcPokemon, foeMoves: string[], rules: BattleRules, field: ReturnType<typeof makeField>, free = false): ActionAdvice {
+  const before = calcErrorCount();
+  const adv = switchAdviceInner(ds, idx, box, r, foeCalc, foeMoves, rules, field, free);
+  if (calcErrorCount() !== before) {
+    adv.calcError = true;
+    adv.reason = `Calc error (some damage could not be computed). ${adv.reason}`;
+  }
+  return adv;
+}
+
+function switchAdviceInner(ds: Dataset, idx: Idx, box: BoxMon[], r: RosterMon, foeCalc: CalcPokemon, foeMoves: string[], rules: BattleRules, field: ReturnType<typeof makeField>, free = false): ActionAdvice {
   const label = free ? `Send in ${r.name}` : `Switch to ${r.name}`;
   const mine = mySet(idx, box, r, (r.moves ?? []).map((m) => m.name));
   if (!mine) return { kind: 'switch', label, score: null, reason: 'Unknown Pokémon.' };
