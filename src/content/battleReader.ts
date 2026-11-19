@@ -28,6 +28,9 @@ export const SEL = {
   /** On-screen stat stages next to the name, e.g. <span class="battle-status battle-stat-changes" title="Evasion +1">. */
   statChanges: '.battle-stat-changes',
   log: '.battle-log',
+  /** Doubles (seen live 2026-11-19): one card per field position inside each side's stats box. */
+  activeCard: '.double-active-card',
+  positionLabel: '.double-position-label',
 } as const;
 
 /** Seen live (Drake, 2026-11-18) after your Pokémon fainted. Matched as text: its markup is not known yet. */
@@ -341,6 +344,12 @@ function readLog(doc: ParentNode, trainer?: string): { lines: string[]; boosts: 
   return { lines: lines.slice(-12).map((l) => l.text), boosts, events: events.slice(-80) };
 }
 
+/** Active Pokémon shown on a side: one card per position in doubles, else one per stats box. */
+function countActives(arena: Element, statsSel: string): number {
+  const cards = arena.querySelectorAll(`${statsSel} ${SEL.activeCard}`).length;
+  return cards || arena.querySelectorAll(statsSel).length;
+}
+
 export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | null {
   const arena = doc.querySelector(SEL.arena);
   if (!arena) return null;
@@ -371,7 +380,7 @@ export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | 
     log: log.lines,
     events: log.events,
     ...(forcedSwitch ? { forcedSwitch: true } : {}),
-    // Two stat boxes on one side = doubles (the reader still only reads the first one of each).
-    sides: { player: arena.querySelectorAll(SEL.playerStats).length, opponent: arena.querySelectorAll(SEL.opponentStats).length },
+    // Seen live (Tate & Liza, 2026-11-19): doubles has ONE stats box per side holding a card per position.
+    sides: { player: countActives(arena, SEL.playerStats), opponent: countActives(arena, SEL.opponentStats) },
   };
 }

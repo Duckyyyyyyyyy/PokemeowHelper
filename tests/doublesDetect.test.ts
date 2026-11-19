@@ -27,13 +27,11 @@ describe('doubles detection (safety gate)', () => {
     expect(doublesReason({ ...snap, format: 'singles' })).toBeNull();
   });
 
-  it('two stat boxes on one side', () => {
-    const doc = load(html);
-    const box = doc.querySelector('.battle-opponent-stats')!;
-    box.parentElement!.appendChild(box.cloneNode(true));
-    const snap = readBattle(doc, 1)!;
-    expect(snap.sides).toEqual({ player: 1, opponent: 2 });
-    expect(doublesReason(snap)).toMatch(/two Pokémon are on the field/);
+  it('the live Tate & Liza layout (one stats box per side, a card per position)', () => {
+    const snap = readBattle(load(readFileSync(resolve(__dirname, 'fixtures/battle/tate-liza-doubles-turn1.reconstructed.html'), 'utf8')), 1)!;
+    expect(snap.sides).toEqual({ player: 2, opponent: 2 });
+    expect(snap.format).toBe('doubles');
+    expect(doublesReason({ ...snap, format: undefined, opponentTeam: [] })).toMatch(/two Pokémon are on the field/);
   });
 
   it('two active Pokémon on the switch cards or the opponent roster', () => {
