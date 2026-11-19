@@ -17,6 +17,8 @@ export interface BattleMon {
   item?: string;
   /** Stat stages shown on screen next to the name ("Evasion +1"), when any. */
   stages?: Boosts;
+  /** Doubles: field position (1 = left card, "Position 1" / "Opponent 1"). */
+  position?: number;
 }
 
 export interface BattleMove {
@@ -56,8 +58,18 @@ export interface BattleEvent {
   side: 'player' | 'opponent';
   mon: string;
   move: string;
-  /** The other side's active Pokémon when the move was used. */
+  /**
+   * The Pokémon hit: the other side's active one in singles; in doubles the one named in
+   * "X used Crunch on Tate & Liza’s Claydol!" (seen live 2026-11-19).
+   */
   target?: string;
+  /** Side of `target` (doubles: a move can target your own ally). */
+  targetSide?: 'player' | 'opponent';
+  /**
+   * Doubles spread move ("Slowbro used Surf!" then one "<Pokémon> took N damage." line per
+   * Pokémon hit, "It doesn't affect <Pokémon>." for an immune one; seen live 2026-11-19).
+   */
+  hits?: EventHit[];
   damage?: number;
   missed?: boolean;
   /** The target fainted right after this hit (damage may be capped by its HP). */
@@ -68,6 +80,16 @@ export interface BattleEvent {
   crit?: boolean;
   /** Stat stages of attacker and target at that moment. */
   stages: { attacker: Boosts; target: Boosts };
+}
+
+export interface EventHit {
+  side: 'player' | 'opponent';
+  mon: string;
+  damage?: number;
+  immune?: boolean;
+  fainted?: boolean;
+  /** Stat stages of the Pokémon hit at that moment. */
+  stages?: Boosts;
 }
 
 export interface BattleSnapshot {
@@ -99,6 +121,21 @@ export interface BattleSnapshot {
   forcedSwitch?: boolean;
   /** Items panel of the battle screen, only what is rendered while the Items tab is open (see readBattleBag). */
   bag?: BattleBagItem[];
+  /**
+   * How many combatant stat boxes each side shows (2 per side would mean a doubles battle).
+   * Not checked against a live doubles battle yet: see doublesReason().
+   */
+  sides?: { player: number; opponent: number };
+  /**
+   * Doubles (format "doubles", one card per field position; seen live 2026-11-19): every active
+   * Pokémon of each side in position order. `player` / `opponent` stay the first ones.
+   */
+  actives?: { player: BattleMon[]; opponent: BattleMon[] };
+  /**
+   * Doubles: whose moves `moves` are. The game shows one position's moves at a time
+   * ("Choose for Slowbro · Position 1"), and none while a target is being picked.
+   */
+  movesFor?: string;
 }
 
 /** One entry of the battle screen's Items panel. */
@@ -109,6 +146,34 @@ export interface BattleBagItem {
   count: number;
   /** The game greys it out ("No team member needs this item" or disabled): unusable right now. */
   locked?: boolean;
+}
+
+/**
+ * Why this battle looks like a doubles battle, or null for singles. The Battle tab's advice is
+ * singles-only (a 1v1 projection), so in doubles it must not show it as if it were right.
+ * Signals: the arena's data-format, two stat boxes on a side, two Pokémon marked active on the
+ * switch cards or the opponent roster, two different Pokémon of one side using moves in the same
+ * turn of the log, or the matched NPC team's wiki format (passed in by the caller).
+ */
+export function doublesReason(snap: BattleSnapshot, npcFormat?: string): string | null {
+  const f = (snap.format ?? '').toLowerCase();
+  if (f && f !== 'singles') return `the battle screen says the format is “${snap.format}”`;
+  if (snap.sides && (snap.sides.player > 1 || snap.sides.opponent > 1)) return 'two Pokémon are on the field on one side';
+  if (snap.bench.filter((r) => r.active && !r.fainted).length > 1) return 'two of your Pokémon are marked active';
+  if (snap.opponentTeam.filter((r) => r.active && !r.fainted).length > 1) return 'two of their Pokémon are marked active';
+  if (npcFormat === 'doubles') return 'this NPC battles in Doubles (wiki data)';
+  // Needs two such turns: a rare singles quirk (e.g. a switch effect) must not hide singles advice.
+  const seen = new Map<string, Set<string>>();
+  const doubleTurns = new Set<string>();
+  for (const e of snap.events ?? []) {
+    if (e.turn === undefined) continue;
+    const key = `${e.turn}|${e.side}`;
+    const mons = seen.get(key) ?? new Set<string>();
+    mons.add(e.mon.toLowerCase());
+    seen.set(key, mons);
+    if (mons.size > 1) doubleTurns.add(key);
+  }
+  return doubleTurns.size > 1 ? 'two Pokémon of one side moved in the same turn (battle log)' : null;
 }
 
 /**

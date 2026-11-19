@@ -106,7 +106,11 @@ export function boxToCalc(ds: Dataset, b: BoxMon, defaultLevel = 50): CalcPokemo
   });
 }
 
-function calcMove(ds: Dataset, id: string, cg: Gen = gen): CalcMove | null {
+/**
+ * `cg`: the calc generation (Gen III in Frontier battles). `singleTarget`: doubles, a spread move
+ * with only one target left (no spread reduction).
+ */
+function calcMove(ds: Dataset, id: string, cg: Gen = gen, singleTarget = false): CalcMove | null {
   const g = ds.moves[id];
   if (!g || g.category === 'Status') return null;
   if (cg.num === 3) {
@@ -114,14 +118,18 @@ function calcMove(ds: Dataset, id: string, cg: Gen = gen): CalcMove | null {
     // (they would undo the split), and no Tackle stand-in for a move Gen III doesn't have.
     const g3 = cg.moves.get(toID(id));
     if (!g3) return null;
+    const spread = g3.target === 'allAdjacent' || g3.target === 'allAdjacentFoes';
     try {
-      return new CalcMove(cg, g3.name);
+      return new CalcMove(cg, g3.name, singleTarget && spread ? { overrides: { target: 'normal' } as any } : undefined);
     } catch {
       return null;
     }
   }
   const known = gen.moves.get(toID(id));
   const overrides: Record<string, unknown> = {};
+  // Doubles: a spread move with one target left gets no spread reduction (the calc keys it on the
+  // move's target, and clones the move from its overrides, so it must be set here).
+  if (singleTarget && known && (known.target === 'allAdjacent' || known.target === 'allAdjacentFoes')) overrides.target = 'normal';
   if (!known || known.type !== g.type) overrides.type = g.type;
   if (!known || known.category !== g.category) overrides.category = g.category;
   // Fixed/variable-power moves have power 0 in the game data – keep the calc's logic for those.
@@ -156,10 +164,14 @@ const accOf = (ds: Dataset, id: string) => {
   return a === true || a === undefined ? 1 : a / 100;
 };
 
-export function moveDamage(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, moveId: string, field?: Field): MoveDamage | null {
-  // The generation follows the attacker (built from the Gen III view in Frontier battles).
+/**
+ * The ruleset reaches the calc two ways: the generation follows the attacker (built from the Gen III
+ * view in Frontier battles), and the game type (singles/doubles, spread moves) follows `field`.
+ * `opts.singleTarget`: doubles, a spread move with only one target left.
+ */
+export function moveDamage(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, moveId: string, field?: Field, opts?: { singleTarget?: boolean }): MoveDamage | null {
   const cg = atk.gen as Gen;
-  const mv = calcMove(ds, moveId, cg);
+  const mv = calcMove(ds, moveId, cg, !!opts?.singleTarget);
   if (!mv) return null;
   let r;
   try {

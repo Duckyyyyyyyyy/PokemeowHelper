@@ -1,6 +1,7 @@
 import { effect, signal } from '@preact/signals';
-import type { BattleSnapshot } from '../shared/battle';
-import { checkEvent, newEvents, type DamageCheck } from '../engine/damageCheck';
+import { doublesReason, type BattleSnapshot } from '../shared/battle';
+import { checkDoublesEvent, checkEvent, newEvents, type DamageCheck } from '../engine/damageCheck';
+import { adviseDoubles } from '../engine/doublesAdvisor';
 import { adviseTurn, lc, matchNpc } from '../engine/turnAdvisor';
 import { battleRulesFor, dsFor } from '../engine/rules';
 import { updateRun, type RunState } from '../engine/towerPlan';
@@ -12,6 +13,11 @@ import { box, dataset, isExtension } from './store';
 export const battle = signal<BattleSnapshot | null>(null);
 /** Calc checks for hits seen since the panel started following this battle. */
 export const damageChecks = signal<DamageCheck[]>([]);
+/**
+ * Doubles: moves of your Pokémon seen this battle (lower-cased name → move names). The game shows
+ * one position's moves at a time (and the Switch list only when opened), so remember them.
+ */
+export const doublesMoves = signal<Record<string, string[]>>({});
 /** How often the NPC's actual move was MeowHelper's top guess, this battle. */
 export const guessScore = signal<{ hit: number; total: number }>({ hit: 0, total: 0 });
 const KEY = 'mdBattle';
@@ -110,12 +116,32 @@ function judge(prev: BattleSnapshot | null, next: BattleSnapshot) {
   if (!sameBattle) {
     damageChecks.value = [];
     guessScore.value = { hit: 0, total: 0 };
+    doublesMoves.value = {};
   }
+  rememberMoves(next);
   const fresh = newEvents(prev, next);
   const base = dataset.value;
   if (!base || !prev || !fresh.length) return;
+  const match = matchNpc(base, prev);
   // Battle Frontier battles are checked against the Gen III calc.
-  const ds = dsFor(base, battleRulesFor(matchNpc(base, prev)?.npc.category, prev.kind, forceGen3.value));
+  const ds = dsFor(base, battleRulesFor(match?.npc.category, prev.kind, forceGen3.value));
+  if (doublesReason(prev, match?.variant.format)) {
+    // Doubles: one check per Pokémon hit; the guess is judged per NPC Pokémon.
+    if (!prev.actives) return; // detected but not readable: no checks rather than wrong ones
+    const checks = fresh.flatMap((e) => checkDoublesEvent(ds, box.value, prev, e));
+    if (checks.length) damageChecks.value = [...damageChecks.value, ...checks].slice(-30);
+    if (prev.status !== 'active') return;
+    const advice = adviseDoubles(base, prev, box.value, { observed: observed.value, movesByMon: doublesMoves.value, gen3: forceGen3.value });
+    let { hit, total } = guessScore.value;
+    for (const foe of advice.foes) {
+      const used = fresh.find((e) => e.side === 'opponent' && lc(e.mon) === lc(foe.mon.name));
+      if (!used || !foe.likely[0]) continue;
+      total++;
+      if (lc(used.move) === lc(foe.likely[0].name)) hit++;
+    }
+    guessScore.value = { hit, total };
+    return;
+  }
 
   const checks = fresh.map((e) => checkEvent(ds, box.value, prev, e)).filter((c): c is DamageCheck => !!c);
   if (checks.length) damageChecks.value = [...damageChecks.value, ...checks].slice(-30);
@@ -128,6 +154,22 @@ function judge(prev: BattleSnapshot | null, next: BattleSnapshot) {
       guessScore.value = { hit: guessScore.value.hit + (hit ? 1 : 0), total: guessScore.value.total + 1 };
     }
   }
+}
+
+/** Keeps the moves the doubles screen showed (current position's buttons, Switch list cards). */
+function rememberMoves(snap: BattleSnapshot) {
+  if (!snap.actives) return;
+  const next = { ...doublesMoves.value };
+  let changed = false;
+  const put = (name: string, moves: string[]) => {
+    const k = name.toLowerCase();
+    if (!moves.length || next[k]?.join('|') === moves.join('|')) return;
+    next[k] = moves;
+    changed = true;
+  };
+  if (snap.movesFor && snap.moves.length) put(snap.movesFor, snap.moves.map((m) => m.name));
+  for (const r of snap.bench) if (r.moves?.length) put(r.name, r.moves.map((m) => m.name));
+  if (changed) doublesMoves.value = next;
 }
 
 export function initBattle() {
@@ -159,11 +201,13 @@ export function initBattle() {
   });
 }
 
-/** Dev harness only: the reconstructed Brock battle, so the tab can be previewed outside Chrome. */
-export async function loadSampleBattle() {
+/** Dev harness only: a reconstructed battle (Brock singles, or Tate & Liza doubles), so the tab can be previewed outside Chrome. */
+export async function loadSampleBattle(kind: 'singles' | 'doubles' = 'singles') {
   if (!import.meta.env.DEV) return;
   const [{ default: html }, { readBattle }] = await Promise.all([
-    import('../../tests/fixtures/battle/brock-turn3.reconstructed.html?raw'),
+    kind === 'doubles'
+      ? import('../../tests/fixtures/battle/tate-liza-doubles-turn1.reconstructed.html?raw')
+      : import('../../tests/fixtures/battle/brock-turn3.reconstructed.html?raw'),
     import('../content/battleReader'),
   ]);
   onSnapshot(readBattle(new DOMParser().parseFromString(html, 'text/html')));

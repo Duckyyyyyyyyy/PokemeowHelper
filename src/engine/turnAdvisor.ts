@@ -1,5 +1,5 @@
 import type { Pokemon as CalcPokemon } from '@smogon/calc';
-import { activeFainted, type BattleMon, type BattleSnapshot, type Boosts, type RosterMon } from '../shared/battle';
+import { activeFainted, doublesReason, type BattleMon, type BattleSnapshot, type Boosts, type RosterMon } from '../shared/battle';
 import type { BoxMon, Dataset, Npc, NpcMon, NpcTeamVariant } from '../shared/types';
 import { ASSUMED_NPC_LEVEL, SELF_KO_MOVES, bestMove, boxToCalc, defenderVsNpc, makeField, moveDamage, npcToCalc, repeatable, type MoveDamage } from './damage';
 import { battleRulesFor, dsFor, type BattleRules } from './rules';
@@ -188,6 +188,9 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
   ds = dsFor(ds, rules); // Battle Frontier: Gen III data and calc
   const idx = indexes(ds);
   const field = makeField('singles');
+  // Safety gate: the lookahead is a singles 1v1 search. On a doubles battle (the Battle tab only
+  // gets here when you force the singles view) keep the one-turn projection.
+  const isDoubles = !!doublesReason(snap, match?.variant.format);
   const out: TurnAdvice = { npc: match?.npc, variant: match?.variant, actions: [], notes };
 
   const format = snap.format ?? match?.variant.format;
@@ -233,7 +236,7 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
   if (activeFainted(snap)) {
     out.forcedSwitch = true;
     const bench = benchFor(ds, idx, box, snap, rules);
-    const look = (opts.lookahead ?? 2) > 0 && bench.length
+    const look = (opts.lookahead ?? 2) > 0 && !isDoubles && bench.length
       ? lookFor(ds, idx, snap, field, rules, null, bench, foe.mon.name, foeCalc, foeMoves, foesLeft(ds, idx, match?.variant, snap, npcBenchOf(ds, idx, match?.variant, snap)), undefined, opts.lookahead)
       : undefined;
     for (const r of snap.bench) {
@@ -306,7 +309,7 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
 
   // Lookahead (default): a few turns of expectimax; the cheap path keeps the one-turn projection.
   const myLegal = myMoveIds.filter((id) => ds.moves[id]?.category !== 'Status' || (searchable(ds, id) && !supportBlocked(support, id)));
-  const look = (opts.lookahead ?? 2) > 0
+  const look = (opts.lookahead ?? 2) > 0 && !isDoubles
     ? lookFor(ds, idx, snap, field, rules, { name: snap.player.name, calc: myCalc, moves: myLegal }, support.bench as BenchRow[], foe.mon.name, foeCalc, foeMoves, support.foesLeft ?? [], out.prediction, opts.lookahead)
     : undefined;
   if (look && out.threat) {
