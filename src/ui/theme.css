@@ -194,10 +194,8 @@ details.card[open] > summary.title::after { content: "▾"; }
 .vs-head b { font: 800 16px var(--cond); letter-spacing: .07em; text-transform: uppercase; }
 .vs-head span { margin-left: auto; font-size: 13px; color: var(--muted); }
 
-/* plates: foe top-right, you bottom-left, like the game */
+/* plates: player on top, foe below — aligned, no side shift */
 .plate { display: flex; gap: 9px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 7px 10px; box-shadow: var(--shadow); }
-.plate.foe { margin-left: 22px; }
-.plate.me { margin-right: 22px; }
 .plate.sm { margin: 0; padding: 6px 8px; }
 .plate.ko { border: 2px solid var(--bad); background: var(--bad-soft); }
 .plate .pm { flex: 1; min-width: 0; }

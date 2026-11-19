@@ -64,9 +64,9 @@ function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
   return (
     <>
       <VsHead snap={snap} extra={variant} />
-      {snap.opponent && <Plate ds={ds} mon={snap.opponent} boosts={snap.boosts.opponent} foe />}
       {snap.player && <Plate ds={ds} mon={snap.player} boosts={snap.boosts.player} threat={advice && !advice.forcedSwitch ? advice.threat : undefined} />}
-
+      {snap.opponent && <Plate ds={ds} mon={snap.opponent} boosts={snap.boosts.opponent} foe />}
+      
       {doubles && !ended && (
         <Tip kind="warn">
           <b>Doubles, but only one Pokémon per side could be read.</b> 1v1 advice would be wrong here ({doubles}).{' '}
