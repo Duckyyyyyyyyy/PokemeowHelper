@@ -8,7 +8,7 @@ import { guessNpcSwitch, predictNpcMove, type NpcGuess, type NpcSwitchGuess } fr
 import { npcKey, observedMoves, type ObservedStore } from './observed';
 import { accuracyStageMul, battleSpeed, order, project } from './projection';
 import { fieldFromLog, rateSupport, supportBlocked, supportEffect, type BenchMon, type SupportContext } from './supportMoves';
-import { SETUP_TIEBREAK, runLookahead, searchable, type LookMon, type Lookahead, type RootValue } from './lookahead';
+import { runLookahead, searchable, setupScore, type LookMon, type Lookahead, type RootValue } from './lookahead';
 import { fxNotes } from './moveEffects';
 
 export { accuracyStageMul, battleSpeed };
@@ -350,10 +350,16 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
       const r = rateSupport(support, g.id);
       const lv = lookMove(g.id);
       if (r && lv && r.score !== null) {
-        // One model: the lookahead plays the setup out (what plan B did, over more turns).
-        const score = Math.round(Math.max(0, Math.min(100, lv.score - (lv.score >= 55 ? SETUP_TIEBREAK : 0))));
-        const vs = bestAttackLook >= 0 && score > bestAttackLook ? ' Beats attacking now.' : '';
-        out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score, reason: `${r.reason}${vs}`, tag: 'setup', line: planLine(lv) });
+        // One model: the lookahead plays the setup out (what plan B did, over more turns), with 4a's cap.
+        const sc = setupScore(lv.score, bestAttackLook);
+        const vs = bestAttackLook < 0 ? '' : sc.better ? ' Looking ahead, it beats attacking now.' : r.better ? ' Looking ahead, attacking now is as good or better.' : '';
+        out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: Math.round(sc.score), reason: `${r.reason}${vs}`, tag: 'setup', line: sc.better ? planLine(lv) : undefined });
+      } else if (r && r.score !== null && look && bestAttackLook >= 0) {
+        // Screens, weather, Tailwind, hazards, Yawn: 4a's plan B, moved onto the lookahead's scale
+        // (its gain over attacking now, added to the best attack's lookahead score).
+        const gain = r.score - r.planA;
+        const score = r.better ? bestAttackLook + Math.max(1, gain) : Math.min(bestAttackLook + gain, bestAttackLook - 10, 50);
+        out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: Math.round(Math.max(0, Math.min(100, score))), reason: r.reason, tag: 'setup' });
       } else if (r) out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: r.score, reason: r.reason, tag: 'setup' });
       else out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: null, reason: 'Status move – not scored. Use it if the effect helps.' });
       continue;
@@ -395,6 +401,8 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
     const lv = lookMove(g.id);
     if (look && lv) {
       score = Math.round(lv.score);
+      // Win/lose follows the lookahead (55+ = you win), not the plain one-turn projection.
+      reason = reason.replace(/you (win|lose) the trade/, score >= 55 ? 'you win the trade' : 'you lose the trade');
       const odds = look.engine.hitOdds(0, g.id);
       if (odds) {
         koChance = odds.ko;

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import fixture from './fixtures/wiki-mini.json';
 import type { BoxMon, Dataset, NpcMon } from '../src/shared/types';
 import { boxToCalc, npcToCalc } from '../src/engine/damage';
-import { Lookahead, runLookahead, squash, type LookInput, type LookMon, type RootValue } from '../src/engine/lookahead';
+import { DEEPEN_BELOW, DEEPER_BUDGET, Lookahead, runLookahead, setupScore, squash, type LookInput, type LookMon, type RootValue } from '../src/engine/lookahead';
 import { CRIT_TABLE, critInfo, fxNotes, moveFx } from '../src/engine/moveEffects';
 import { rateSupport } from '../src/engine/supportMoves';
 import { NORMAL_RULES } from '../src/engine/rules';
@@ -52,9 +52,13 @@ describe('lookahead: setup', () => {
     for (const [me, foe, id] of cases) {
       const attacks = me.moves.filter((x) => ds.moves[x].category !== 'Status');
       const r = rateSupport({ ds, rules: NORMAL_RULES, me: boxToCalc(ds, me), myMoves: attacks, foe: npcToCalc(ds, foe), foeName: foe.name, foeMoves: foe.moves }, id)!;
-      const { values } = run({ mine: [L(me)], foes: [F(foe)] });
+      // As the Battle tab runs it: auto depth (2, or 3 for small trees) and the shared setup rule.
+      const { values } = runLookahead({ ds, mine: [L(me)], foes: [F(foe)] });
       const best = Math.max(...attacks.map((a) => score(values, a)));
-      expect(score(values, id) > best, `${id} vs ${foe.name}`).toBe(r.better);
+      const sc = setupScore(score(values, id), best);
+      expect(sc.better, `${id} vs ${foe.name}`).toBe(r.better);
+      if (sc.better) expect(Math.round(sc.score), `${id} shows above the attack`).toBeGreaterThan(Math.round(best));
+      else expect(sc.score, `${id} stays out of the win band`).toBeLessThanOrEqual(Math.min(50, best - 10));
     }
   });
 
@@ -203,33 +207,49 @@ describe('secondary effects', () => {
 });
 
 describe('performance budget', () => {
-  it('a full board (4 moves incl. setup, 5 bench, 6 foes) stays small and fast', () => {
-    const lapras = wiki('Lapras', 54);
-    const team = ds.npcs.flatMap((n) => n.variants).find((v) => v.team.includes(lapras))!.team;
-    const foes = [lapras, ...team.filter((m) => m !== lapras), wiki('Quagsire', 56)].map((m) => F(m));
-    const bench = [
-      mine('Snorlax', 55, ['bodyslam', 'earthquake', 'crunch', 'rockslide']),
-      mine('Vaporeon', 55, ['surf', 'icebeam', 'bite', 'quickattack']),
-      mine('Pikachu', 55, ['thunderbolt', 'quickattack', 'irontail', 'brickbreak']),
-      mine('Golem', 55, ['earthquake', 'rockslide', 'explosion', 'tackle']),
-      mine('Gengar', 55, ['shadowball', 'sludgebomb', 'thunderbolt', 'psychic']),
-    ].map((m) => L(m));
-    const me = L(mine('Machamp', 55, ['swordsdance', 'brickbreak', 'crosschop', 'rockslide']));
-    const go = () => runLookahead({ ds, mine: [me, ...bench], foes });
-    go(); // warm-up (JIT)
-    const times: number[] = [];
-    let r!: ReturnType<typeof go>;
+  const lapras = wiki('Lapras', 54);
+  const team = ds.npcs.flatMap((n) => n.variants).find((v) => v.team.includes(lapras))!.team;
+  const allFoes = [lapras, ...team.filter((m) => m !== lapras), wiki('Quagsire', 56)].map((m) => F(m));
+  const allBench = [
+    mine('Snorlax', 55, ['bodyslam', 'earthquake', 'crunch', 'rockslide']),
+    mine('Vaporeon', 55, ['surf', 'icebeam', 'bite', 'quickattack']),
+    mine('Pikachu', 55, ['thunderbolt', 'quickattack', 'irontail', 'brickbreak']),
+    mine('Golem', 55, ['earthquake', 'rockslide', 'explosion', 'tackle']),
+    mine('Gengar', 55, ['shadowball', 'sludgebomb', 'thunderbolt', 'psychic']),
+  ].map((m) => L(m));
+  const me = L(mine('Machamp', 55, ['swordsdance', 'brickbreak', 'crosschop', 'rockslide']));
+  /** Best of several runs after a warm-up: the machine's noise only ever adds time. */
+  const timed = (input: LookInput) => {
+    runLookahead(input);
+    let best = Infinity;
+    let r!: ReturnType<typeof runLookahead>;
     for (let i = 0; i < 7; i++) {
       const t = performance.now();
-      r = go();
-      times.push(performance.now() - t);
+      r = runLookahead(input);
+      best = Math.min(best, performance.now() - t);
     }
-    times.sort((a, b) => a - b);
-    console.log('full board', { depth: r.depth, nodes: r.engine.nodes, calcs: r.engine.calcs, medianMs: times[3].toFixed(1) });
-    expect(r.engine.nodes).toBeLessThanOrEqual(6000);
-    expect(r.engine.calcs).toBeLessThan(600);
-    // Target is ~50 ms per turn in the Battle tab; the loose bound keeps slow CI machines green.
-    expect(times[3]).toBeLessThan(150);
+    return { r, best };
+  };
+
+  it('a full board (4 moves incl. setup, 5 bench, 6 foes) stays at depth 2 and small', () => {
+    const { r, best } = timed({ ds, mine: [me, ...allBench], foes: allFoes });
+    console.log('full board', { depth: r.depth, nodes: r.engine.nodes, calcs: r.engine.calcs, bestMs: best.toFixed(1) });
+    expect(r.depth).toBe(2);
+    expect(r.engine.nodes).toBeLessThan(800);
+    expect(r.engine.calcs).toBeLessThan(250);
+    // ~8 ms alone; the whole suite runs files in parallel, so the time bound is loose (counts are the real check).
+    expect(best).toBeLessThan(100);
+  });
+
+  it('the worst case is a tree just under the deepening threshold: depth 3 within its budget', () => {
+    // 4 moves, 2 bench, 1 foe: ~380 nodes at depth 2, so it goes one turn deeper.
+    const { r, best } = timed({ ds, mine: [me, ...allBench.slice(0, 2)], foes: allFoes.slice(0, 1) });
+    console.log('near threshold', { depth: r.depth, nodes: r.engine.nodes, calcs: r.engine.calcs, bestMs: best.toFixed(1) });
+    expect(r.depth).toBe(3);
+    expect(r.engine.nodes).toBeLessThan(DEEPEN_BELOW + DEEPER_BUDGET);
+    expect(r.engine.calcs).toBeLessThan(150);
+    // Target ~50 ms per turn in the Battle tab: ~25 ms alone, ~50 ms with the whole suite running in parallel.
+    expect(best).toBeLessThan(100);
     expect(squash(120)).toBeLessThanOrEqual(100);
   });
 });

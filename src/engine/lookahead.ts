@@ -70,7 +70,19 @@ export const WORST_CASE_SHARE = 0.25;
 /** Switching gives up a turn: same −8 the old switch rows used, so a good attack wins ties. */
 export const SWITCH_PENALTY = 8;
 /** Setup on a line that already wins costs a small tie-break (an NPC switch or a miss we don't see). */
-export const SETUP_TIEBREAK = 4;
+export const SETUP_TIEBREAK = 2;
+
+/**
+ * Score of a support move from its lookahead value and your best attack's (both unrounded), with
+ * 4a's rule: a support move that doesn't beat attacking now stays clearly below it and out of the
+ * win band (≤ min(50, best attack − 10)). Shared by adviseTurn and the 4a agreement test.
+ */
+export function setupScore(value: number, bestAttack: number): { score: number; better: boolean } {
+  const v = value - (value >= 55 ? SETUP_TIEBREAK : 0);
+  // Better by at least a point, so it never shows the same number as the attack it claims to beat.
+  const better = bestAttack < 0 || v >= bestAttack + 1;
+  return { score: Math.max(0, Math.min(100, better ? v : Math.min(v, bestAttack - 10, 50))), better };
+}
 /** Confusion: 33% to hit itself (Gen 7+), lasts 2–5 turns (guess: 3 attempts). */
 const CONFUSE_ACT = 2 / 3;
 const CONFUSE_TURNS = 3;
@@ -146,7 +158,8 @@ export class Lookahead {
   private readonly prediction?: { moveId: string; prob: number }[];
   private readonly dists = new Map<string, Dist | null>();
   private readonly memo = new Map<string, { v: number; best?: RootAction }>();
-  private readonly maxNodes: number;
+  /** Search size cap (nodes counted over the engine's life; raised for the depth-3 pass). */
+  maxNodes: number;
   nodes = 0;
   calcs = 0;
 
@@ -587,7 +600,7 @@ export class Lookahead {
   }
 
   private key(s: S, depth: number): string {
-    return `${depth}|${s.me},${s.foe}|${s.hp.map((x) => Math.round(x * 4)).join(',')}|${s.st.join('')}${s.slp.join('')}|${s.mb.join('')}|${s.fb.join('')}|${s.mc}${s.fc}${+s.mFE}${+s.fFE}${+s.mFirst}${+s.fFirst}|${s.lost},${s.kos},${s.f0t},${s.fUsed}`;
+    return `${depth}|${s.me},${s.foe}|${s.hp.map((x) => Math.round(x * 4)).join(',')}|${s.st.join(',')}|${s.slp.join(',')}|${s.mb.join(',')}|${s.fb.join(',')}|${s.mc}${s.fc}${+s.mFE}${+s.fFE}${+s.mFirst}${+s.fFirst}|${s.lost},${s.kos},${s.f0t},${s.fUsed}`;
   }
 
   /** Value of a decision node. */
@@ -677,8 +690,8 @@ export class Lookahead {
           const v = this.value(this.switched(s, b), d);
           if (v > best) { best = v; pick = b; }
         }
+        steps.push(`${this.mons[s.me].name} faints, ${this.mons[pick].name} comes in`);
         s = this.switched(s, pick);
-        steps.push(`${this.mons[pick].name} comes in`);
       }
       if (!a) a = this.memo.get(this.key(s, d))?.best ?? this.myActions(s)[0];
       if (!a) break;
@@ -719,7 +732,8 @@ export class Lookahead {
     const allDown = s.kos + beaten.length === total;
     const lastMove = [...steps].reverse().find((x) => !/comes in$/.test(x))?.replace(/ KOs .+$/, '');
     let tail = '';
-    if (allDown && total >= 2 && lastMove && !/^Switch to/.test(lastMove)) {
+    // "KOs both remaining" only for a line where your Pokémon stays in (a lost one keeps the plain steps).
+    if (allDown && total >= 2 && s.lost === 0 && lastMove && !/^Switch to/.test(lastMove)) {
       // Keep the moves up to the repeated attack: "Swords Dance → Brick Break KOs both remaining".
       while (steps.length > 1 && steps[steps.length - 1].replace(/ KOs .+$/, '') === steps[steps.length - 2].replace(/ KOs .+$/, '')) steps.pop();
       steps[steps.length - 1] = `${steps[steps.length - 1].replace(/ KOs .+$/, '')} KOs ${total === 2 ? 'both' : `all ${total}`} remaining`;
@@ -797,19 +811,19 @@ export function searchable(ds: Dataset, moveId: string): boolean {
  * Returns the engine (for odds) and a score per root action.
  */
 export function runLookahead(input: LookInput): { engine: Lookahead; values: RootValue[]; depth: number } {
-  const depth = input.depth ?? 2;
   const engine = new Lookahead(input);
-  let values = engine.run(depth);
-  let used = depth;
-  // Small trees (few options, few replies): one more turn fits the budget.
-  if (input.depth === undefined && engine.nodes < 400) {
-    const deeper = new Lookahead({ ...input, maxNodes: input.maxNodes ?? 6000 });
-    const v3 = deeper.run(3);
-    if (deeper.nodes < (input.maxNodes ?? 6000)) {
-      values = v3;
-      used = 3;
-      return { engine: deeper, values, depth: used };
-    }
+  const values = engine.run(input.depth ?? 2);
+  // Small trees (few options, few replies): one more turn fits. Same engine, so damage stays cached;
+  // if the deeper pass hits its cap, its partial results are dropped.
+  if (input.depth === undefined && engine.nodes < DEEPEN_BELOW) {
+    engine.maxNodes = engine.nodes + DEEPER_BUDGET;
+    const v3 = engine.run(3);
+    if (engine.nodes < engine.maxNodes) return { engine, values: v3, depth: 3 };
+    return { engine, values, depth: 2 };
   }
-  return { engine, values, depth: used };
+  return { engine, values, depth: input.depth ?? 2 };
 }
+
+/** Depth 2 trees smaller than this get a third turn, with at most this many extra nodes. */
+export const DEEPEN_BELOW = 400;
+export const DEEPER_BUDGET = 2500;

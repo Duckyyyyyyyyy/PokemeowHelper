@@ -148,7 +148,7 @@ export function Action({ a, top }: { a: ActionAdvice; top: boolean }) {
         {a.threat?.ko && <span class="chip" style={{ padding: '0 7px', marginLeft: '4px' }}>{a.threat.ko === 'sure' ? 'They KO it' : 'They can KO it'}</span>}
         {a.threat && a.threat.ko !== 'sure' && <CritChip t={a.threat} />}
         <div class="small muted">{a.reason}</div>
-        {a.line && <div class="small" title="Most likely line of play (lookahead): your moves, their likely replies.">▸ {a.line}</div>}
+        {a.line && (top || a.tag === 'setup' || a.kind === 'switch') && <div class="small" title="Most likely line of play (lookahead): your moves, their likely replies.">▸ {a.line}</div>}
       </div>
     </div>
   );
