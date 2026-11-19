@@ -44,7 +44,7 @@ export function SettingsTab() {
     const blob = new Blob([JSON.stringify({ meowdex: 1, box: box.value }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'meowhelper-box.json';
+    a.download = 'meowrpgadvisor-box.json';
     a.click();
     URL.revokeObjectURL(a.href);
   }
@@ -82,7 +82,7 @@ export function SettingsTab() {
     const blob = new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `meowhelper-npc-data-${file.exportedAt.slice(0, 10)}.json`;
+    a.download = `meowrpgadvisor-npc-data-${file.exportedAt.slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
     setShareMsg(`Exported ${n} NPC${n === 1 ? '' : 's'}.`);
@@ -169,7 +169,7 @@ export function SettingsTab() {
       <div class="card">
         <p class="title">Share NPC data<span class="r">{ownCount} yours · {importedCount(observed.value)} from others</span></p>
         <div class="small muted">
-          Export what MeowHelper saw NPCs do into a file you send yourself (Discord, Drive…). The file has only NPC ids, Pokémon names and move ids: no name, box, team or bag. Nothing is uploaded.
+          Export what MeowRPGAdvisor saw NPCs do into a file you send yourself (Discord, Drive…). The file has only NPC ids, Pokémon names and move ids: no name, box, team or bag. Nothing is uploaded.
         </div>
         <label class="small" style={{ display: 'block', marginTop: '6px' }}>
           <input type="checkbox" checked={onlyData} onChange={(e) => setOnlyData(e.currentTarget.checked)} /> Only NPCs I have data for
@@ -190,7 +190,7 @@ export function SettingsTab() {
         <div class="small muted">
           {bag.value
             ? `Read from the game's Bag page ${new Date(bag.value.at).toLocaleString()}. Open the Bag page again after buying or using items.`
-            : "Open the Bag page in the game once: MeowHelper reads it from the screen (no extra requests) to suggest TMs and held items you own."}
+            : "Open the Bag page in the game once: MeowRPGAdvisor reads it from the screen (no extra requests) to suggest TMs and held items you own."}
         </div>
         <div class="btns" style={{ marginTop: '6px' }}>
           <button class="btn" disabled={!bag.value} onClick={() => confirm('Forget your bag? It is read again next time you open the Bag page.') && forgetBag()}>Forget</button>
@@ -206,7 +206,7 @@ export function SettingsTab() {
           ))}
         </div>
       </div>
-      <div class="foot">MeowHelper {APP_VERSION} · fan-made tool, not affiliated with PokeMeowRPG. Advice only – you play.</div>
+      <div class="foot">MeowRPGAdvisor {APP_VERSION} · fan-made tool, not affiliated with PokeMeowRPG. Advice only – you play.</div>
     </>
   );
 }

@@ -198,7 +198,7 @@ export function fightOrCatch(ds: Dataset, t: WildTarget, box: BoxMon[], wanted: 
   if (t.catchlist) return catchIt("On this week's Catchlist.");
   if (t.registered === false) return catchIt(`Not in your Pokédex yet: ${name} is a new entry.`);
   if (t.registered === undefined && !ownedSpecies(box).has(t.species)) {
-    return catchIt(`${name} is not in your box (MeowHelper can't see your Pokédex here): likely a new entry.`);
+    return catchIt(`${name} is not in your box (MeowRPGAdvisor can't see your Pokédex here): likely a new entry.`);
   }
   const why = t.registered === undefined
     ? `You have ${name} in your box → fight for EXP.`

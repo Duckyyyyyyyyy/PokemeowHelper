@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { isExtension } from '../store';
 import { MODE_KEY, DEFAULT_MODE, normalizeMode, type UiMode } from '../../shared/uiMode';
 
-/** Settings card: where the toolbar icon opens MeowHelper. The background worker reacts to the stored value. */
+/** Settings card: where the toolbar icon opens MeowRPGAdvisor. The background worker reacts to the stored value. */
 export function UiModeCard() {
   const [mode, setMode] = useState<UiMode>(DEFAULT_MODE);
   useEffect(() => {
@@ -15,7 +15,7 @@ export function UiModeCard() {
   }
   return (
     <div class="card">
-      <h3>Where MeowHelper opens</h3>
+      <h3>Where MeowRPGAdvisor opens</h3>
       <label style="display:block;margin:6px 0">
         <input type="radio" name="uimode" checked={mode === 'window'} onChange={() => choose('window')} /> Floating window (default){' '}
         <span class="muted">– a small window that stays put when you switch tabs. Chrome cannot keep it always on top, so the browser can cover it.</span>

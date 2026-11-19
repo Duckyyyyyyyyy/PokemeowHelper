@@ -2,7 +2,7 @@ import { activeTab, loading } from '../store';
 import { Empty } from '../components/common';
 
 export function NoData() {
-  if (loading.value) return <Empty title="Opening MeowHelper…" />;
+  if (loading.value) return <Empty title="Opening MeowRPGAdvisor…" />;
   return (
     <Empty title="No NPC data yet">
       <p class="small">Log in to pokemeowrpg.com in Chrome, then sync the wiki data once.</p>

@@ -18,7 +18,7 @@ export const damageChecks = signal<DamageCheck[]>([]);
  * one position's moves at a time (and the Switch list only when opened), so remember them.
  */
 export const doublesMoves = signal<Record<string, string[]>>({});
-/** How often the NPC's actual move was MeowHelper's top guess, this battle. */
+/** How often the NPC's actual move was MeowRPGAdvisor's top guess, this battle. */
 export const guessScore = signal<{ hit: number; total: number }>({ hit: 0, total: 0 });
 const KEY = 'mdBattle';
 

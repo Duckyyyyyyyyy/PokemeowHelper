@@ -1,9 +1,9 @@
 {
-  "name": "meowhelper",
+  "name": "meowrpgadvisor",
   "private": true,
   "version": "0.11.0",
   "type": "module",
-  "description": "MeowHelper – advisory battle helper for PokeMeowRPG (Chrome side panel extension)",
+  "description": "MeowRPGAdvisor – advisory battle helper for PokeMeowRPG (Chrome side panel extension)",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build && vite build -c vite.content.config.ts && node scripts/check-content.mjs",

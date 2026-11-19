@@ -4,7 +4,7 @@ import { readWild } from './wildReader';
 import { carryTeamHp } from '../shared/wildTeam';
 
 /**
- * MeowHelper content script (pokemeowrpg.com). READ-ONLY by design (game rule: "Play yourself"):
+ * MeowRPGAdvisor content script (pokemeowrpg.com). READ-ONLY by design (game rule: "Play yourself"):
  * it watches the page, reads the battle screen, the Bag page or the Explore encounter card when one is open, and stores a
  * snapshot for the side panel. It never clicks, types, changes the page, or calls the game's API.
  */

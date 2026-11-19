@@ -35,7 +35,7 @@ export async function runBoxSync() {
   const ds = dataset.value;
   if (boxSync.value.busy) return;
   if (!ds) {
-    boxSync.value = { busy: false, error: 'Sync the wiki data first (Settings ⚙), so MeowHelper knows every Pokémon.' };
+    boxSync.value = { busy: false, error: 'Sync the wiki data first (Settings ⚙), so MeowRPGAdvisor knows every Pokémon.' };
     return;
   }
   boxSync.value = { busy: true, step: 'Reading your box…' };

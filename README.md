@@ -1,8 +1,8 @@
-# MeowHelper – PokeMeowRPG Battle Helper
+# MeowRPGAdvisor – PokeMeowRPG Battle Helper
 
 A Chrome extension (side panel) that helps you plan and fight NPC battles in [PokeMeowRPG](https://pokemeowrpg.com): look up any NPC's team, get a team picked from your own box, and get live tips during a battle.
 
-**Advice only.** MeowHelper never clicks, types or plays for you. It only reads what is on the screen (game rule: *"Play yourself. Do not use bots or automation"*). The game's staff said a helper like this is fine as long as there is no automation, and it stays that way.
+**Advice only.** MeowRPGAdvisor never clicks, types or plays for you. It only reads what is on the screen (game rule: *"Play yourself. Do not use bots or automation"*). The game's staff said a helper like this is fine as long as there is no automation, and it stays that way.
 
 Fan-made, not affiliated with PokeMeowRPG.
 
@@ -15,25 +15,25 @@ Fan-made, not affiliated with PokeMeowRPG.
 
 ## Install (for players)
 
-You need a `MeowHelper-x.y.z.zip` file (from a friend, or from the [Releases](../../releases) page).
+You need a `MeowRPGAdvisor-x.y.z.zip` file (from a friend, or from the [Releases](../../releases) page).
 
-1. Unzip it into a folder you will keep, for example `Documents\MeowHelper`. Don't delete the folder later; Chrome runs the extension from it.
+1. Unzip it into a folder you will keep, for example `Documents\MeowRPGAdvisor`. Don't delete the folder later; Chrome runs the extension from it.
 2. Open `chrome://extensions` and turn on **Developer mode** (top right).
 3. Click **Load unpacked** and pick the unzipped folder (the one with `manifest.json` in it).
-4. Pin MeowHelper from the puzzle-piece menu, then click its icon. By default MeowHelper opens in a small floating window (see **Window or side panel** below).
-5. Log in to pokemeowrpg.com. In MeowHelper's ⚙ tab click **Sync data** (the game's wiki data, about 8 MB, once), then **Sync box from game** (your Pokémon).
+4. Pin MeowRPGAdvisor from the puzzle-piece menu, then click its icon. By default MeowRPGAdvisor opens in a small floating window (see **Window or side panel** below).
+5. Log in to pokemeowrpg.com. In MeowRPGAdvisor's ⚙ tab click **Sync data** (the game's wiki data, about 8 MB, once), then **Sync box from game** (your Pokémon).
 6. Reload any open game tab once, so the Battle tab can see battles.
-7. Open the game's **Bag** page once, so MeowHelper knows your TMs and items. Open it again after buying or using items.
+7. Open the game's **Bag** page once, so MeowRPGAdvisor knows your TMs and items. Open it again after buying or using items.
 
-**Updating:** unzip the new version over the same folder, then click the ↻ reload button on MeowHelper in `chrome://extensions` and reload the game tab. Your synced data and settings are kept.
+**Updating:** unzip the new version over the same folder, then click the ↻ reload button on MeowRPGAdvisor in `chrome://extensions` and reload the game tab. Your synced data and settings are kept.
 
 Chrome may show a "developer mode extensions" notice at startup; that is normal for extensions installed this way.
 
-**Brave, Edge and other Chromium browsers** work the same way: open `brave://extensions` (or `edge://extensions`), turn on Developer mode and **Load unpacked**. In Brave the panel opens in Brave's sidebar when you click the MeowHelper icon. Brave has had bugs with extension side panels (for example [the panel closing by itself](https://github.com/brave/brave-browser/issues/32132) or [crashes in some versions](https://github.com/brave/brave-browser/issues/40262)); if that happens, update Brave or use Chrome.
+**Brave, Edge and other Chromium browsers** work the same way: open `brave://extensions` (or `edge://extensions`), turn on Developer mode and **Load unpacked**. In Brave the panel opens in Brave's sidebar when you click the MeowRPGAdvisor icon. Brave has had bugs with extension side panels (for example [the panel closing by itself](https://github.com/brave/brave-browser/issues/32132) or [crashes in some versions](https://github.com/brave/brave-browser/issues/40262)); if that happens, update Brave or use Chrome.
 
 ## Window or side panel
 
-In ⚙ → **Where MeowHelper opens** you can choose:
+In ⚙ → **Where MeowRPGAdvisor opens** you can choose:
 
 - **Floating window** (default): the toolbar icon opens a small standalone window, or focuses it if it is already open. Its size and position are remembered. It does not follow you between tabs. Live battle and bag data still arrive, because the game page writes them to extension storage, not to "the current tab". Chrome has no always-on-top option for windows, so the browser window can cover it; put it on a second monitor or snap the two side by side.
 - **Side panel on game tabs only**: the docked panel is enabled only on pokemeowrpg.com tabs and disappears on other sites.
@@ -46,19 +46,19 @@ After switching, close the old window or panel and click the icon again.
 npm run package
 ```
 
-This builds the extension and writes `release/MeowHelper-<version>.zip`. Send that zip (Discord, Drive…), or attach it to a GitHub Release so friends can always download the latest one. They follow [Install (for players)](#install-for-players). Each friend syncs their own wiki data and box; nothing of yours is in the zip.
+This builds the extension and writes `release/MeowRPGAdvisor-<version>.zip`. Send that zip (Discord, Drive…), or attach it to a GitHub Release so friends can always download the latest one. They follow [Install (for players)](#install-for-players). Each friend syncs their own wiki data and box; nothing of yours is in the zip.
 
 Don't send a `.crx` file: Chrome on Windows blocks `.crx` files that don't come from the Chrome Web Store. Publishing on the Web Store (one-time $5 developer fee, a review, and a privacy policy) is the way to get one-click installs and automatic updates later.
 
-## Share what MeowHelper learned about NPCs
+## Share what MeowRPGAdvisor learned about NPCs
 
-MeowHelper remembers which moves NPC Pokémon used in your battles. You can swap that with friends, by file only (nothing is uploaded anywhere):
+MeowRPGAdvisor remembers which moves NPC Pokémon used in your battles. You can swap that with friends, by file only (nothing is uploaded anywhere):
 
 1. **Export:** Settings → *Share NPC data* → *Export file*. Tick "Only NPCs I have data for" to skip empty NPCs. Send the `.json` through Discord, Drive, etc.
 2. **Import:** Settings → *Share NPC data* → *Import file*. The file is checked strictly (max 2 MB, known NPCs and moves only, unknown fields ignored) and merged: the NPC tab and the Battle tab's "Seen in earlier battles" line show those moves as "seen by others (n)", where n is how many imported files saw it. Moves you saw yourself have no label.
 3. **Undo:** *Remove imported data* drops everything imported and keeps your own observations. Importing the same file twice does nothing; a newer file from the same friend replaces their older one.
 
-The file contains: format version, export date, MeowHelper version, a random id (made on your computer, so a re-import isn't double-counted) and NPC id → variant → Pokémon → move ids. No player name, box, team, bag or account id. Wild and player battles are never exported.
+The file contains: format version, export date, MeowRPGAdvisor version, a random id (made on your computer, so a re-import isn't double-counted) and NPC id → variant → Pokémon → move ids. No player name, box, team, bag or account id. Wild and player battles are never exported.
 
 ## Features
 

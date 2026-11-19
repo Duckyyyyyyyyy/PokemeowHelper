@@ -23,12 +23,12 @@ export function BattleTab() {
     return (
       <>
         <Empty title="No battle open">
-          <p class="small">Start a battle on pokemeowrpg.com. MeowHelper reads the battle screen (read-only) and ranks your options every turn.</p>
-          {isExtension && <p class="small muted">Just installed or updated MeowHelper? Reload the game tab once so it can see the battle.</p>}
+          <p class="small">Start a battle on pokemeowrpg.com. MeowRPGAdvisor reads the battle screen (read-only) and ranks your options every turn.</p>
+          {isExtension && <p class="small muted">Just installed or updated MeowRPGAdvisor? Reload the game tab once so it can see the battle.</p>}
         </Empty>
         {import.meta.env.DEV && <button class="btn" style={{ width: '100%' }} onClick={() => loadSampleBattle()}>Load sample battle (dev)</button>}
         {import.meta.env.DEV && <button class="btn" style={{ width: '100%', marginTop: '6px' }} onClick={() => loadSampleBattle('doubles')}>Load sample doubles battle (dev)</button>}
-        <Tip kind="info">MeowHelper only gives advice. You always pick your moves – it never clicks for you.</Tip>
+        <Tip kind="info">MeowRPGAdvisor only gives advice. You always pick your moves – it never clicks for you.</Tip>
       </>
     );
   }
@@ -62,7 +62,7 @@ function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
 
       {doubles && !ended && (
         <Tip kind="warn">
-          <b>Doubles: not fully supported yet.</b> MeowHelper only reads one Pokémon per side and scores a 1v1, so its advice would be wrong here ({doubles}).{' '}
+          <b>Doubles: not fully supported yet.</b> MeowRPGAdvisor only reads one Pokémon per side and scores a 1v1, so its advice would be wrong here ({doubles}).{' '}
           {hideAdvice
             ? <button class="btn" style={{ marginTop: '6px' }} onClick={() => setForceSingles(true)}>Show 1v1 advice anyway</button>
             : <>Showing 1v1 advice for the first Pokémon on each side – treat it as a rough guide. <button class="btn" style={{ marginTop: '6px' }} onClick={() => setForceSingles(false)}>Hide it</button></>}
@@ -130,7 +130,7 @@ function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
 
       <TowerRun advice={advice} />
       <CalcCheck gen3={gen3 || advice?.npc?.category === 'frontier'} />
-      <label class="small muted row" style={{ gap: '6px', padding: '0 4px' }} title="Battle Frontier battles use Gen III rules. Turn this on if MeowHelper does not recognise a Frontier battle by itself.">
+      <label class="small muted row" style={{ gap: '6px', padding: '0 4px' }} title="Battle Frontier battles use Gen III rules. Turn this on if MeowRPGAdvisor does not recognise a Frontier battle by itself.">
         <input type="checkbox" checked={gen3} onChange={(e) => setForceGen3((e.target as HTMLInputElement).checked)} />
         Battle Frontier: use Gen III rules{advice?.npc?.category === 'frontier' ? ' (on automatically for this Brain)' : ''}
       </label>

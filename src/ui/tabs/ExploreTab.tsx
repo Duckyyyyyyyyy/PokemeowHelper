@@ -112,7 +112,7 @@ export function ExploreTab() {
   if (!ds.wild) {
     return (
       <Empty title="No map data yet">
-        <p class="small">Your saved wiki data is from an older MeowHelper. Sync the data again in ⚙ Settings to load explore maps, catch rates and balls.</p>
+        <p class="small">Your saved wiki data is from an older MeowRPGAdvisor. Sync the data again in ⚙ Settings to load explore maps, catch rates and balls.</p>
       </Empty>
     );
   }
@@ -288,7 +288,7 @@ function Encounter({ ds }: { ds: Dataset }) {
             <button class="btn" style={{ flex: '0 0 auto' }} onClick={() => pickSpecies(pickName)}>Set</button>
           </div>
           {import.meta.env.DEV && !wild.value && <button class="btn" style={{ width: '100%' }} onClick={loadSampleWild}>Load sample wild encounter (dev)</button>}
-          {!t && <div class="small muted">Meet a wild Pokémon on the game's Explore page and it shows up here by itself, or pick it above (or tap a row in Maps). MeowHelper never acts in the game.</div>}
+          {!t && <div class="small muted">Meet a wild Pokémon on the game's Explore page and it shows up here by itself, or pick it above (or tap a row in Maps). MeowRPGAdvisor never acts in the game.</div>}
         </>
       )}
       {t && <EncounterDetail ds={ds} t={t} myLevel={t.myLevel ?? live?.myLevel} isLive={isLive} />}
@@ -457,7 +457,7 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
           {weaken.map((w) => <WeakenLine w={w} member={tplan.memberOf[w.uid]} />)}
           {plan.weaken.length > 3 && <button class="link small enc-opt" onClick={() => setMoreWeaken(!moreWeaken)}>{moreWeaken ? 'less' : `more (${plan.weaken.length - 3})`}</button>}
           {tplan.weakenHint && <div class="small c-y enc-opt">{tplan.weakenHint}</div>}
-          {tplan.source === 'box' && !plan.weaken.length && <div class="small muted enc-opt">No safe hit in your box{plan.notes.some((n) => /Ghost/.test(n)) ? ' (Ghost: False Swipe does nothing)' : ''}. Sync your box (⚙) so MeowHelper knows your moves.</div>}
+          {tplan.source === 'box' && !plan.weaken.length && <div class="small muted enc-opt">No safe hit in your box{plan.notes.some((n) => /Ghost/.test(n)) ? ' (Ghost: False Swipe does nothing)' : ''}. Sync your box (⚙) so MeowRPGAdvisor knows your moves.</div>}
 
           <div class="enc-step"><span class="enc-n">2</span><b>Status</b><span class="muted small"> sleep ×2.5 › paralysis ×1.5 › burn/poison</span></div>
           {status.map((o) => <StatusLine o={o} member={tplan.memberOf[o.uid]} />)}
@@ -487,7 +487,7 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
             <b>{o.effect.unknown ? '?' : pct(o.chance)}</b>
           </div>
         ))}
-        {!owned && <div class="muted">Open the game's Bag page once so MeowHelper can prefer balls you have.</div>}
+        {!owned && <div class="muted">Open the game's Bag page once so MeowRPGAdvisor can prefer balls you have.</div>}
       </details>
 
       <details class="card small enc-more">
@@ -641,7 +641,7 @@ function Balls({ ds }: { ds: Dataset }) {
           {b.wildRule && <div class="small muted">Wild holders: {b.wildRule.split('\n')[0]}</div>}
         </div>
       ))}
-      <div class="small muted" style={{ marginTop: '6px' }}>Heavy Ball needs the Pokémon's weight, which the wiki data does not include, so MeowHelper never picks it.</div>
+      <div class="small muted" style={{ marginTop: '6px' }}>Heavy Ball needs the Pokémon's weight, which the wiki data does not include, so MeowRPGAdvisor never picks it.</div>
     </div>
   );
 }

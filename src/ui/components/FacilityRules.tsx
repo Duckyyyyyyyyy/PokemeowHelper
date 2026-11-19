@@ -42,7 +42,7 @@ export function FacilityRules({ npc }: { npc: Npc }) {
         <div>Round: {f.round} · register {f.register}, battle with {f.battleWith} · {f.restored ? 'restored after each battle' : 'HP, status and PP carry over'}.</div>
         {f.rules.map((r) => <div>• {r}</div>)}
         <div>• Gen III rules: no Fairy type, a move's type decides physical/special (Ghost uses Attack, Dark uses Sp. Atk), Gen III power, stats and abilities; Steel resists Ghost and Dark.</div>
-        <div>• Gen I–III Pokémon, moves and held items only; one of each species and each held item; no Mega/Z/Dynamax/Tera. Restricted legendaries are excluded (the wiki gives no list – MeowHelper guesses Emerald's).</div>
+        <div>• Gen I–III Pokémon, moves and held items only; one of each species and each held item; no Mega/Z/Dynamax/Tera. Restricted legendaries are excluded (the wiki gives no list – MeowRPGAdvisor guesses Emerald's).</div>
         <div>• Symbols: {f.symbols}. BP: {f.bp}.</div>
         <div class="bad-t">• Hardcore runs: your own Pokémon that faint are lost for good{f.ownTeam ? '' : ' (rentals are exempt)'}.</div>
       </div>
