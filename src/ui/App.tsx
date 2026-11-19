@@ -5,6 +5,7 @@ import { TeamTab } from './tabs/TeamTab';
 import { BattleTab } from './tabs/BattleTab';
 import { SettingsTab } from './tabs/SettingsTab';
 import { ExploreTab } from './tabs/ExploreTab';
+import { TipsTab } from './tabs/TipsTab';
 
 /** Tab registry: add a tab here to extend the panel. */
 export interface TabDef {
@@ -19,6 +20,7 @@ export const TABS: TabDef[] = [
   { id: 'team', label: 'Team', component: TeamTab },
   { id: 'battle', label: 'Battle', component: BattleTab },
   { id: 'explore', label: 'Explore', component: ExploreTab },
+  { id: 'tips', label: 'Tips', component: TipsTab },
   { id: 'settings', label: '⚙', aria: 'Settings', component: SettingsTab },
 ];
 

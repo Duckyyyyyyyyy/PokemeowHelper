@@ -19,6 +19,7 @@ import { Action } from './BattleTab';
 import type { BoxMon } from '../../shared/types';
 import { matchNpc, lc } from '../../engine/turnAdvisor';
 import { ALL_TYPES } from '../../engine/typeChart';
+import { MapTips } from './TipsTab';
 
 type View = 'maps' | 'encounter' | 'balls';
 const view = signal<View>('maps');
@@ -179,6 +180,7 @@ function Maps({ ds }: { ds: Dataset }) {
           {ALL_TYPES.map((t) => <option value={t}>{t}</option>)}
         </select>
       </div>
+      {mapId && <MapTips ds={ds} mapId={mapId} />}
       <div class="row wrap small">
         <label><input type="checkbox" checked={findable} onChange={(e) => setFindable((e.target as HTMLInputElement).checked)} /> Common/rare only (when not searching)</label>
         <label><input type="checkbox" checked={onlyMarked} onChange={(e) => setOnlyMarked((e.target as HTMLInputElement).checked)} /> Only wanted / new</label>

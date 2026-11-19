@@ -9,6 +9,8 @@ import { ASSUMED_NPC_LEVEL, npcToCalc } from '../../engine/damage';
 import { observedForNpc } from '../../engine/observed';
 import { lc } from '../../engine/turnAdvisor';
 import { observed } from '../battleStore';
+import { allTips, tipsForNpc } from '../../engine/tips';
+import { openTip } from '../tipsStore';
 
 const FILTERS: { id: string; label: string; cats: string[] }[] = [
   { id: 'all', label: 'All', cats: [] },
@@ -36,6 +38,12 @@ function subtitle(n: Npc) {
   const v = n.variants[0];
   const lv = n.levelCap ? `Cap Lv ${n.levelCap}` : maxLevel(n) ? `Lv ${maxLevel(n)}` : '';
   return [n.group, n.location, v.format === 'doubles' ? 'Doubles' : 'Singles', lv].filter(Boolean).join(' · ');
+}
+
+/** "Boulder Badge · gives HM01 Cut, Exp. Charm" – badge and HM/Key Item rewards (schema 5+ data). */
+function gives(ds: Dataset, n: Npc): string {
+  const special = (n.rewardItems ?? []).filter((id) => /^hm/.test(id) || ds.items[id]?.category === 'key-items').map((id) => ds.items[id]?.name ?? id);
+  return [n.badge && `${n.badge} Badge`, special.length && `gives ${special.join(', ')}`].filter(Boolean).join(' · ');
 }
 
 export function NpcTab() {
@@ -83,6 +91,7 @@ function NpcList({ ds }: { ds: Dataset }) {
               <div class="grow">
                 <b>{n.name} {n.specialty && !n.specialty.includes('/') ? <TypeBadge type={n.specialty} /> : null}</b>
                 <small>{n.title} · {subtitle(n)}</small>
+                {gives(ds, n) && <small class="gives">{gives(ds, n)}</small>}
               </div>
               <span class={`diff ${cls}`}>{label}</span>
             </button>
@@ -199,6 +208,7 @@ function NpcDetail({ ds, npc }: { ds: Dataset; npc: Npc }) {
         </Tip>
       )}
 
+      <NpcUnlocks ds={ds} npc={npc} />
       {rulesFor(npc.category).npcIgnoresWonderGuard && <Tip kind="info"><b>Special rules:</b> {RULES_TEXT}</Tip>}
       {!rulesFor(npc.category).bagItems && <Tip kind="info"><b>Battle Tower rules:</b> Bag medicine cannot be used, and HP, status and PP carry over between opponents.</Tip>}
       <div class="btns">
@@ -206,5 +216,23 @@ function NpcDetail({ ds, npc }: { ds: Dataset; npc: Npc }) {
       </div>
       <div class="foot">Types use the game's type chart and known abilities. Damage numbers are in the Team tab.</div>
     </>
+  );
+}
+
+/** Rewards and what beating this trainer unlocks, linked to the Tips tab. */
+function NpcUnlocks({ ds, npc }: { ds: Dataset; npc: Npc }) {
+  const unlocks = useMemo(() => tipsForNpc(allTips(ds), npc.id), [ds, npc.id]);
+  const rewards = (npc.rewardItems ?? []).map((id) => ds.items[id]?.name ?? id);
+  if (!npc.badge && !rewards.length && !unlocks.length) return null;
+  return (
+    <div class="card">
+      <p class="title">Rewards &amp; unlocks</p>
+      {(npc.badge || rewards.length > 0) && (
+        <div class="small">{[npc.badge && `${npc.badge} Badge`, ...rewards].filter(Boolean).join(' · ')}</div>
+      )}
+      {unlocks.slice(0, 10).map((t) => (
+        <div class="small"><button class="link" onClick={() => openTip(t.id)}>{t.title} →</button></div>
+      ))}
+    </div>
   );
 }
