@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { BoxMon, Dataset, Species } from '../../shared/types';
-import { activeTab, box, dataset, selectedNpc, selectedVariant, setBox } from '../store';
-import { Empty, MoveChip, Tip, Types, scoreClass } from '../components/common';
-import { suggestTeam, supportLead, type Candidate } from '../../engine/teamSuggest';
+import { box, dataset, goPrep, selectedNpc, selectedVariant, setBox } from '../store';
+import { Empty, MoveChip, Tip, Types } from '../components/common';
+import { hardestFoes, outcomeOf, suggestTeam, supportLead, type Candidate } from '../../engine/teamSuggest';
+import { RatePill, TypeAvatar } from '../components/hud';
+import { HuntSlot } from '../components/HuntSlot';
 import { formatMult } from '../../engine/typeChart';
 import { NoData } from './shared';
 import { BoxSyncCard } from '../components/BoxSync';
@@ -34,21 +36,22 @@ function FrontierNotes({ ds, team, entries, blocked, ownTeam }: { ds: Dataset; t
   );
 }
 
-export function TeamTab() {
+/** Prep → Team (the suggestion, your box) or Prep → Hunt & grind (Worth grinding + the Hunt slot). */
+export function TeamTab({ part = 'team' }: { part?: 'team' | 'hunt' }) {
   const ds = dataset.value;
   if (!ds) return <NoData />;
   return (
     <>
-      <Suggestion ds={ds} />
-      <BoxSyncCard compact />
-      <BoxEditor ds={ds} />
+      <Suggestion ds={ds} part={part} />
+      {part === 'team' && <BoxSyncCard compact />}
+      {part === 'team' && <BoxEditor ds={ds} />}
     </>
   );
 }
 
 /* ---------------- suggestion ---------------- */
 
-function Suggestion({ ds: base }: { ds: Dataset }) {
+function Suggestion({ ds: base, part }: { ds: Dataset; part: 'team' | 'hunt' }) {
   const npc = selectedNpc.value;
   const v0 = npc ? npc.variants[Math.min(selectedVariant.value, npc.variants.length - 1)] : null;
   const rules = rulesFor(npc?.category);
@@ -104,7 +107,7 @@ function Suggestion({ ds: base }: { ds: Dataset }) {
 
   async function exportTeam() {
     if (!res || !npc || !v) return;
-    const text = teamToText(base, res.team.map((c) => c.mon), `MeowHelper team vs ${v.trainerName ?? npc.name}${npc.variants.length > 1 ? ` (${v.label})` : ''}`);
+    const text = teamToText(base, res.team.map((c) => c.mon), `MeowRPGAdvisor team vs ${v.trainerName ?? npc.name}${npc.variants.length > 1 ? ` (${v.label})` : ''}`);
     try {
       await navigator.clipboard.writeText(text);
       setCopied('Team copied to the clipboard.');
@@ -115,6 +118,7 @@ function Suggestion({ ds: base }: { ds: Dataset }) {
   const name = (c: Candidate) => ds.species[c.mon.species]?.name ?? '?';
   const [cell, setCell] = useState<{ j: number; uid: string } | null>(null);
   const [movesFor, setMovesFor] = useState<string | null>(null);
+  const [allRows, setAllRows] = useState(false);
 
   return (
     <>
@@ -124,13 +128,20 @@ function Suggestion({ ds: base }: { ds: Dataset }) {
           <b>{npc ? `${v!.trainerName ?? npc.name}${npc.variants.length > 1 ? ` · ${v!.label}` : ''}` : 'No NPC selected'}</b>
           {v && <div class="small muted">{facility ? `${facility.name} · Gen III rules · register ${facility.register}` : tower ? `One battle vs ${v.team.length} · HP/PP carry over · bring up to 6` : `${v.format === 'doubles' ? 'Doubles' : 'Singles'} · ${v.levelCap ? `Cap Lv ${v.levelCap}` : 'No level cap'}`}</div>}
         </div>
-        <button class="btn sm" onClick={() => (activeTab.value = 'npc')}>{npc ? 'Change' : 'Pick NPC'}</button>
+        <button class="btn sm" onClick={() => goPrep('npc')}>{npc ? 'Change' : 'Pick NPC'}</button>
       </div>
 
       {!npc || !v ? (
-        <Tip>Pick an NPC in the NPC tab, then tap “Suggest team”.</Tip>
+        <Tip>Pick an NPC in step 1 (Opponent), then tap “Suggest team”.</Tip>
       ) : !box.value.length ? (
         <Tip>Add the Pokémon you own to “Your box” below to get suggestions.</Tip>
+      ) : res && part === 'hunt' ? (
+        <>
+          <HuntSlot npcName={v.trainerName ?? npc.name} />
+          {!(facility && mode === 'open') ? (
+            <GrindCard ds={ds} v={v} ready={res} rules={rules} locked={locked} size={facility?.register} excluded={grindExcluded} />
+          ) : <Tip>Open Level Brains scale to your highest level, so grinding gains nothing here.</Tip>}
+        </>
       ) : res && (
         <>
           {fr && <LevelModeSeg level={fr.level} estimated={fr.estimated} />}
@@ -143,7 +154,7 @@ function Suggestion({ ds: base }: { ds: Dataset }) {
             </Tip>
           )}
           <div class="card">
-            <p class="title">Suggested team · ready now <span class="r">Coverage {res.coverage}/100</span></p>
+            <p class="title">Bring these {res.team.length} · ready now <span class="r">{(() => { const n = v.team.filter((_, j) => res.team.some((c) => c.pairs[j] && outcomeOf(c.pairs[j], tower) === 'win')).length; return `answers ${n} of ${v.team.length}`; })()}</span></p>
             {res.team.map((c) => {
               const s = ds.species[c.mon.species];
               const bi = c.pairs.reduce((a, p, i) => ((p.duel?.mine?.expectedPct ?? 0) > (c.pairs[a].duel?.mine?.expectedPct ?? 0) ? i : a), 0);
@@ -151,12 +162,12 @@ function Suggestion({ ds: base }: { ds: Dataset }) {
               const wins = c.pairs.filter((p) => p.duel?.win).length;
               return (
                 <div class="mon">
-                  <div class="av">{s?.name.slice(0, 2).toUpperCase()}</div>
-                  <span class="nm">{s?.name}<Types types={s?.types ?? []} /></span>
+                  <TypeAvatar name={s?.name ?? '?'} types={s?.types ?? []} size={34} />
+                  <span class="nm">{s?.name}{res.lead === c && v.format !== 'doubles' ? <> <span class="lead">LEAD</span></> : null}<Types types={s?.types ?? []} /></span>
                   <span class="row">
-                    <span class={`score ${scoreClass(c.avg)}`}>{c.avg}</span>
+                    <RatePill score={c.avg} />
                     <button class={`btn sm${c.locked ? ' primary' : ''}`} onClick={() => toggleLock(c.mon.uid)} aria-pressed={!!c.locked}
-                      title={c.locked ? 'Locked: always on the team. Tap to unlock.' : 'Lock this slot'} aria-label={`${c.locked ? 'Unlock' : 'Lock'} ${s?.name}`}>{c.locked ? '🔒' : '🔓'}</button>
+                      title={c.locked ? 'Locked: always on the team. Tap to unlock.' : 'Lock this slot'} aria-label={`${c.locked ? 'Unlock' : 'Lock'} ${s?.name}`}>{c.locked ? 'Locked' : 'Lock'}</button>
                     <button class="btn sm" onClick={() => toggleExclude(c.mon.uid)} title="Don't suggest this Pokémon" aria-label={`Exclude ${s?.name}`}>✕</button>
                   </span>
                   <div class="full small muted">
@@ -199,58 +210,66 @@ function Suggestion({ ds: base }: { ds: Dataset }) {
             {copied && (copied.startsWith('//') ? (
               <textarea class="input" style={{ width: '100%', height: '120px', marginTop: '6px' }} readOnly value={copied} aria-label="Team text to copy" />
             ) : <div class="small muted" role="status" style={{ marginTop: '4px' }}>{copied}</div>)}
-            <div class="small muted" style={{ marginTop: '4px' }}>🔓 lock a Pokémon to keep it on the team · ✕ never suggest it · tap a bench name to lock it in.</div>
+            <div class="small muted" style={{ marginTop: '4px' }}>Lock keeps a Pokémon on the team · ✕ never suggests it · tap a bench name to lock it in.</div>
             <div class="small muted">{held ? '🎒 Held items: from your bag, one each. Damage items use the calc; the rest are rules of thumb.' : '🎒 Open your Bag page in the game once to get held item advice from what you own.'}</div>
           </div>
           {lockedOut.length > 0 && (
             <Tip kind="warn">Locked but not on the team: {lockedOut.map((c) => `${name(c)} (${c.reason ?? 'team is full'})`).join(', ')}</Tip>
           )}
 
-          {/* Open Level Brains scale to your highest level, so grinding gains nothing there. */}
-          {!(facility && mode === 'open') && (
-            <GrindCard ds={ds} v={v} ready={res} rules={rules} locked={locked} size={facility?.register} excluded={grindExcluded} />
-          )}
 
-          {res.team.length > 0 && (
+          {res.team.length > 0 && (() => {
+            // Big rosters (Battle Tower: 20): hardest NPC Pokémon first, top 8, unless you ask for all.
+            const big = v.team.length > 8;
+            const order = big ? hardestFoes(res.team, v.team.length, tower).map((r) => r.index) : v.team.map((_, j) => j);
+            const rowsShown = big && !allRows ? order.slice(0, 8) : order;
+            return (
             <div class="card">
-              <p class="title">Matchup matrix</p>
-              {/* Rows = NPC Pokémon (can be 20 in towers), columns = your team (max 6). */}
-              <div class="grid" style={{ gridTemplateColumns: `minmax(64px, 1.4fr) repeat(${res.team.length}, minmax(34px, 1fr))` }}>
-                <span class="small muted" style={{ textAlign: 'left' }}>NPC ↓ · You →</span>
-                {res.team.map((c) => <b title={name(c)}>{name(c).slice(0, 5)}</b>)}
-                {v.team.map((m, j) => (
-                  <>
-                    <b class="rn" title={m.name}>{m.name}</b>
-                    {res.team.map((c) => {
-                      const p = c.pairs[j];
-                      return (
-                        <button
-                          class={`cell c-${p.score >= 70 ? 'g' : p.score >= 45 ? 'y' : 'r'}${cell?.j === j && cell.uid === c.mon.uid ? ' sel' : ''}`}
-                          title={p.duel ? `${name(c)} vs ${m.name}: ${duelSummary(p.duel)}` : `${name(c)} vs ${m.name}: deals ${formatMult(p.bestHit.mult)}`}
-                          onClick={() => setCell(cell?.j === j && cell.uid === c.mon.uid ? null : { j, uid: c.mon.uid })}
-                        >
-                          {p.score}
-                        </button>
-                      );
-                    })}
-                  </>
-                ))}
+              <p class="title">{big ? `Hardest for your team · ${rowsShown.length} of ${v.team.length}` : 'Matchups'}<span class="r">✓ wins · ~ close · ✗ loses</span></p>
+              {/* Rows = NPC Pokémon, columns = your team (max 6). Symbols instead of raw scores. */}
+              <div class="mx" style={{ gridTemplateColumns: `minmax(70px, 1.4fr) repeat(${res.team.length}, minmax(30px, 1fr))` }}>
+                <span class="h" style={{ textAlign: 'left' }}>Them ↓ You →</span>
+                {res.team.map((c) => <span class="h" title={name(c)}>{name(c).slice(0, 6)}</span>)}
+                {rowsShown.map((j) => {
+                  const m = v.team[j];
+                  return (
+                    <>
+                      <span class="rn" title={m.name}>{m.name}</span>
+                      {res.team.map((c) => {
+                        const p = c.pairs[j];
+                        const o = outcomeOf(p, tower);
+                        return (
+                          <button
+                            class={`c ${o === 'win' ? 'w' : o === 'close' ? 'e' : 'l'}${cell?.j === j && cell.uid === c.mon.uid ? ' sel' : ''}`}
+                            title={p.duel ? `${name(c)} vs ${m.name}: ${duelSummary(p.duel)}` : `${name(c)} vs ${m.name}: deals ${formatMult(p.bestHit.mult)}`}
+                            aria-label={`${name(c)} vs ${m.name}: ${o === 'win' ? 'wins' : o === 'close' ? 'close' : 'loses'}`}
+                            onClick={() => setCell(cell?.j === j && cell.uid === c.mon.uid ? null : { j, uid: c.mon.uid })}
+                          >
+                            {o === 'win' ? '✓' : o === 'close' ? '~' : '✗'}
+                          </button>
+                        );
+                      })}
+                    </>
+                  );
+                })}
               </div>
-              <div class="small muted" style={{ marginTop: '6px' }}>Tap a cell for the damage numbers. {tower ? 'Endurance score: 35+ = you win the 1v1, higher = more HP kept (+ sustain).' : '55+ = you win the 1v1.'}</div>
+              {big && <button class="link small" style={{ marginTop: '6px' }} onClick={() => setAllRows(!allRows)}>{allRows ? 'Show the 8 hardest' : `Show all ${v.team.length}`}</button>}
+              <div class="small muted" style={{ marginTop: '6px' }}>Tap a cell for the damage numbers.{tower ? ' Tower: "wins" also counts the HP it keeps, since nothing heals between opponents.' : ''}</div>
               {cell && (() => {
                 const c = res.team.find((t) => t.mon.uid === cell.uid);
                 const p = c?.pairs[cell.j];
                 return c && p?.duel ? <DuelDetail ds={ds} you={c.mon} foeName={v.team[cell.j].name} d={p.duel} /> : null;
               })()}
             </div>
-          )}
+            );
+          })()}
 
           {pairs.length > 0 && (
             <div class="card">
               <p class="title">Lead pair · Doubles <span class="r small muted">vs {v.team.slice(0, 2).map((m) => m.name).join(' + ')}</span></p>
               {pairs.map((p, i) => (
                 <div class={`act${i === 0 ? ' top' : ''}`}>
-                  <span class={`score ${scoreClass(p.score)}`}>{p.score}</span>
+                  <RatePill score={p.score} top={pairs[0]?.score} />
                   <div class="grow">
                     <b>{name(p.a)} + {name(p.b)}</b>
                     <div class="small muted">{p.why.length ? p.why.join(' · ') : 'No special teamwork found.'}</div>
@@ -262,7 +281,7 @@ function Suggestion({ ds: base }: { ds: Dataset }) {
           )}
           {res.lead && v.format !== 'doubles' && (
             <Tip kind="info">
-              Lead with <b>{name(res.lead)}</b>: scores {res.lead.pairs[0]?.score} vs the NPC's first Pokémon ({v.team[0]?.name}).
+              Lead with <b>{name(res.lead)}</b>: {outcomeOf(res.lead.pairs[0], tower) === 'win' ? 'it beats' : outcomeOf(res.lead.pairs[0], tower) === 'close' ? 'it is close against' : 'your best answer to'} their first Pokémon ({v.team[0]?.name}).
             </Tip>
           )}
           {bench.length > 0 && (

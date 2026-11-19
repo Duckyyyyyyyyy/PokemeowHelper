@@ -1,19 +1,18 @@
 import { useMemo, useState } from 'preact/hooks';
 import { ownedItems } from '../bagStore';
-import { doublesReason, type BattleMon, type BattleSnapshot, type Boosts } from '../../shared/battle';
+import { doublesReason, type BattleSnapshot } from '../../shared/battle';
 import type { Dataset } from '../../shared/types';
-import { Empty, Tip, Types, scoreClass } from '../components/common';
+import { Empty, Tip } from '../components/common';
+import { DangerStrip, Fold, Hp, Icon, Plate, RatePill, TypeAvatar, hpPct, speciesTypes } from '../components/hud';
 import { adviseTurn, matchNpc, type ActionAdvice, type ThreatInfo, type TurnAdvice } from '../../engine/turnAdvisor';
+import { factsLine, plainLine, rate } from '../../engine/plain';
 import { npcKey, seenByOthers, seenByYou } from '../../engine/observed';
 import { battle, damageChecks, doublesMoves, forceGen3, guessScore, loadSampleBattle, observed, setForceGen3, towerRun } from '../battleStore';
 import { runSummary } from '../../engine/towerPlan';
-import { adviseDoubles, type DoublesAction, type DoublesAdvice } from '../../engine/doublesAdvisor';
-import { box, dataset, isExtension } from '../store';
+import { adviseDoubles, type DoublesAction, type DoublesAdvice, type DoublesMonAdvice } from '../../engine/doublesAdvisor';
+import { activeTab, box, dataset, isExtension } from '../store';
 import { NoData } from './shared';
 import { timeAgo } from '../boxStore';
-
-const STATUS_LABEL: Record<string, string> = { par: 'PAR', brn: 'BRN', psn: 'PSN', tox: 'TOX', slp: 'SLP', frz: 'FRZ' };
-const BOOST_LABEL: Record<string, string> = { atk: 'Atk', def: 'Def', spa: 'SpA', spd: 'SpD', spe: 'Spe', accuracy: 'Acc', evasion: 'Eva' };
 
 export function BattleTab() {
   const ds = dataset.value;
@@ -23,12 +22,12 @@ export function BattleTab() {
     return (
       <>
         <Empty title="No battle open">
-          <p class="small">Start a battle on pokemeowrpg.com. MeowHelper reads the battle screen (read-only) and ranks your options every turn.</p>
-          {isExtension && <p class="small muted">Just installed or updated MeowHelper? Reload the game tab once so it can see the battle.</p>}
+          <p class="small">Start a battle on pokemeowrpg.com. MeowRPGAdvisor reads the battle screen (read-only), opens this tab and rates your moves every turn.</p>
+          {isExtension && <p class="small muted">Just installed or updated MeowRPGAdvisor? Reload the game tab once so it can see the battle.</p>}
         </Empty>
         {import.meta.env.DEV && <button class="btn" style={{ width: '100%' }} onClick={() => loadSampleBattle()}>Load sample battle (dev)</button>}
-        {import.meta.env.DEV && <button class="btn" style={{ width: '100%', marginTop: '6px' }} onClick={() => loadSampleBattle('doubles')}>Load sample doubles battle (dev)</button>}
-        <Tip kind="info">MeowHelper only gives advice. You always pick your moves – it never clicks for you.</Tip>
+        {import.meta.env.DEV && <button class="btn" style={{ width: '100%' }} onClick={() => loadSampleBattle('doubles')}>Load sample doubles battle (dev)</button>}
+        <Tip kind="info">MeowRPGAdvisor only gives advice. You always pick your moves; it never clicks for you.</Tip>
       </>
     );
   }
@@ -37,178 +36,246 @@ export function BattleTab() {
   return <Live ds={ds} snap={snap} />;
 }
 
+const topScore = (as: { score: number | null }[]) => {
+  const s = as.map((a) => a.score).filter((x): x is number => x !== null);
+  return s.length ? Math.max(...s) : null;
+};
+const pct = (x: number) => (x > 0 && x < 0.01 ? '<1%' : `${Math.round(x * 100)}%`);
+
+function VsHead({ snap, extra }: { snap: BattleSnapshot; extra?: string }) {
+  return (
+    <div class="vs-head">
+      <b>VS {snap.opponentName ?? 'opponent'}</b>
+      <span>{[snap.turn ? `Turn ${snap.turn}` : '', extra].filter(Boolean).join(' · ')}</span>
+    </div>
+  );
+}
+
 function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
   const gen3 = forceGen3.value;
   const doubles = useMemo(() => doublesReason(snap, matchNpc(ds, snap)?.variant.format), [ds, snap]);
   const [forceSingles, setForceSingles] = useState(false);
   // Singles advice in a doubles battle would look right and be wrong: hide it unless asked for.
-  // Even when asked for, adviseTurn turns the lookahead off on a doubles battle (one-turn view only).
   const hideAdvice = !!doubles && !forceSingles;
   const advice = useMemo(() => (snap.status === 'active' && !hideAdvice ? adviseTurn(ds, snap, box.value, { observed: observed.value, items: ownedItems.value, gen3 }) : null), [ds, snap, box.value, observed.value, ownedItems.value, gen3, hideAdvice]);
   const ended = snap.status === 'won' || snap.status === 'lost';
-  const ranked = advice?.actions.filter((a) => a.score !== null) ?? [];
-  const unscored = advice?.actions.filter((a) => a.score === null) ?? [];
+  const variant = advice?.variant && advice.npc && advice.npc.variants.length > 1 ? advice.variant.label : undefined;
 
   return (
     <>
-      <div class="card">
-        <p class="title" style={{ margin: 0 }}>
-          vs {snap.opponentName ?? 'opponent'}
-          <span class="r">{snap.turn ? `Turn ${snap.turn}` : ''}{advice?.variant && advice.npc && advice.npc.variants.length > 1 ? ` · ${advice.variant.label}` : ''}</span>
-        </p>
-        {snap.player && <Side ds={ds} label="You" mon={snap.player} boosts={snap.boosts.player} />}
-        {snap.opponent && <Side ds={ds} label="Them" mon={snap.opponent} boosts={snap.boosts.opponent} foe />}
-      </div>
+      <VsHead snap={snap} extra={variant} />
+      {snap.opponent && <Plate ds={ds} mon={snap.opponent} boosts={snap.boosts.opponent} foe />}
+      {snap.player && <Plate ds={ds} mon={snap.player} boosts={snap.boosts.player} threat={advice && !advice.forcedSwitch ? advice.threat : undefined} />}
 
       {doubles && !ended && (
         <Tip kind="warn">
-          <b>Doubles: not fully supported yet.</b> MeowHelper only reads one Pokémon per side and scores a 1v1, so its advice would be wrong here ({doubles}).{' '}
+          <b>Doubles, but only one Pokémon per side could be read.</b> 1v1 advice would be wrong here ({doubles}).{' '}
           {hideAdvice
-            ? <button class="btn" style={{ marginTop: '6px' }} onClick={() => setForceSingles(true)}>Show 1v1 advice anyway</button>
-            : <>Showing 1v1 advice for the first Pokémon on each side – treat it as a rough guide. <button class="btn" style={{ marginTop: '6px' }} onClick={() => setForceSingles(false)}>Hide it</button></>}
+            ? <button class="btn sm" style={{ marginTop: '6px' }} onClick={() => setForceSingles(true)}>Show 1v1 advice anyway</button>
+            : <>Showing 1v1 advice for the first Pokémon on each side as a rough guide. <button class="btn sm" style={{ marginTop: '6px' }} onClick={() => setForceSingles(false)}>Hide it</button></>}
         </Tip>
       )}
       {ended ? (
-        <Tip kind={snap.status === 'won' ? 'ok' : 'danger'}>{snap.status === 'won' ? 'You won the battle!' : 'You lost this one.'} Pick the next NPC in the NPC tab to plan a team.</Tip>
+        <Tip kind={snap.status === 'won' ? 'ok' : 'danger'}>
+          {snap.status === 'won' ? 'You won the battle!' : 'You lost this one.'}{' '}
+          <button class="link" onClick={() => (activeTab.value = 'prep')}>Plan the next NPC in Prep →</button>
+        </Tip>
       ) : snap.status !== 'active' ? (
         <Tip kind="info">Battle state: {snap.status}. Advice shows while the battle is active.</Tip>
-      ) : advice && (
-        <>
-          {advice.forcedSwitch && (
-            <Tip kind="warn">
-              <b>{snap.player?.name ?? 'Your Pokémon'}</b> {snap.player?.hp === 0 ? 'fainted' : 'is out'}. Pick who to send in next{snap.opponent ? <> against <b>{snap.opponent.name}</b></> : ''}: it comes in without taking a hit.
-            </Tip>
-          )}
-          {advice.threat && (
-            <Tip kind={advice.threat.ko === 'sure' ? 'danger' : advice.threat.ko ? 'warn' : 'info'}>
-              Their best hit: <b>{advice.threat.name}</b> {Math.round(advice.threat.minPct)}–{Math.round(advice.threat.maxPct)}% of your max HP
-              {advice.threat.ko === 'sure' ? ' – KOs you' : advice.threat.ko ? ' – can KO you' : ''}.{' '}
-              {advice.threat.youFirst === null ? 'Speed tie.' : advice.threat.youFirst ? 'You are faster.' : 'They are faster.'}
-              {advice.threat.calcError && <span class="chip warn" style={{ padding: '0 7px', marginLeft: '4px' }} title="The damage calc failed for some of their moves: this may not be their best hit.">calc error</span>}
-              <CritChip t={advice.threat} />
-              {advice.threat.ko !== 'sure' && (advice.threat.koChance ?? 0) >= 0.01 && (advice.threat.koChance! - (advice.threat.critKo ?? 0)) >= 0.01 && (
-                <span class="small"> ~{pct(advice.threat.koChance!)} they KO you this turn (likely moves).</span>
-              )}
-            </Tip>
-          )}
-          {advice.prediction && advice.prediction.length > 0 && (
-            <div class="small muted" style={{ padding: '0 4px' }}>
-              <b>Likely next (guess):</b>{' '}
-              {advice.prediction.slice(0, 3).map((g, i) => (
-                <>{i > 0 && ' · '}{g.name} {Math.round(g.prob * 100)}%{g.ko === 'sure' ? ' (KO)' : ''}</>
-              ))}
-              {guessScore.value.total > 0 && <> · guess right {guessScore.value.hit}/{guessScore.value.total} this battle</>}
-              {advice.npcSwitch && <div title={advice.npcSwitch.reason}><b>May switch to {advice.npcSwitch.to}</b> (guess): {advice.npcSwitch.reason}</div>}
-              {advice.seenBefore && snap.opponent && (() => {
-                const key = npcKey(matchNpc(ds, snap), snap);
-                const opp = snap.opponent;
-                return (
-                  <div>
-                    Seen in earlier battles:{' '}
-                    {advice.seenBefore.map((id, i) => {
-                      const others = seenByOthers(observed.value, key, opp.name, opp.level, id);
-                      const you = seenByYou(observed.value, key, opp.name, opp.level, id);
-                      return <>{i > 0 && ', '}{ds.moves[id]?.name ?? id}{others > 0 && (you ? ` (you + others ${others})` : ` (seen by others ${others})`)}</>;
-                    })}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-          <div class="card">
-            <p class="title">{advice.forcedSwitch ? 'Best switch-in' : 'Best options'}</p>
-            {ranked.map((a, i) => <Action a={a} top={i === 0} />)}
-            {!ranked.length && <div class="small muted">Nothing to score yet.</div>}
-            {unscored.length > 0 && (
-              <div class="small muted" style={{ marginTop: '6px' }}>
-                {unscored.map((a) => <div><b>{a.label}</b>: {a.reason}</div>)}
-              </div>
-            )}
-          </div>
-          {advice.notes.length > 0 && <div class="small muted">{advice.notes.map((n) => <div>• {n}</div>)}</div>}
-        </>
-      )}
+      ) : advice && !advice.actions.length ? (
+        <Tip kind="info">{advice.notes.length ? advice.notes.map((n) => <div>{n}</div>) : 'Nothing to rate yet.'}</Tip>
+      ) : advice && (advice.forcedSwitch ? <ForcedSwitch ds={ds} snap={snap} advice={advice} /> : <Turn ds={ds} snap={snap} advice={advice} />)}
 
-      <TowerRun advice={advice} />
-      <CalcCheck gen3={gen3 || advice?.npc?.category === 'frontier'} />
-      <label class="small muted row" style={{ gap: '6px', padding: '0 4px' }} title="Battle Frontier battles use Gen III rules. Turn this on if MeowHelper does not recognise a Frontier battle by itself.">
-        <input type="checkbox" checked={gen3} onChange={(e) => setForceGen3((e.target as HTMLInputElement).checked)} />
-        Battle Frontier: use Gen III rules{advice?.npc?.category === 'frontier' ? ' (on automatically for this Brain)' : ''}
-      </label>
-
-      {snap.log.length > 0 && (
-        <details class="card">
-          <summary class="title" style={{ margin: 0, cursor: 'pointer' }}>Battle log</summary>
-          <div class="small" style={{ marginTop: '6px' }}>{snap.log.slice(-8).map((l) => <div>{l}</div>)}</div>
-        </details>
-      )}
-      <div class="foot">
-        Read from the battle screen {timeAgo(snap.at)}. Score = 2–3 turns looked ahead from the current HP, status and stat stages (their likely replies, damage rolls, crits, secondary effects), then a 1v1 projection; 55+ = you win the 1v1. Advice only – you pick the move.
-      </div>
+      <Fold title="Details">
+        {advice && <DetailBody ds={ds} snap={snap} advice={advice} />}
+        <TowerRun advice={advice} />
+        <CalcCheck gen3={gen3 || advice?.npc?.category === 'frontier'} />
+        <label class="small muted row" style={{ gap: '6px' }} title="Battle Frontier battles use Gen III rules. Turn this on if MeowRPGAdvisor does not recognise a Frontier battle by itself.">
+          <input type="checkbox" checked={gen3} onChange={(e) => setForceGen3((e.target as HTMLInputElement).checked)} />
+          Battle Frontier: use Gen III rules{advice?.npc?.category === 'frontier' ? ' (on automatically for this Brain)' : ''}
+        </label>
+        {snap.log.length > 0 && <div class="card small"><p class="title">Battle log</p>{snap.log.slice(-8).map((l) => <div>{l}</div>)}</div>}
+      </Fold>
+      <div class="foot">Read from the battle screen {timeAgo(snap.at)}. Looks 2–3 turns ahead (their likely replies, damage rolls, crits). Advice only: you pick the move.</div>
     </>
   );
 }
 
-function Side({ ds, label, mon, boosts, foe }: { ds: Dataset; label: string; mon: BattleMon; boosts: Boosts; foe?: boolean }) {
-  const s = Object.values(ds.species).find((x) => x.name.toLowerCase() === mon.name.toLowerCase());
-  const pct = mon.hp !== undefined && mon.maxHp ? Math.max(0, Math.min(100, (100 * mon.hp) / mon.maxHp)) : undefined;
-  const stages = Object.entries(boosts).filter(([, v]) => v);
+/** A normal turn: danger, the four move tiles in the game's order, switches, items. */
+function Turn({ ds, snap, advice }: { ds: Dataset; snap: BattleSnapshot; advice: TurnAdvice }) {
+  const moves = advice.actions.filter((a) => a.kind === 'move').sort((a, b) => (a.slot ?? 9) - (b.slot ?? 9));
+  const switches = advice.actions.filter((a) => a.kind === 'switch');
+  const items = advice.actions.filter((a) => a.kind === 'item');
+  const top = topScore(advice.actions);
+  const best = advice.actions[0]?.score !== null ? advice.actions[0] : undefined; // sorted best first, unrated last
+  const bestMove = best?.kind === 'move' ? best : moves.filter((m) => m.score !== null).sort((a, b) => b.score! - a.score!)[0];
+  const [openSwitch, setOpenSwitch] = useState<string | null>(null);
+  const sw = switches.find((s) => s.label === openSwitch);
+
   return (
-    <div class="mon">
-      <div class={`av${foe ? ' foe' : ''}`}>{mon.name.slice(0, 2).toUpperCase()}</div>
-      <span class="nm">{mon.name}{s && <Types types={s.types} />}</span>
-      <span class="lv">{label} · Lv {mon.level ?? '?'}</span>
-      <div class="full">
-        {pct !== undefined && (
-          <div class="hpbar" role="meter" aria-label={`${mon.name} HP`} aria-valuenow={mon.hp} aria-valuemax={mon.maxHp}>
-            <i class={pct > 50 ? 'g' : pct > 20 ? 'y' : 'r'} style={{ width: `${pct}%` }} />
-          </div>
-        )}
+    <>
+      <DangerStrip threat={advice.threat} />
+      {best && best.kind !== 'move' && (
+        <div class="better">
+          <Icon name={best.kind === 'switch' ? 'swap' : 'bag'} />
+          <span class="grow"><b>{best.label}</b> beats every move: {plainLine(best)}</span>
+          <RatePill score={best.score} top={top} />
+        </div>
+      )}
+      <div class="tiles">
+        {moves.map((a) => <MoveTile ds={ds} snap={snap} a={a} top={top} best={a === bestMove} />)}
       </div>
-      <div class="full small muted row">
-        <span>{mon.hp ?? '?'}/{mon.maxHp ?? '?'} HP</span>
-        {mon.status && <span class="chip on" style={{ padding: '0 7px' }}>{STATUS_LABEL[mon.status] ?? mon.status}</span>}
-        {stages.map(([k, v]) => <span class="chip" style={{ padding: '0 7px' }}>{BOOST_LABEL[k] ?? k} {v! > 0 ? `+${v}` : v}</span>)}
-        {mon.item && <span>@ {mon.item}</span>}
-      </div>
+      {bestMove && (
+        <p class="say">
+          <b>{bestMove.label}</b>: {plainLine(bestMove)}.
+          {advice.threat?.ko === 'sure' && bestMove.facts?.koNow === 'sure' && bestMove.facts.movesFirst ? ' You are in KO range, but you hit first.' : ''}
+          {bestMove.line ? <span class="muted"> Plan: {bestMove.line}.</span> : null}
+        </p>
+      )}
+      <p class="note">Tiles sit where the game's move buttons are. Advice only: you pick the move.</p>
+
+      {switches.length > 0 && (
+        <div class="bench" role="group" aria-label="Switch options">
+          <span class="bl">Switch</span>
+          {switches.map((a) => {
+            const name = a.label.replace(/^(Switch to|Send in) /, '');
+            return (
+              <button class={openSwitch === a.label ? 'on' : ''} aria-expanded={openSwitch === a.label} onClick={() => setOpenSwitch(openSwitch === a.label ? null : a.label)}>
+                <TypeAvatar name={name} types={speciesTypes(ds, name)} size={28} />
+                <span>{name}</span>
+                <RatePill score={a.score} top={top} unknown={a.unknownMoves} calcError={a.calcError} />
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {sw && <p class="say small"><b>{sw.label}:</b> {sw.reason}</p>}
+
+      {items.length > 0 && (
+        <Fold title={`Items (${items.length})`}>
+          <div class="card">{items.map((a) => <Action a={a} top={a === best} topScore={top} />)}</div>
+        </Fold>
+      )}
+      <Guess ds={ds} snap={snap} advice={advice} />
+    </>
+  );
+}
+
+function MoveTile({ ds, snap, a, top, best }: { ds: Dataset; snap: BattleSnapshot; a: ActionAdvice; top: number | null; best: boolean }) {
+  const m = a.moveId ? ds.moves[a.moveId] : undefined;
+  const shown = a.slot !== undefined ? snap.moves[a.slot] : undefined;
+  const type = m?.type ?? shown?.type;
+  // A calc that threw is not "No effect" or "Weak": say so (0.11.1 fix).
+  const r = a.calcError ? { label: 'Calc error', tone: 'calc' } : a.score === null ? { label: a.tag === 'setup' ? 'Support' : 'Not rated', tone: 'none' } : rate(a.score, top);
+  const range = a.calcError ? '—' : a.minPct !== undefined ? `${Math.round(a.minPct)}–${Math.round(a.maxPct!)}%` : m?.category === 'Status' ? 'Status' : '—';
+  const pp = shown?.pp !== undefined ? `PP ${shown.pp}${shown.maxPp ? `/${shown.maxPp}` : ''}` : '';
+  const info = a.calcError ? a.reason : factsLine(a.facts) ?? a.reason;
+  return (
+    <div class={`tile${best ? ' best' : ''}${a.score === 0 || a.score === null ? ' off' : ''}`} style={type ? { '--tc': `var(--t-${type.toLowerCase()})` } : undefined} title={a.reason}>
+      <span class={`rate ${best ? 'best' : r.tone === 'best' ? 'good' : r.tone}`}>{best ? '★ Best' : r.tone === 'best' ? 'Good' : r.label}</span>
+      <b>{a.label}</b>
+      <span class="d">{range}{pp && <span class="muted"> · {pp}</span>}</span>
+      <span class="f">{info}</span>
     </div>
   );
 }
 
-export function Action({ a, top }: { a: ActionAdvice; top: boolean }) {
+/** Your Pokémon fainted: who to send in (it comes in without taking a hit). */
+function ForcedSwitch({ ds, snap, advice }: { ds: Dataset; snap: BattleSnapshot; advice: TurnAdvice }) {
+  const opts = advice.actions;
+  const top = topScore(opts);
+  const allUnknown = opts.length > 0 && opts.every((a) => a.unknownMoves);
+  const safest = [...opts].sort((a, b) => (a.threat?.maxPct ?? 999) - (b.threat?.maxPct ?? 999))[0];
+  const pick = top !== null ? opts[0] : safest;
+  return (
+    <>
+      <div class="banner"><Icon name="x" /> <span><b>{snap.player?.name ?? 'Your Pokémon'}</b> fainted. The next one comes in free, without taking a hit.</span></div>
+      <div class="tiles">
+        {opts.map((a) => {
+          const name = a.label.replace(/^(Switch to|Send in) /, '');
+          const isPick = a === pick;
+          const label = a.unknownMoves ? (isPick ? 'Safest' : 'Moves ?') : rate(a.score, top).label;
+          return (
+            <div class={`tile${isPick ? ' best' : ''}`} style={{ '--tc': `var(--t-${(speciesTypes(ds, name)[0] ?? 'normal').toLowerCase()})` }} title={a.reason}>
+              <span class={`rate ${isPick ? 'best' : a.unknownMoves ? 'none' : rate(a.score, top).tone}`}>{isPick ? `★ ${label === 'Best' ? 'Best' : label}` : label}</span>
+              <b>{name}</b>
+              {a.threat && <span class="d">takes {Math.round(a.threat.minPct)}–{Math.round(a.threat.maxPct)}%{a.threat.ko === 'sure' ? ' · KO' : ''}</span>}
+              <span class="f">{a.unknownMoves ? 'Moves unknown' : a.reason.replace(/^Their .+? to it( \((can )?KOs it\))?\. /, '')}</span>
+            </div>
+          );
+        })}
+      </div>
+      {!opts.length && <Tip kind="warn">No healthy Pokémon left to send in.</Tip>}
+      {allUnknown && (
+        <p class="say">Their moves are unknown: <button class="link" onClick={() => (activeTab.value = 'settings')}>sync your box</button> to rate them. Until then, <b>{safest.label.replace(/^Send in /, '')}</b> takes the least damage.</p>
+      )}
+    </>
+  );
+}
+
+function Guess({ ds, snap, advice }: { ds: Dataset; snap: BattleSnapshot; advice: TurnAdvice }) {
+  if (!advice.prediction?.length) return null;
+  return (
+    <div class="guess">
+      <span>They might use</span>
+      {advice.prediction.slice(0, 3).map((g) => <b>{g.name} <i>{Math.round(g.prob * 100)}%</i>{g.ko === 'sure' ? <i> (KO)</i> : null}</b>)}
+      {advice.npcSwitch && <span class="small" title={advice.npcSwitch.reason}>· may switch to <b>{advice.npcSwitch.to}</b></span>}
+      {guessScore.value.total > 0 && <i class="small">· guessed right {guessScore.value.hit}/{guessScore.value.total}</i>}
+      {advice.seenBefore && snap.opponent && (() => {
+        const key = npcKey(matchNpc(ds, snap), snap);
+        const opp = snap.opponent;
+        return (
+          <div class="small muted" style={{ width: '100%' }}>
+            Seen in earlier battles:{' '}
+            {advice.seenBefore.map((id, i) => {
+              const others = seenByOthers(observed.value, key, opp.name, opp.level, id);
+              const you = seenByYou(observed.value, key, opp.name, opp.level, id);
+              return <>{i > 0 && ', '}{ds.moves[id]?.name ?? id}{others > 0 && (you ? ` (you + ${others} others)` : ` (seen by ${others} others)`)}</>;
+            })}
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
+/** Everything behind "Details": notes, every option with its full reason (and score, for the curious). */
+function DetailBody({ advice }: { ds: Dataset; snap: BattleSnapshot; advice: TurnAdvice }) {
+  const top = topScore(advice.actions);
+  return (
+    <>
+      {advice.notes.length > 0 && <div class="small muted">{advice.notes.map((n) => <div>• {n}</div>)}</div>}
+      {advice.actions.length > 0 && (
+        <div class="card">
+          <p class="title">All options <span class="r">score 0–100 in brackets</span></p>
+          {advice.actions.map((a) => <Action a={a} top={false} topScore={top} showScore />)}
+        </div>
+      )}
+    </>
+  );
+}
+
+/** One option as a row: rating in words, label, reason. Also used by Wild → Defeat it. */
+export function Action({ a, top, topScore: ts, showScore }: { a: ActionAdvice; top: boolean; topScore?: number | null; showScore?: boolean }) {
   return (
     <div class={`act${top ? ' top' : ''}`}>
-      <span class={`score ${scoreClass(a.score ?? 0)}`}>{a.score}</span>
+      <RatePill score={a.score} top={ts ?? (top ? a.score : undefined)} unknown={a.unknownMoves} calcError={a.calcError} />
       <div class="grow">
-        <b>{a.kind === 'switch' ? '⇄ ' : a.kind === 'item' ? '🎒 ' : ''}{a.label}</b>
+        <b>{a.label}</b>
         {a.minPct !== undefined && <span class="muted"> · {Math.round(a.minPct)}–{Math.round(a.maxPct!)}%</span>}
-        {a.calcError && <span class="chip warn" style={{ padding: '0 7px', marginLeft: '4px' }} title="The damage calc failed for this row (details in the notes and the console). Please report it.">calc error</span>}
-        {a.tag === 'setup' && <span class="chip" style={{ padding: '0 7px', marginLeft: '4px' }} title="Support move: compared with attacking right away (stat stages, status, screens, weather, hazards).">Setup</span>}
-        {a.ko === 'sure' && <span class="chip on" style={{ padding: '0 7px', marginLeft: '4px' }}>KO</span>}
-        {a.threat?.ko && <span class="chip" style={{ padding: '0 7px', marginLeft: '4px' }}>{a.threat.ko === 'sure' ? 'They KO it' : 'They can KO it'}</span>}
-        {a.threat && a.threat.ko !== 'sure' && <CritChip t={a.threat} />}
+        {showScore && a.score !== null && <span class="muted small"> ({a.score})</span>}
+        {a.calcError && <span class="chip warn sm" style={{ marginLeft: '4px' }} title="The damage calc failed for this row (details in the notes and the console). Please report it.">calc error</span>}
+        {a.threat?.ko && <span class="chip sm" style={{ marginLeft: '4px' }}>{a.threat.ko === 'sure' ? 'They KO it' : 'They can KO it'}</span>}
+        {a.threat && a.threat.ko !== 'sure' && (a.threat.critKo ?? 0) >= 0.01 && <span class="chip sm" style={{ marginLeft: '4px' }}>Crit risk {pct(a.threat.critKo!)}</span>}
         <div class="small muted">{a.reason}</div>
-        {a.line && (top || a.tag === 'setup' || a.kind === 'switch') && <div class="small" title="Most likely line of play (lookahead): your moves, their likely replies.">▸ {a.line}</div>}
+        {a.line && (top || a.tag === 'setup' || a.kind === 'switch') && <div class="small">▸ {a.line}</div>}
       </div>
     </div>
-  );
-}
-
-const pct = (x: number) => (x > 0 && x < 0.01 ? '<1%' : `${Math.round(x * 100)}%`);
-
-/** Chance a critical hit KOs (only shown when it is the crit that does it). */
-function CritChip({ t }: { t: ThreatInfo }) {
-  if ((t.critKo ?? 0) < 0.01) return null;
-  return (
-    <span class="chip" style={{ padding: '0 7px', marginLeft: '4px' }} title="Chance their crit KOs this turn when a normal hit would not (their likely moves).">
-      Crit risk {pct(t.critKo!)}
-    </span>
   );
 }
 
 const VERDICT = { ok: '✓', off: '✗', 'set-mismatch': '≠' } as const;
 
-/** Real damage from the battle log vs the calc range for the same hit. */
 /** Battle Tower attempt: what is left and what your team still has (HP, status and PP carry over). */
 function TowerRun({ advice }: { advice: TurnAdvice | null }) {
   const run = towerRun.value;
@@ -228,30 +295,29 @@ function TowerRun({ advice }: { advice: TurnAdvice | null }) {
   );
 }
 
+/** Real damage from the battle log vs the calc range for the same hit. */
 function CalcCheck({ gen3 }: { gen3?: boolean }) {
   const checks = damageChecks.value;
   if (!checks.length) return null;
   const judged = checks.filter((c) => c.verdict !== 'set-mismatch');
   const ok = judged.filter((c) => c.verdict === 'ok').length;
   return (
-    <details class="card">
-      <summary class="title" style={{ margin: 0, cursor: 'pointer' }}>
-        Calc check <span class="r">{judged.length ? `${ok}/${judged.length} hits in range` : 'sets differ'}</span>
-      </summary>
-      <div class="small" style={{ marginTop: '6px' }}>
+    <div class="card">
+      <p class="title">Calc check <span class="r">{judged.length ? `${ok}/${judged.length} hits in range` : 'sets differ'}</span></p>
+      <div class="small">
         {checks.slice(-8).map((c) => (
           <div title={c.verdict === 'set-mismatch' ? 'Max HP on screen differs from the calc: IVs/EVs/level in the data differ, so this hit is not judged.' : undefined}>
             <b class={c.verdict === 'ok' ? 'ok-t' : c.verdict === 'off' ? 'bad-t' : 'muted'}>{VERDICT[c.verdict]}</b>{' '}
-            {c.attacker} {c.move} → {c.target}: <b>{c.damage}</b>{c.crit && <span class="chip" style={{ padding: '0 7px', marginLeft: '4px' }}>Crit</span>} <span class="muted">(calc {c.crit ? 'crit ' : ''}{c.lo}–{c.hi}{c.spread ? ', spread ×0.75' : ''}{c.capped ? ', KO: capped' : ''})</span>
+            {c.attacker} {c.move} → {c.target}: <b>{c.damage}</b>{c.crit && <span class="chip sm" style={{ marginLeft: '4px' }}>Crit</span>} <span class="muted">(calc {c.crit ? 'crit ' : ''}{c.lo}–{c.hi}{c.spread ? ', spread ×0.75' : ''}{c.capped ? ', KO: capped' : ''})</span>
           </div>
         ))}
       </div>
       <div class="small muted" style={{ marginTop: '4px' }}>Damage the game reported vs the {gen3 ? 'Gen III' : 'Gen 9'} calc. Only hits where both Pokémon's exact sets are known; crits are checked against the crit range, multi-hit and other unusual hits are skipped.</div>
-    </details>
+    </div>
   );
 }
 
-/* ---------------- Doubles (Phase 4b) ---------------- */
+/* ---------------- Doubles ---------------- */
 
 function DoublesLive({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
   const advice = useMemo(
@@ -259,108 +325,114 @@ function DoublesLive({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
     [ds, snap, box.value, observed.value, doublesMoves.value, forceGen3.value],
   );
   const ended = snap.status === 'won' || snap.status === 'lost';
-  const mine = snap.actives?.player ?? [];
   const theirs = snap.actives?.opponent ?? [];
   return (
     <>
-      <div class="card">
-        <p class="title" style={{ margin: 0 }}>
-          vs {snap.opponentName ?? 'opponent'} <span class="chip sm">Doubles</span>
-          <span class="r">{snap.turn ? `Turn ${snap.turn}` : ''}</span>
-        </p>
-        {theirs.map((m) => <Side ds={ds} label={`Them · ${m.position ?? ''}`} mon={m} boosts={m.stages ?? {}} foe />)}
-        {mine.map((m) => <Side ds={ds} label={`You · ${m.position ?? ''}`} mon={m} boosts={m.stages ?? {}} />)}
+      <VsHead snap={snap} extra="Doubles" />
+      <div class="two">
+        {theirs.map((m) => <Plate ds={ds} mon={m} foe small />)}
       </div>
-
       {ended ? (
         <Tip kind={snap.status === 'won' ? 'ok' : 'danger'}>{snap.status === 'won' ? 'You won the battle!' : 'You lost this one.'}</Tip>
       ) : snap.status !== 'active' ? (
         <Tip kind="info">Battle state: {snap.status}. Advice shows while the battle is active.</Tip>
-      ) : advice && <DoublesBody advice={advice} />}
+      ) : advice && <DoublesBody ds={ds} advice={advice} snap={snap} />}
 
-      <CalcCheck />
-      {snap.log.length > 0 && (
-        <details class="card">
-          <summary class="title" style={{ margin: 0, cursor: 'pointer' }}>Battle log</summary>
-          <div class="small" style={{ marginTop: '6px' }}>{snap.log.slice(-8).map((l) => <div>{l}</div>)}</div>
-        </details>
-      )}
-      <div class="foot">
-        Read from the battle screen {timeAgo(snap.at)}. Doubles score = one-turn view: damage on the target's HP left, KO chance, how dangerous the target is, spread moves at ×0.75 minus the hit on your ally. Advice only – you pick the moves and targets.
-      </div>
+      <Fold title="Details">
+        {advice && advice.foes.length > 0 && (
+          <div class="small">
+            <b>Their likely moves (guess):</b>
+            {advice.foes.map((f) => (
+              <div>{f.mon.name}: {f.likely.map((g, i) => <>{i > 0 && ' · '}{g.name}{g.spread ? ' (hits both)' : g.target ? ` → ${g.target}` : ''} {Math.round(g.prob * 100)}%{g.ko === 'sure' ? ' (KO)' : ''}</>)}</div>
+            ))}
+            {guessScore.value.total > 0 && <div class="muted">Guessed right {guessScore.value.hit}/{guessScore.value.total} this battle</div>}
+          </div>
+        )}
+        {advice && advice.order.length > 0 && <div class="small"><b>Speed order:</b> {advice.order.map((o) => `${o.name}${o.side === 'opponent' ? ' (them)' : ''}`).join(' → ')}</div>}
+        {advice && advice.notes.length > 0 && <div class="small muted">{advice.notes.map((n) => <div>• {n}</div>)}</div>}
+        <CalcCheck />
+        {snap.log.length > 0 && <div class="card small"><p class="title">Battle log</p>{snap.log.slice(-8).map((l) => <div>{l}</div>)}</div>}
+      </Fold>
+      <div class="foot">Read from the battle screen {timeAgo(snap.at)}. Doubles look one turn ahead: damage on what's left, KO chance, spread moves at ×0.75 minus the hit on your ally. Advice only: you pick moves and targets.</div>
     </>
   );
 }
 
-function DoublesBody({ advice }: { advice: DoublesAdvice }) {
+function targetText(a: DoublesAction) {
+  if (a.spread) return 'all adjacent';
+  if (!a.target) return '';
+  return `${a.target.side === 'opponent' ? '' : 'ally '}${a.target.name}`;
+}
+
+function DoublesBody({ ds, advice, snap }: { ds: Dataset; advice: DoublesAdvice; snap: BattleSnapshot }) {
+  const planned = new Set(advice.plan?.picks ?? []);
   return (
     <>
       {advice.plan && advice.plan.picks.length > 0 && (
         <div class="card">
-          <p class="title">Suggested this turn <span class="r small muted">score {advice.plan.score}</span></p>
-          {advice.plan.picks.map((a) => (
-            <div class="small" style={{ margin: '2px 0' }}><b>{a.user}</b>: {a.label} <TargetChip a={a} /></div>
-          ))}
-          {advice.plan.why.length > 0 && <div class="small muted" style={{ marginTop: '4px' }}>{advice.plan.why.map((w) => <div>• {w}</div>)}</div>}
+          <p class="title">This turn</p>
+          {advice.plan.picks.map((a) => <div class="say"><b>{a.user}</b>: {a.label}{targetText(a) ? <span class="muted"> → {targetText(a)}</span> : ''}</div>)}
+          {advice.plan.why.length > 0 && <div class="small muted" style={{ marginTop: '4px' }}>{advice.plan.why.join(' · ')}</div>}
         </div>
       )}
-      {advice.mine.map((m) => (
-        <div class="card">
-          <p class="title">{m.mon.name} <span class="r small muted">{m.mon.position ? `Position ${m.mon.position}` : ''}</span></p>
-          {m.danger && (
-            <div class={`small ${m.danger.ko === 'sure' ? 'bad-t' : m.danger.ko ? 'warn-t' : 'muted'}`} style={{ marginBottom: '4px' }}>
-              If both foes hit it: {Math.round(m.danger.minPct)}–{Math.round(m.danger.maxPct)}%{m.danger.ko === 'sure' ? ' – KOs it' : m.danger.ko ? ' – can KO it' : ''} ({m.danger.from.join(', ')}).
-            </div>
-          )}
-          {m.actions.filter((a) => a.score !== null).slice(0, 5).map((a, i) => <DoublesActionRow a={a} top={i === 0} />)}
-          {!m.actions.length && <div class="small muted">Moves not known yet: open {m.mon.name}'s command (or its Switch card) in the game once, or sync your box.</div>}
-          {m.actions.some((a) => a.score === null) && (
-            <div class="small muted" style={{ marginTop: '4px' }}>
-              {m.actions.filter((a) => a.score === null).map((a) => <div><b>{a.label}</b>: {a.reason}</div>)}
-            </div>
-          )}
-          {m.movesFrom === 'box' && <div class="small muted" style={{ marginTop: '4px' }}>Moves from your box (not seen on the battle screen yet).</div>}
-        </div>
+      {advice.mine.map((m) => <DoublesSlot ds={ds} m={m} planned={planned} />)}
+      {/* Your Pokémon the advisor could not place (not in the data): still shown, so both slots are there. */}
+      {(snap.actives?.player ?? []).filter((p) => !advice.mine.some((m) => m.mon.name === p.name) && (p.hp ?? 1) > 0).map((p) => (
+        <section class="slot" aria-label={p.name}>
+          <div class="sh"><span class="side">{p.position === 2 ? 'RIGHT' : p.position === 1 ? 'LEFT' : 'YOU'}</span><TypeAvatar name={p.name} types={speciesTypes(ds, p.name)} size={26} /><b>{p.name}</b><Hp pct={hpPct(p.hp, p.maxHp)} label={`${p.name} HP`} /></div>
+          <div class="small muted">No advice for {p.name}: it is not in the synced wiki data, or its moves are unknown. Sync the data and your box.</div>
+        </section>
       ))}
-      {advice.foes.length > 0 && (
-        <div class="small muted" style={{ padding: '0 4px' }}>
-          <b>Their likely moves (guess):</b>
-          {advice.foes.map((f) => (
-            <div>
-              {f.mon.name}: {f.likely.map((g, i) => <>{i > 0 && ' · '}{g.name}{g.spread ? ' (hits both)' : g.target ? ` → ${g.target}` : ''} {Math.round(g.prob * 100)}%{g.ko === 'sure' ? ' (KO)' : ''}</>)}
-            </div>
-          ))}
-          {guessScore.value.total > 0 && <div>Guess right {guessScore.value.hit}/{guessScore.value.total} this battle</div>}
-        </div>
-      )}
-      {advice.order.length > 0 && (
-        <div class="small muted" style={{ padding: '0 4px' }}>
-          <b>Speed order:</b> {advice.order.map((o) => `${o.name}${o.side === 'opponent' ? ' (them)' : ''}`).join(' → ')}
-        </div>
-      )}
-      {advice.notes.length > 0 && <div class="small muted">{advice.notes.map((n) => <div>• {n}</div>)}</div>}
     </>
   );
 }
 
-function TargetChip({ a }: { a: DoublesAction }) {
-  if (a.spread) return <span class="chip sm" title="Hits every adjacent Pokémon (×0.75 each)">all adjacent</span>;
-  if (!a.target) return null;
-  const who = a.target.side === 'opponent' ? `Opponent ${a.target.position ?? ''}`.trim() : `Ally ${a.target.position ?? ''}`.trim();
-  return <span class="chip sm" title={`Pick “${who} : ${a.target.name}” in the game's target list`}>→ {a.target.name}</span>;
-}
-
-function DoublesActionRow({ a, top }: { a: DoublesAction; top: boolean }) {
+function DoublesSlot({ ds, m, planned }: { ds: Dataset; m: DoublesMonAdvice; planned: Set<DoublesAction> }) {
+  const scored = m.actions.filter((a) => a.score !== null);
+  const top = topScore(scored);
+  const pick = scored.find((a) => planned.has(a)) ?? scored[0];
+  const rest = scored.filter((a) => a !== pick).slice(0, 3);
+  const calcErrors = m.actions.filter((a) => a.score === null && /^Calc error/.test(a.reason));
+  const threat: ThreatInfo | undefined = m.danger ? { name: m.danger.from.join(' + '), minPct: m.danger.minPct, maxPct: m.danger.maxPct, ko: m.danger.ko, youFirst: null } : undefined;
+  const type = pick?.moveId ? ds.moves[pick.moveId]?.type : undefined;
   return (
-    <div class={`act${top ? ' top' : ''}`}>
-      <span class={`score ${scoreClass(a.score ?? 0)}`}>{a.score}</span>
-      <div class="grow">
-        <b>{a.label}</b> <TargetChip a={a} />
-        {a.hits?.some((h) => h.ko === 'sure' && h.side === 'opponent') && <span class="chip on sm" style={{ marginLeft: '4px' }}>KO</span>}
-        {(a.allyHit || a.allyUnknown) && <span class="chip warn sm" style={{ marginLeft: '4px' }} title={`Also hits your ${a.allyHit?.name ?? a.allyUnknown}`}>Hits ally</span>}
-        {a.combo && <span class="chip sm" style={{ marginLeft: '4px' }} title={a.combo}>Combo</span>}
-        <div class="small muted">{a.reason}{a.combo ? ` ${a.combo}.` : ''}</div>
+    <section class="slot" aria-label={m.mon.name}>
+      <div class="sh">
+        <span class="side">{m.mon.position === 2 ? 'RIGHT' : m.mon.position === 1 ? 'LEFT' : 'YOU'}</span>
+        <TypeAvatar name={m.mon.name} types={speciesTypes(ds, m.mon.name)} size={26} />
+        <b>{m.mon.name}</b>
+        <Hp pct={hpPct(m.mon.hp, m.mon.maxHp)} ghost={threat ? [threat.minPct, threat.maxPct] : undefined} label={`${m.mon.name} HP`} />
       </div>
-    </div>
+      {m.danger && (
+        <div class={`small ${m.danger.ko === 'sure' ? 'bad-t' : m.danger.ko ? 'warn-t' : 'muted'}`}>
+          {m.danger.ko === 'sure' ? 'KO risk: both foes together KO it' : m.danger.ko ? 'Watch: both foes together can KO it' : 'Safe from both foes this turn'} ({Math.round(m.danger.minPct)}–{Math.round(m.danger.maxPct)}%, {m.danger.from.join(', ')}).
+        </div>
+      )}
+      {pick ? (
+        <div class="tile wide best" style={type ? { '--tc': `var(--t-${type.toLowerCase()})` } : undefined} title={pick.reason}>
+          <span class="rate best">★ {planned.has(pick) ? 'This turn' : 'Best'}</span>
+          <b>{pick.label}</b>
+          <span class="d">{targetText(pick) ? `→ ${targetText(pick)}` : ''}{pick.hits?.some((h) => h.ko === 'sure' && h.side === 'opponent') ? ' · KO' : ''}</span>
+          <span class="f">{pick.reason}{pick.combo ? ` ${pick.combo}.` : ''}</span>
+          {(pick.allyHit || pick.allyUnknown) && !/hits your/.test(pick.reason) && <span class="f bad-t">Also hits your {pick.allyHit?.name ?? pick.allyUnknown}.</span>}
+        </div>
+      ) : <div class="small muted">Moves not known yet: open {m.mon.name}'s command (or its Switch card) in the game once, or sync your box.</div>}
+      {rest.length > 0 && (
+        <div class="alts">
+          {rest.map((a) => (
+            <div title={a.reason}>
+              <RatePill score={a.score} top={top} />
+              <b>{a.label}</b>
+              <span class="grow">{targetText(a) ? `→ ${targetText(a)}` : ''}{(a.allyHit || a.allyUnknown) ? ' · hits ally' : ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {calcErrors.map((a) => (
+        <div class="alts"><div title={a.reason}><span class="pill calc">Calc error</span><b>{a.label}</b><span class="grow">{targetText(a) ? `→ ${targetText(a)}` : ''} not scored</span></div></div>
+      ))}
+      {m.movesFrom === 'box' && <div class="note">Moves from your box (not seen on the battle screen yet).</div>}
+    </section>
   );
 }
+

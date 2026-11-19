@@ -101,7 +101,7 @@ export interface RunMon {
   pp: { name: string; pp?: number; maxPp?: number }[];
 }
 
-/** What MeowHelper remembers about one Battle Tower attempt (or a carry-over Frontier run). */
+/** What MeowRPGAdvisor remembers about one Battle Tower attempt (or a carry-over Frontier run). */
 export interface RunState {
   key: string;
   startedAt: number;

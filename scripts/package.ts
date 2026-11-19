@@ -1,5 +1,5 @@
 /**
- * Zips the built extension (dist/) into release/MeowHelper-<version>.zip to send to friends.
+ * Zips the built extension (dist/) into release/MeowRPGAdvisor-<version>.zip to send to friends.
  * Run `npm run package` (it builds first). The zip is ignored by git.
  */
 import { execFileSync } from 'node:child_process';
@@ -13,7 +13,7 @@ if (!existsSync(resolve(dist, 'manifest.json'))) throw new Error('dist/ is missi
 const { version } = JSON.parse(readFileSync(resolve(dist, 'manifest.json'), 'utf8'));
 const outDir = resolve(root, 'release');
 mkdirSync(outDir, { recursive: true });
-const zip = resolve(outDir, `MeowHelper-${version}.zip`);
+const zip = resolve(outDir, `MeowRPGAdvisor-${version}.zip`);
 rmSync(zip, { force: true });
 
 if (process.platform === 'win32' || process.platform === 'darwin') {

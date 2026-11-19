@@ -49,6 +49,26 @@ export interface ActionAdvice {
   line?: string;
   /** The damage calc threw for this row: its numbers are missing or incomplete (shown as "calc error"). */
   calcError?: boolean;
+  /** Move rows: position in the game's move grid (0–3, the order the battle screen lists them). */
+  slot?: number;
+  /** Damaging move rows: plain facts the UI turns into words (see plain.ts). */
+  facts?: MoveFacts;
+  /**
+   * Switch-ins that are not in your box and have no known damaging move: their moves are unknown,
+   * so they are not scored (score null) instead of getting a misleading low number.
+   */
+  unknownMoves?: boolean;
+}
+
+export interface MoveFacts {
+  /** KO from the target's current HP this turn: 'sure' on every roll, 'chance' on a high roll. */
+  koNow?: 'sure' | 'chance';
+  /** Hits needed to KO (one-turn projection); undefined when it never KOs. */
+  hitsToKo?: number;
+  /** You move before their best hit (null = speed tie). */
+  movesFirst: boolean | null;
+  /** Chance to hit in %, only when below 100 (base accuracy and accuracy/evasion stages). */
+  accuracy?: number;
 }
 
 export interface ThreatInfo {
@@ -68,7 +88,7 @@ export interface ThreatInfo {
 export interface TurnAdvice {
   npc?: Npc;
   variant?: NpcTeamVariant;
-  /** Their active Pokémon as MeowHelper knows it (wiki set) and whether it was found in the NPC's team. */
+  /** Their active Pokémon as MeowRPGAdvisor knows it (wiki set) and whether it was found in the NPC's team. */
   foe?: { mon: NpcMon; known: boolean };
   me?: { mon: BoxMon; known: boolean };
   actions: ActionAdvice[];
@@ -345,7 +365,8 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
   // Best attack's one-turn projection score (plan A), to rebase item rows onto the lookahead scale.
   let planA1 = -1;
 
-  // Your moves
+  // Your moves (each gets its slot in the game's move grid below)
+  const moveRowsFrom = out.actions.length;
   for (const m of snap.moves) {
     const g = idx.moves.get(lc(m.name));
     if (!g) {
@@ -470,8 +491,14 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
         reason += ' You hit before it can use Destiny Bond.';
       }
     }
-    out.actions.push({ kind: 'move', label: m.name, moveId: g.id, minPct: d.minPct, maxPct: d.maxPct, ko, score, reason, koChance, critKo, line });
+    const facts: MoveFacts = {
+      koNow: ko, hitsToKo: p.myTurns === Infinity ? undefined : p.myTurns, movesFirst: first,
+      accuracy: !alwaysHits && hitChance < 1 ? Math.round(hitChance * 100) : undefined,
+    };
+    out.actions.push({ kind: 'move', label: m.name, moveId: g.id, minPct: d.minPct, maxPct: d.maxPct, ko, score, reason, koChance, critKo, line, facts });
   }
+  // The loop pushes exactly one row per entry of snap.moves, in order.
+  out.actions.slice(moveRowsFrom).forEach((a, i) => (a.slot = i));
 
   // Items from your bag
   const supply = resolveItems(snap, opts.items);
@@ -650,7 +677,11 @@ function switchAdviceInner(ds: Dataset, idx: Idx, box: BoxMon[], r: RosterMon, f
   const hpAfter = curPct(p) - avg(incoming);
   if (hpAfter <= 0) return { kind: 'switch', label, score: 0, reason: `Would faint switching in (${incoming ? `${incoming.name} ${pctTxt(incoming)}` : ''}).` };
   const mineBest = bestMove(ds, p, foeCalc, repeatable(moves.filter((id) => !rules.bannedMoves.has(id))), field);
-  if (!mineBest) return { kind: 'switch', label, score: 5, reason: `Takes ~${Math.round(avg(incoming))}% switching in; no known damaging move${mine.known ? '' : ' (not in your box)'}.` };
+  if (!mineBest) {
+    return mine.known
+      ? { kind: 'switch', label, score: 5, reason: `Takes ~${Math.round(avg(incoming))}% switching in; no known damaging move.` }
+      : { kind: 'switch', label, score: null, unknownMoves: true, reason: `Takes ~${Math.round(avg(incoming))}% switching in. Its moves are unknown (not in your box): sync your box to rate it.` };
+  }
   const first = order(p, foeCalc, mineBest.priority, incoming?.priority ?? 0);
   const proj = project(mineBest.expectedPct, avg(incoming), hpAfter, curPct(foeCalc), first);
   // Switching gives up this turn's attack: small penalty so a good attack wins ties.
@@ -673,7 +704,11 @@ function freeSwitchAdvice(
     : undefined;
   const hit = threat ? `Their ${threat.name} does ${pctTxt(threat)} to it${threat.ko === 'sure' ? ' (KOs it)' : threat.ko ? ' (can KO it)' : ''}. ` : '';
   const note = known ? '' : ' (Not in your box: average IVs.)';
-  if (!mineBest) return { kind: 'switch', label, score: 5, threat, reason: `${hit}No known damaging move.${note}` };
+  if (!mineBest) {
+    return known
+      ? { kind: 'switch', label, score: 5, threat, reason: `${hit}No known damaging move.` }
+      : { kind: 'switch', label, score: null, unknownMoves: true, threat, reason: `${hit}Its moves are unknown (not in your box): sync your box to rate it.` };
+  }
   const proj = project(mineBest.expectedPct, avg(incoming), hp, curPct(foeCalc), first);
   const speed = first === null ? 'speed tie' : first ? 'it moves first' : 'they move first';
   return {

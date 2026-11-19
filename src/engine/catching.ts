@@ -98,7 +98,7 @@ export interface BallEffect {
   rateDelta?: number;
   /** Always catches (Master Ball). */
   guaranteed?: boolean;
-  /** The bonus depends on something MeowHelper cannot know (weight). */
+  /** The bonus depends on something MeowRPGAdvisor cannot know (weight). */
   unknown?: boolean;
   /** Short reason, e.g. "×3.5 Water type". */
   why: string;

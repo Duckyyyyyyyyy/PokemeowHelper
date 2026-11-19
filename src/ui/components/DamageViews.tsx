@@ -70,7 +70,7 @@ export function MovesetPanel({ ds, mon, v, rules }: { ds: Dataset; mon: BoxMon; 
       out.push(
         tms
           ? { title: 'With TMs in your bag', note: 'Only TMs you own (as of the last time you opened the Bag page).', s: withTm }
-          : { title: 'With TMs', note: "Any TM. Open your Bag page in the game once and MeowHelper will only suggest TMs you own.", s: withTm },
+          : { title: 'With TMs', note: "Any TM. Open your Bag page in the game once and MeowRPGAdvisor will only suggest TMs you own.", s: withTm },
       );
     return out;
   }, [ds, mon, v, rules, cap, tms]);

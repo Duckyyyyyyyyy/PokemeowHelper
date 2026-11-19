@@ -39,7 +39,7 @@ describe('import validation', () => {
   });
   it('rejects bad input', () => {
     expect(() => parseImport('nope', ds)).toThrow(/JSON/);
-    expect(() => parse({ ...exp(), format: 'other' })).toThrow(/not a MeowHelper/);
+    expect(() => parse({ ...exp(), format: 'other' })).toThrow(/not a MeowRPGAdvisor/);
     expect(() => parse({ ...exp(), formatVersion: 2 })).toThrow(/version/);
     expect(() => parse({ ...exp(), sourceId: '<script>' })).toThrow(/source id/);
     expect(() => parse({ ...exp(), npcs: [] })).toThrow(/NPC data/);

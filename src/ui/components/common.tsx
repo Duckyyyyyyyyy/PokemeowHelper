@@ -2,8 +2,8 @@ import type { ComponentChildren } from 'preact';
 import { useState } from 'preact/hooks';
 import type { Dataset } from '../../shared/types';
 
-/** Type colours too light for white text get dark text instead. */
-const LIGHT_TEXT = new Set(['Electric', 'Ice', 'Ground', 'Normal', 'Bug', 'Steel']);
+/** Type colours dark enough that white text reads better than dark text (AA-checked in tests/theme.test.ts). */
+export const WHITE_TEXT_TYPES = new Set(['Fighting', 'Poison', 'Ghost', 'Dragon', 'Dark']);
 
 export function typeColor(t: string) {
   return `var(--t-${t.toLowerCase()})`;
@@ -11,7 +11,7 @@ export function typeColor(t: string) {
 
 export function TypeBadge({ type }: { type: string }) {
   return (
-    <span class={`type${LIGHT_TEXT.has(type) ? ' light' : ''}`} style={{ background: typeColor(type) }}>
+    <span class={`type${WHITE_TEXT_TYPES.has(type) ? ' wt' : ''}`} style={{ background: typeColor(type) }}>
       {type}
     </span>
   );

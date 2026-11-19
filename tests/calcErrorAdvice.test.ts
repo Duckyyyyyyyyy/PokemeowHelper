@@ -36,6 +36,9 @@ describe('calc errors in the Battle tab advice', () => {
     expect(zen.score).toBeNull();
     expect(zen.reason).toMatch(/Calc error: boom/);
     expect(zen.reason).not.toMatch(/No effect/);
+    // Arena HUD tiles: the failed row keeps its game slot and has no damage facts to misread.
+    expect(zen.slot).toBe(snap.moves.findIndex((m) => m.name === zen.label));
+    expect(zen.facts).toBeUndefined();
     expect(a.actions.find((x) => x.moveId === 'meteormash')!.score).toBeGreaterThan(0);
     expect(a.calcErrors?.length).toBeGreaterThan(0);
     expect(a.notes[0]).toMatch(/^Calc error: the damage calc failed/);

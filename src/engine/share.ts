@@ -3,7 +3,7 @@ import { lc } from './turnAdvisor';
 import { obsKey, type ObservedStore } from './observed';
 
 /**
- * Sharing what MeowHelper learned about NPCs, by file only (no server). The file holds NPC ids,
+ * Sharing what MeowRPGAdvisor learned about NPCs, by file only (no server). The file holds NPC ids,
  * variant labels, Pokémon names and move ids — nothing about the player (no name, box, team, bag).
  * `sourceId` is a random id made once on this computer, used only so importing the same
  * contributor twice replaces instead of double-counting.
@@ -89,7 +89,7 @@ export function parseImport(text: string, ds: Dataset): ParsedImport {
   } catch {
     throw new Error('Not a valid JSON file.');
   }
-  if (!isObj(data) || data.format !== SHARE_FORMAT) throw new Error('This is not a MeowHelper NPC data file.');
+  if (!isObj(data) || data.format !== SHARE_FORMAT) throw new Error('This is not a MeowRPGAdvisor NPC data file.');
   if (data.formatVersion !== SHARE_VERSION) throw new Error('Unsupported file version.');
   if (typeof data.sourceId !== 'string' || !ID_RE.test(data.sourceId)) throw new Error('Missing or invalid source id.');
   const exportedAt = typeof data.exportedAt === 'string' && !Number.isNaN(Date.parse(data.exportedAt)) ? data.exportedAt : '';

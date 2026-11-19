@@ -241,3 +241,49 @@ export function supportLead(ds: Dataset, mon: BoxMon, v: NpcTeamVariant, opts: S
   }
   return best;
 }
+
+/* ---------------- matchups in words (Prep grid, big rosters) ---------------- */
+
+export type Outcome = 'win' | 'close' | 'lose';
+
+/**
+ * One matchup cell as a word: wins the 1v1, close, or loses. Uses the damage duel when there is one,
+ * else the score (Battle Tower scores are on the endurance scale: 35+ = win).
+ */
+export function outcomeOf(p: PairResult, tower = false): Outcome {
+  const close = tower ? 25 : 45;
+  if (p.duel) return p.duel.win ? 'win' : p.score >= close ? 'close' : 'lose';
+  return p.score >= (tower ? 35 : 55) ? 'win' : p.score >= close ? 'close' : 'lose';
+}
+
+export interface FoeRow {
+  /** Index into the NPC team (variant.team). */
+  index: number;
+  /** How many of your team win the 1v1. */
+  wins: number;
+  /** Your best answer to it, and how that goes. */
+  best?: Candidate;
+  bestOutcome: Outcome;
+}
+
+/**
+ * NPC Pokémon ordered hardest first: fewest of your team win, then the weakest best answer.
+ * Big rosters (Battle Tower: 20 Pokémon) show the top rows of this instead of the full grid.
+ */
+export function hardestFoes(team: Candidate[], foeCount: number, tower = false): FoeRow[] {
+  const rows: (FoeRow & { bestScore: number })[] = [];
+  for (let j = 0; j < foeCount; j++) {
+    let best: Candidate | undefined;
+    let bestScore = -1;
+    let wins = 0;
+    for (const c of team) {
+      const p = c.pairs[j];
+      if (!p) continue;
+      if (outcomeOf(p, tower) === 'win') wins++;
+      if (p.score > bestScore) { bestScore = p.score; best = c; }
+    }
+    rows.push({ index: j, wins, best, bestScore, bestOutcome: best ? outcomeOf(best.pairs[j], tower) : 'lose' });
+  }
+  rows.sort((a, b) => a.wins - b.wins || a.bestScore - b.bestScore || a.index - b.index);
+  return rows.map(({ bestScore: _s, ...r }) => r);
+}

@@ -5,7 +5,7 @@ import { DEFAULT_BOUNDS, MODE_KEY, WINDOW_BOUNDS_KEY, isGameUrl, normalizeMode, 
 // chrome.storage and the UI listens there. Nothing here touches the game page.
 
 const PAGE = 'sidepanel.html';
-const log = (err: unknown) => console.error('[MeowHelper]', err);
+const log = (err: unknown) => console.error('[MeowRPGAdvisor]', err);
 
 async function getMode(): Promise<UiMode> {
   const r = await chrome.storage.local.get(MODE_KEY);

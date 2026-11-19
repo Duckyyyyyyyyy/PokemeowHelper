@@ -18,7 +18,7 @@ import { gen3Issues, gen3Species } from './gen3';
  *  - new Hardcore runs permanently lose owned Pokémon that faint (Factory rentals exempt);
  *  - a Brain win adds 10 BP; the wallet holds up to 9,999 BP.
  * Opponents other than the Brains use Pokémon Emerald's Frontier teams and AI: the wiki data file
- * has NO pool of them, so MeowHelper can only plan against the Brains plus general Gen III advice.
+ * has NO pool of them, so MeowRPGAdvisor can only plan against the Brains plus general Gen III advice.
  */
 export type LevelMode = 'lv50' | 'open';
 

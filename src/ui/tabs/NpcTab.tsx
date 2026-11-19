@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'preact/hooks';
 import type { Dataset, Npc, NpcMon } from '../../shared/types';
-import { activeTab, box, dataset, selectedNpc, selectedNpcId, selectedVariant } from '../store';
+import { box, dataset, goPrep, selectedNpc, selectedNpcId, selectedVariant } from '../store';
 import { Avatar, Empty, MoveChip, Tip, TypeBadge, Types } from '../components/common';
 import { bestAttackTypes, bestDefensiveTypes, monTypes, teamNotes } from '../../engine/analysis';
 import { RULES_TEXT, dsFor, rulesFor } from '../../engine/rules';
@@ -220,9 +220,9 @@ function NpcDetail({ ds: base, npc }: { ds: Dataset; npc: Npc }) {
       {rulesFor(npc.category).npcIgnoresWonderGuard && <Tip kind="info"><b>Special rules:</b> {RULES_TEXT}</Tip>}
       <FacilityRules npc={npc} />
       <div class="btns">
-        <button class="btn primary" onClick={() => (activeTab.value = 'team')}>Suggest team →</button>
+        <button class="btn primary" onClick={() => goPrep('team')}>Suggest team →</button>
       </div>
-      <div class="foot">Types use the {frontier ? 'Gen III' : "game's"} type chart and known abilities. Damage numbers are in the Team tab.</div>
+      <div class="foot">Types use the {frontier ? 'Gen III' : "game's"} type chart and known abilities. Damage numbers are in step 2, Team.</div>
     </>
   );
 }
