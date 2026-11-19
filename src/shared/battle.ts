@@ -95,6 +95,18 @@ export interface BattleSnapshot {
    * only a switch-in can be picked. Missing in older snapshots: use activeFainted().
    */
   forcedSwitch?: boolean;
+  /** Items panel of the battle screen, only what is rendered while the Items tab is open (see readBattleBag). */
+  bag?: BattleBagItem[];
+}
+
+/** One entry of the battle screen's Items panel. */
+export interface BattleBagItem {
+  /** Item id as the Bag page uses it (lower-case name without spaces, or the game's data attribute). */
+  id: string;
+  name: string;
+  count: number;
+  /** The game greys it out ("No team member needs this item" or disabled): unusable right now. */
+  locked?: boolean;
 }
 
 /**

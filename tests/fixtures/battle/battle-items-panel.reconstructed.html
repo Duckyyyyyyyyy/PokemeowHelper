@@ -1,0 +1,19 @@
+<!-- RECONSTRUCTED (not captured): the Items tab of the battle screen. Only the class names .battle-team-bag-panel / .battle-bag,
+     the All/Medicine/Berries filters, the 2 pages and "No team member needs this item" were seen live (2026-11-18); the entry markup
+     is a guess that readBattleBag() reads tolerantly (name + "x N" + disabled/locked). Replace with a real capture when available. -->
+<div class="battle-team-bag-panel">
+  <div class="battle-bag">
+    <p>Choose an item, then its target. Uses one turn.</p>
+    <div class="battle-bag-filters">
+      <button aria-pressed="true">All</button><button aria-pressed="false">Medicine</button><button aria-pressed="false">Berries</button>
+    </div>
+    <ul class="battle-bag-list">
+      <li class="battle-bag-item"><button><span class="battle-bag-item-name">Potion</span><span class="battle-bag-item-count">×7</span></button></li>
+      <li class="battle-bag-item"><button><span class="battle-bag-item-name">Super Potion</span><span class="battle-bag-item-count">×12</span></button></li>
+      <li class="battle-bag-item"><button disabled aria-disabled="true"><span class="battle-bag-item-name">Revive</span><span class="battle-bag-item-count">×3</span><span>No team member needs this item</span></button></li>
+      <li class="battle-bag-item"><button><span class="battle-bag-item-name">Ether</span><span class="battle-bag-item-count">×2</span></button></li>
+      <li class="battle-bag-item"><button><span class="battle-bag-item-name">Oran Berry</span><span class="battle-bag-item-count">×20</span></button></li>
+    </ul>
+    <div class="battle-bag-pages"><button disabled>Previous</button><span>Page 1 of 2</span><button>Next</button></div>
+  </div>
+</div>

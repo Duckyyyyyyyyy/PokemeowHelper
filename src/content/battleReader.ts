@@ -1,4 +1,4 @@
-import { activeFainted, type BattleEvent, type BattleMon, type BattleMove, type BattleSnapshot, type BoostKey, type Boosts, type RosterMon } from '../shared/battle';
+import { activeFainted, type BattleBagItem, type BattleEvent, type BattleMon, type BattleMove, type BattleSnapshot, type BoostKey, type Boosts, type RosterMon } from '../shared/battle';
 
 /**
  * Reads the PokeMeowRPG battle screen into a BattleSnapshot. Pure and read-only:
@@ -28,6 +28,11 @@ export const SEL = {
   /** On-screen stat stages next to the name, e.g. <span class="battle-status battle-stat-changes" title="Evasion +1">. */
   statChanges: '.battle-stat-changes',
   log: '.battle-log',
+  /** Items tab. Panel and class `.battle-bag` seen live 2026-11-18; the entry markup is read tolerantly (see readBattleBag). */
+  bag: '.battle-team-bag-panel .battle-bag, .battle-bag',
+  bagEntry: '.battle-bag-item, [data-item-id], [data-battle-item], li',
+  bagName: '.battle-bag-item-name, .battle-item-name, [data-item-name]',
+  bagCount: '.battle-bag-item-count, .battle-item-count, [data-count]',
 } as const;
 
 /** Seen live (Drake, 2026-11-18) after your Pokémon fainted. Matched as text: its markup is not known yet. */
@@ -341,6 +346,38 @@ function readLog(doc: ParentNode, trainer?: string): { lines: string[]; boosts: 
   return { lines: lines.slice(-12).map((l) => l.text), boosts, events: events.slice(-80) };
 }
 
+const LOCKED_TEXT = /no team member needs this item|can(?:no|')t be used|unusable/i;
+
+/**
+ * Items panel of the battle screen (READ-ONLY; only what is rendered, it never switches pages or filters).
+ * The panel is `.battle-team-bag-panel > .battle-bag` with All/Medicine/Berries filters and 2 pages; the entry
+ * markup was not captured, so an entry is any `.battle-bag-item` / `[data-item-id]` / `li` inside it, with the
+ * count read from "×N" text or a count element, and "locked" from disabled / aria-disabled / data-locked or the
+ * game's "No team member needs this item". Returns undefined when the Items tab is not shown.
+ */
+export function readBattleBag(doc: ParentNode): BattleBagItem[] | undefined {
+  const panel = doc.querySelector(SEL.bag);
+  if (!panel) return undefined;
+  const out = new Map<string, BattleBagItem>();
+  for (const el of panel.querySelectorAll(SEL.bagEntry)) {
+    if (el.querySelector(SEL.bagEntry)) continue; // wrapper of another entry
+    const btn = el.matches('button') ? el : el.querySelector('button');
+    const label = clean(el.getAttribute('aria-label') ?? btn?.getAttribute('aria-label') ?? '');
+    const text = clean(el.textContent);
+    const countText = clean(el.querySelector(SEL.bagCount)?.textContent ?? el.getAttribute('data-count') ?? '') || (label + ' ' + text);
+    const c = countText.match(/(?:[×x]\s*|count:?\s*|quantity:?\s*)(\d+)/i) ?? clean(el.querySelector(SEL.bagCount)?.textContent).match(/^(\d+)$/);
+    if (!c) continue; // filter buttons, page controls, headings: no count
+    const named = clean(el.querySelector(SEL.bagName)?.textContent ?? el.getAttribute('data-item-name') ?? '');
+    const name = named || clean((label || text).replace(LOCKED_TEXT, '').replace(/(?:[×x]\s*|count:?\s*|quantity:?\s*)\d+/gi, '').split(/[.,·]/)[0]);
+    if (!name) continue;
+    const id = el.getAttribute('data-item-id') || el.getAttribute('data-battle-item') || name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const locked = [el, btn].some((e) => !!e && (e.hasAttribute('disabled') || e.getAttribute('aria-disabled') === 'true' || e.getAttribute('data-locked') === 'true')) || LOCKED_TEXT.test(`${label} ${text}`);
+    const prev = out.get(id);
+    out.set(id, { id, name, count: parseInt(c[1], 10), ...(locked ? { locked: true } : {}) , ...(prev ? { count: Math.max(prev.count, parseInt(c[1], 10)) } : {}) });
+  }
+  return out.size ? [...out.values()] : undefined;
+}
+
 export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | null {
   const arena = doc.querySelector(SEL.arena);
   if (!arena) return null;
@@ -353,6 +390,7 @@ export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | 
   const forcedSwitch = (!!player && hasFntBadge(playerRoot))
     || hasNextPrompt(arena)
     || activeFainted({ player, bench } as BattleSnapshot);
+  const bag = readBattleBag(arena);
   return {
     v: 2,
     at: now,
@@ -371,5 +409,6 @@ export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | 
     log: log.lines,
     events: log.events,
     ...(forcedSwitch ? { forcedSwitch: true } : {}),
+    ...(bag ? { bag } : {}),
   };
 }
