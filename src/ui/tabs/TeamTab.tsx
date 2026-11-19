@@ -196,7 +196,7 @@ function Suggestion({ ds }: { ds: Dataset }) {
                   <span class={`score ${scoreClass(p.score)}`}>{p.score}</span>
                   <div class="grow">
                     <b>{name(p.a)} + {name(p.b)}</b>
-                    <div class="small muted">{p.why.length ? p.why.join(' · ') : 'Covers both leads; no special teamwork.'}</div>
+                    <div class="small muted">{p.why.length ? p.why.join(' · ') : 'No special teamwork found.'}</div>
                   </div>
                 </div>
               ))}
