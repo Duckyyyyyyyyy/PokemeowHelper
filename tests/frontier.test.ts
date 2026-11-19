@@ -109,6 +109,10 @@ describe('Gen III type split and data', () => {
     expect(gen3Issues(ds, mon('Magnezone', 50)).some((i) => i.kind === 'species' && i.blocking)).toBe(true);
     expect(gen3Issues(ds, mon('Mewtwo', 50)).some((i) => i.kind === 'restricted' && i.blocking)).toBe(true);
     expect(gen3Issues(ds, mon('Dragonite', 50))).toEqual([]);
+    // Names with ♀/♂ resolve (calc dex: Nidoran-F / Nidoran-M).
+    expect(gen3Issues(ds, mon('Nidoran♀', 50))).toEqual([]);
+    expect(gen3Issues(ds, mon('Nidoran♂', 50))).toEqual([]);
+    expect(g3.species[29].abilities.map((a) => a.name)).toEqual(['Poison Point']);
   });
 });
 
@@ -122,7 +126,10 @@ describe('rule lookup', () => {
 
   it('places a live battle by NPC, then arena kind, then the manual switch', () => {
     expect(battleRulesFor('gym', 'frontier', false)).toBe(NORMAL_RULES); // the matched NPC wins
-    expect(battleRulesFor(undefined, 'battle-pike', false)).toBe(FRONTIER_RULES);
+    expect(battleRulesFor('gym', 'gym', true)).toBe(NORMAL_RULES); // a switch left on never makes a Gym Gen III
+    expect(battleRulesFor('tower', 'tower', true)).toBe(TOWER_RULES);
+    expect(battleRulesFor(undefined, 'battle-frontier', false)).toBe(FRONTIER_RULES);
+    expect(battleRulesFor(undefined, 'arena', false)).toBe(NORMAL_RULES); // the reader's container, not the facility
     expect(battleRulesFor(undefined, 'tower', false)).toBe(TOWER_RULES);
     expect(battleRulesFor(undefined, undefined, true)).toBe(FRONTIER_RULES);
     expect(battleRulesFor(undefined, undefined, false)).toBe(NORMAL_RULES);
@@ -179,6 +186,12 @@ describe('Frontier team suggestion: eligibility and clauses', () => {
     expect(res.ranked.find((c) => c.mon.uid === 'f')?.reason).toMatch(/Generation I–III/);
   });
 
+  it('the species clause also holds for locked Pokémon', () => {
+    const box = [mon('Snorlax', 50, ['bodyslam'], { uid: 'a' }), mon('Snorlax', 50, ['bodyslam'], { uid: 'b' }), mon('Lapras', 50, ['icebeam'], { uid: 'c' })];
+    const res = suggestTeam(ds, box, v, { rules: FRONTIER_RULES, size: 3, uniqueSpecies: true, locked: ['a', 'b'] });
+    expect(res.team.filter((c) => c.mon.species === box[0].species)).toHaveLength(1);
+  });
+
   it('flags a held item used twice (item clause)', () => {
     expect(itemClause(ds, [mon('Snorlax', 50, [], { item: 'leftovers' }), mon('Lapras', 50, [], { item: 'leftovers' })])).toEqual(['Leftovers']);
     expect(itemClause(ds, [mon('Snorlax', 50, [], { item: 'leftovers' })])).toEqual([]);
@@ -198,7 +211,8 @@ describe('Battle Tower: endurance and carry-over', () => {
 
   it('budgets the team HP over all 20 opponents', () => {
     const box = [mon('Snorlax', 100, ['bodyslam', 'earthquake']), mon('Jolteon', 100, ['thunderbolt', 'shadowball']), mon('Exeggutor', 100, ['gigadrain', 'psychic'])];
-    const res = suggestTeam(ds, box, v, { rules: TOWER_RULES, endurance: true });
+    const res = suggestTeam(ds, box, v, { rules: TOWER_RULES }); // endurance is on by default under carry-over rules
+    expect(res.team[0].pairs.every((p) => !p.duel || p.duel.win ? true : p.score <= 35)).toBe(true);
     const e = towerEndurance(res.team, v);
     expect(e.rows).toHaveLength(v.team.length);
     expect(e.budget).toBe(300);
@@ -232,15 +246,21 @@ describe('Battle Tower: endurance and carry-over', () => {
 describe('Battle tab under Gen III rules', () => {
   it('scores with Gen III data when switched on (no Fairy moves)', () => {
     document.body.innerHTML = readFileSync(resolve(__dirname, 'fixtures/battle/brock-turn3.reconstructed.html'), 'utf8');
-    const snap = readBattle(document, 1)!;
+    const brock = readBattle(document, 1)!;
+    // An opponent the wiki data doesn't know (regular Frontier trainers are not in it).
+    const snap = { ...brock, kind: undefined, opponentName: 'Frontier Trainer' };
     const local = structuredClone(ds);
     local.species[546] = { id: 546, name: 'Cottonee', types: ['Grass', 'Fairy'], baseStats: { hp: 40, atk: 27, def: 60, spa: 37, spd: 50, spe: 66 }, abilities: [], levelMoves: [], machineMoves: [], eggMoves: [] };
     const box: BoxMon[] = [{ uid: 'c', source: 'game', species: 546, level: 18, moves: ['fairywind', 'megadrain'], nature: 'Modest' }];
     const on = adviseTurn(local, snap, box, { gen3: true });
     expect(on.notes.some((n) => /Gen III/.test(n))).toBe(true);
+    expect(on.actions.some((a) => a.moveId === 'megadrain' && a.score !== null)).toBe(true);
     expect(on.actions.find((a) => a.moveId === 'fairywind')?.score ?? null).toBeNull();
     const off = adviseTurn(local, snap, box);
     expect(off.notes.some((n) => /Gen III/.test(n))).toBe(false);
+    expect(off.actions.some((a) => a.moveId === 'fairywind' && a.score !== null)).toBe(true);
+    // A matched Gym battle ignores a switch left on.
+    expect(adviseTurn(local, brock, box, { gen3: true }).notes.some((n) => /Gen III/.test(n))).toBe(false);
   });
 });
 

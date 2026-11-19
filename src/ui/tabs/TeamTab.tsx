@@ -67,7 +67,9 @@ function Suggestion({ ds: base }: { ds: Dataset }) {
   const res = useMemo(() => {
     if (!v) return null;
     const blocked = entries ? new Map([...entries].filter(([, e]) => e.blocking.length).map(([uid, e]) => [uid, e.blocking[0]])) : undefined;
-    return suggestTeam(ds, box.value, v, { levelCap: v.levelCap, rules, locked, excluded, blocked, uniqueSpecies: !!facility, size: facility?.register, endurance: tower });
+    // Pyramid: registered without held items, so score them without one.
+    const mons = facility && !facility.heldItems ? box.value.map((m) => ({ ...m, item: null })) : box.value;
+    return suggestTeam(ds, mons, v, { levelCap: v.levelCap, rules, locked, excluded, blocked, uniqueSpecies: !!facility, size: facility?.register });
   }, [ds, v, box.value, npc, locked, excluded, entries]);
   // Frontier: Pokémon that can never enter stay out of the grind plan too.
   const grindExcluded = useMemo(
@@ -231,7 +233,7 @@ function Suggestion({ ds: base }: { ds: Dataset }) {
                   </>
                 ))}
               </div>
-              <div class="small muted" style={{ marginTop: '6px' }}>Tap a cell for the damage numbers. 55+ = you win the 1v1.</div>
+              <div class="small muted" style={{ marginTop: '6px' }}>Tap a cell for the damage numbers. {tower ? 'Endurance score: 35+ = you win the 1v1, higher = more HP kept (+ sustain).' : '55+ = you win the 1v1.'}</div>
               {cell && (() => {
                 const c = res.team.find((t) => t.mon.uid === cell.uid);
                 const p = c?.pairs[cell.j];

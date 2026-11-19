@@ -30,7 +30,8 @@ const PERFECT: StatTable = { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31
 function speciesName(ds: Dataset, id: number, fallbackName: string, g: Gen = gen): { name: string; known: boolean } {
   const s = ds.species[id];
   const name = s?.name ?? fallbackName;
-  for (const cand of [name, name.replace(/\s+/g, '-')]) {
+  const fixed = name.replace(/♀/g, '-F').replace(/♂/g, '-M'); // Nidoran♀ → Nidoran-F (calc dex name)
+  for (const cand of [fixed, fixed.replace(/\s+/g, '-')]) {
     const sp = g.species.get(toID(cand));
     if (sp) return { name: sp.name, known: true };
   }

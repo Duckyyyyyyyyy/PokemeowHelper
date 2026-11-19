@@ -21,6 +21,8 @@ export interface BattleRules {
   bagItems: boolean;
   /** Mechanics generation: 3 = Battle Frontier (Gen III simulator rules). Missing = Gen 9. */
   gen?: 3;
+  /** HP, status and PP carry over between opponents (Battle Towers): team picks value endurance. */
+  carryOver?: boolean;
 }
 
 export const CHALLENGE_BANNED_MOVES: ReadonlySet<string> = new Set([
@@ -33,7 +35,7 @@ const NO_BAG_CATEGORIES: NpcCategory[] = ['tower'];
 
 export const NORMAL_RULES: BattleRules = { bannedMoves: new Set(), npcIgnoresWonderGuard: false, bagItems: true };
 export const CHALLENGE_RULES: BattleRules = { bannedMoves: CHALLENGE_BANNED_MOVES, npcIgnoresWonderGuard: true, bagItems: true };
-export const TOWER_RULES: BattleRules = { ...NORMAL_RULES, bagItems: false };
+export const TOWER_RULES: BattleRules = { ...NORMAL_RULES, bagItems: false, carryOver: true };
 export const FRONTIER_RULES: BattleRules = { ...NORMAL_RULES, bagItems: false, gen: 3 };
 
 export function rulesFor(category?: NpcCategory): BattleRules {
@@ -62,12 +64,15 @@ export const RULES_TEXT = "Your OHKO moves, Destiny Bond, Perish Song, Endeavor 
  * has NOT been seen yet (needs a live run): this is a guess, and the Battle tab also has a manual
  * "Gen III rules" switch.
  */
-const FRONTIER_KIND = /frontier|dome|palace|arena|factory|pike|pyramid/i;
+const FRONTIER_KIND = /frontier/i;
 
-/** Rules for a live battle: the matched NPC first, then the arena kind, then the manual switch. */
+/**
+ * Rules for a live battle: a matched NPC always decides (so a switch left on never turns a Gym battle
+ * into Gen III), then the manual switch, then the arena kind.
+ */
 export function battleRulesFor(category: NpcCategory | undefined, kind: string | undefined, gen3?: boolean): BattleRules {
-  if (gen3) return category === 'frontier' || !category ? FRONTIER_RULES : { ...rulesFor(category), gen: 3 };
   if (category) return rulesFor(category);
+  if (gen3) return FRONTIER_RULES;
   if (kind && FRONTIER_KIND.test(kind)) return FRONTIER_RULES;
   if (kind && /tower/i.test(kind)) return TOWER_RULES;
   return NORMAL_RULES;

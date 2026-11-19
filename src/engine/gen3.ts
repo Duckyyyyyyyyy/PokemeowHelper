@@ -32,6 +32,12 @@ export const GEN3_LAST_DEX = 386;
 export const RESTRICTED_GUESS: ReadonlySet<number> = new Set([150, 151, 249, 250, 251, 382, 383, 384, 385, 386]);
 
 const views = new WeakMap<Dataset, Dataset>();
+const bases = new WeakMap<Dataset, Dataset>();
+
+/** The normal (Gen 9) data behind a Gen III view; the dataset itself otherwise. */
+export function baseOf(ds: Dataset): Dataset {
+  return bases.get(ds) ?? ds;
+}
 
 export function isGen3(ds: Dataset): boolean {
   return ds.ruleset === 'gen3';
@@ -40,7 +46,8 @@ export function isGen3(ds: Dataset): boolean {
 /** The Gen III species entry for a game species (by name, as the calc dex knows it). */
 export function gen3Species(name: string | undefined) {
   if (!name) return undefined;
-  for (const cand of [name, name.replace(/\s+/g, '-')]) {
+  const fixed = name.replace(/♀/g, '-F').replace(/♂/g, '-M'); // Nidoran♀ → Nidoran-F (calc dex name)
+  for (const cand of [fixed, fixed.replace(/\s+/g, '-')]) {
     const sp = GEN3.species.get(toID(cand));
     if (sp) return sp;
   }
@@ -108,6 +115,7 @@ export function gen3View(ds: Dataset): Dataset {
   }
   const view: Dataset = { ...ds, species, moves, types: gen3TypeTable(), ruleset: 'gen3' };
   views.set(ds, view);
+  bases.set(view, ds);
   return view;
 }
 

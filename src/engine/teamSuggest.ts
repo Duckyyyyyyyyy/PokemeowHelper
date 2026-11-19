@@ -121,7 +121,7 @@ export interface SuggestOptions {
   blocked?: ReadonlyMap<string, string>;
   /** Species clause: never two of the same species on the team (Battle Frontier). */
   uniqueSpecies?: boolean;
-  /** Battle Towers: value HP kept and sustain, since nothing heals between the 20 opponents. */
+  /** Value HP kept and sustain (default: on when the rules carry HP over, i.e. Battle Towers). */
   endurance?: boolean;
 }
 
@@ -133,10 +133,13 @@ export function scoreAgainstTeam(ds: Dataset, mon: BoxMon, v: NpcTeamVariant, op
   const me = boxToCalc(ds, mon, opts.levelCap ?? 50);
   const myMoves = movesForBox(ds, mon);
   const foes = npcCalc ?? v.team.map((n) => npcToCalc(ds, n));
+  // Battle Towers: HP kept and sustain count more (nothing heals between the 20 opponents).
+  const sustain = opts.endurance ?? opts.rules?.carryOver ? sustainBonus(mon) : undefined;
   return v.team.map((n, j) => {
     const typeView = scorePair(ds, mon, n, opts.rules);
     const d = duel(ds, me, myMoves, foes[j], n.moves, field, opts.rules);
-    return { ...typeView, score: d.score, duel: d };
+    const pair = { ...typeView, score: d.score, duel: d };
+    return sustain === undefined ? pair : { ...pair, score: enduranceScore(pair, sustain) };
   });
 }
 
@@ -147,11 +150,7 @@ export function suggestTeam(ds: Dataset, box: BoxMon[], v: NpcTeamVariant, opts:
   const excluded = new Set(opts.excluded ?? []);
   const locked = new Set(opts.locked ?? []);
   const ranked: Candidate[] = box.map((mon) => {
-    let pairs = scoreAgainstTeam(ds, mon, v, opts, npcCalc);
-    if (opts.endurance) {
-      const sustain = sustainBonus(mon);
-      pairs = pairs.map((p) => ({ ...p, score: enduranceScore(p, sustain) }));
-    }
+    const pairs = scoreAgainstTeam(ds, mon, v, opts, npcCalc);
     const tooHigh = opts.levelCap !== undefined && mon.level !== undefined && mon.level > opts.levelCap;
     const out = excluded.has(mon.uid);
     const blocked = opts.blocked?.get(mon.uid);
@@ -172,6 +171,7 @@ export function suggestTeam(ds: Dataset, box: BoxMon[], v: NpcTeamVariant, opts:
   // Pinned members go in first (highest average first), then the greedy picks fill the rest.
   for (const c of pool.filter((c) => c.locked).slice(0, size)) {
     pool.splice(pool.indexOf(c), 1);
+    if (opts.uniqueSpecies && team.some((t) => t.mon.species === c.mon.species)) continue; // species clause
     team.push(c);
     c.pairs.forEach((p, j) => (bestPer[j] = Math.max(bestPer[j], p.score)));
   }
