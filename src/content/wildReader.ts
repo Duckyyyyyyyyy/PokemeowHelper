@@ -30,6 +30,9 @@ export const WILD_SEL = {
   dexUncaught: '.dex-status-uncaught',
   owned: '.encounter-owned-count',
   ballSlot: '.quick-catch-slot button[aria-label^="Quick catch"]',
+  /** Weekly Catchlist marker (game stylesheet: `.encounter-announcement > .catchlist-target-button`; not seen live). */
+  announcement: '.encounter-announcement',
+  catchlist: '.catchlist-target-button',
   lead: '.battle-partner',
   hp: '.battle-hp-numbers',
   healthBar: '.health-track > span',
@@ -187,6 +190,12 @@ export function readTeamPanel(doc: ParentNode): RosterMon[] {
   return out.sort((x, y) => (x.slot ?? 99) - (y.slot ?? 99));
 }
 
+/** Catchlist marker next to the name; false when the announcement is there without it (as on the live Doduo card). */
+function catchlistOf(card: Element): boolean | undefined {
+  if (card.querySelector(WILD_SEL.catchlist)) return true;
+  return card.querySelector(WILD_SEL.announcement) ? false : undefined;
+}
+
 export function readWild(doc: ParentNode, now = Date.now()): WildSnapshot | null {
   const card = doc.querySelector(WILD_SEL.card);
   if (!card) return null;
@@ -230,6 +239,7 @@ export function readWild(doc: ParentNode, now = Date.now()): WildSnapshot | null
     shiny: !!card.querySelector(WILD_SEL.shiny) || /shiny/i.test(rarity ?? ''),
     item: itemOf(head),
     registered,
+    catchlist: catchlistOf(card),
     inBox: num(ownedText.match(/in box:\s*(\d+)/i)?.[1]),
     hp,
     maxHp,

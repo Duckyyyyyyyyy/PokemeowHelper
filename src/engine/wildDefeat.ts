@@ -71,7 +71,7 @@ export function wildOpponent(w: WildSnapshot): BattleMon {
 const isDown = (r: RosterMon) => r.fainted || (r.hp !== undefined && r.hp <= 0);
 
 /** Move names for one of your Pokémon: the battle's buttons for the active one, its switch-card moves, else your box. */
-function moveNamesFor(ds: Dataset, box: BoxMon[], w: WildSnapshot, r: RosterMon): string[] {
+export function moveNamesFor(ds: Dataset, box: BoxMon[], w: WildSnapshot, r: RosterMon): string[] {
   if (r.active && w.moves?.length) return w.moves.filter((m) => !m.disabled).map((m) => m.name);
   if (r.moves?.length) return r.moves.filter((m) => m.pp === undefined || m.pp > 0).map((m) => m.name);
   const me = mySet(indexes(ds), box, r, []);

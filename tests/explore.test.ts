@@ -112,19 +112,21 @@ describe('fight or catch', () => {
     const d = fightOrCatch(ds, { species: rattata, level: 5 }, [mon('Rattata', [])]);
     expect(d.verdict).toBe('fight');
   });
-  it('trusts the game card: in-box count and Pokédex icon beat the synced box', () => {
-    expect(fightOrCatch(ds, { species: rattata, inBox: 2, registered: true }, []).verdict).toBe('fight');
-    expect(fightOrCatch(ds, { species: rattata, inBox: 0, registered: true }, [mon('Rattata', [])]).reasons.join(' ')).toMatch(/in box: 0/);
-    expect(fightOrCatch(ds, { species: rattata, inBox: 0, registered: false }, []).reasons.join(' ')).toMatch(/not in your Pokédex/);
+  it('catches only Catchlist or unregistered species; in box: 0 alone is a fight (Haunter, live 2026-11-19)', () => {
+    const haunter = { species: sp('Haunter'), level: 35, inBox: 0, registered: true, catchlist: false };
+    const d = fightOrCatch(ds, haunter, []);
+    expect(d).toMatchObject({ verdict: 'fight', reasons: ['Registered, not on Catchlist → fight for EXP.'] });
+    expect(fightOrCatch(ds, { ...haunter, catchlist: true }, [])).toMatchObject({ verdict: 'catch', reasons: ["On this week's Catchlist."] });
+    expect(fightOrCatch(ds, { ...haunter, inBox: 3, catchlist: true }, [mon('Haunter', [])]).verdict).toBe('catch');
+    expect(fightOrCatch(ds, { ...haunter, registered: false }, []).reasons[0]).toMatch(/^Not in your Pokédex yet/);
+    expect(fightOrCatch(ds, { ...haunter, catchlist: undefined }, []).reasons[0]).toBe('Registered (no Catchlist marker read) → fight for EXP.');
   });
-  it('catches an owned species that holds a worthwhile item, is wanted-but-not-owned, shiny or has good IVs', () => {
-    const owned = [mon('Pikachu', [])];
-    expect(fightOrCatch(ds, { species: sp('Pikachu'), item: 'lightball' }, owned).verdict).toBe('catch');
-    expect(fightOrCatch(ds, { species: sp('Pikachu'), item: 'Light Ball' }, owned).reasons.join(' ')).toMatch(/Light Ball/);
-    expect(fightOrCatch(ds, { species: sp('Pikachu'), item: 'potion' }, owned).verdict).toBe('fight');
-    expect(fightOrCatch(ds, { species: sp('Pikachu'), shiny: true }, owned).verdict).toBe('catch');
-    expect(fightOrCatch(ds, { species: sp('Pikachu'), goodIvs: true }, owned).verdict).toBe('catch');
-    expect(fightOrCatch(ds, { species: sp('Squirtle') }, owned, new Set([sp('Squirtle')])).reasons.join(' ')).toMatch(/counters/);
+  it('shiny, held item, good IVs and countering the NPC are hints, never a catch on their own', () => {
+    const reg = { registered: true, catchlist: false };
+    const d = fightOrCatch(ds, { species: sp('Pikachu'), item: 'lightball', shiny: true, goodIvs: true, ...reg }, [], new Set([sp('Pikachu')]), { npcName: 'Roxanne' });
+    expect(d.verdict).toBe('fight');
+    expect(d.hints).toEqual(['shiny', 'holds Light Ball', 'good IVs', 'counters Roxanne']);
+    expect(fightOrCatch(ds, { species: sp('Pikachu'), item: 'potion', ...reg }, []).hints).toEqual([]);
   });
 });
 
@@ -275,6 +277,6 @@ describe('after the plan', () => {
     expect(a.label).toBe('weaken');
   });
   it('changes nothing with an empty plan', () => {
-    expect(afterPlan({ weaken: [], status: [], notes: [] }, { hpPct: 60 })).toEqual({ hpFrac: 0.6, status: undefined, label: '' });
+    expect(afterPlan({ weaken: [], status: [], risky: [], notes: [] }, { hpPct: 60 })).toEqual({ hpFrac: 0.6, status: undefined, label: '' });
   });
 });

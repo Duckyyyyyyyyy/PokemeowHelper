@@ -30,6 +30,13 @@ describe('wild encounter reader (Doduo intro, Grasslands 3)', () => {
     expect(snap.lead).toEqual({ name: 'Charizard', level: 56, hp: 166, maxHp: 166, item: 'Fire Gem', gender: 'M' });
   });
 
+  it('reads the weekly Catchlist marker (stylesheet: .encounter-announcement > .catchlist-target-button; not seen live)', () => {
+    expect(snap.catchlist).toBe(false);
+    const marked = readFileSync(resolve(__dirname, 'fixtures/explore/doduo-catchlist.reconstructed.html'), 'utf8');
+    expect(readWild(load(marked))!.catchlist).toBe(true);
+    expect(readWild(load(html.replace(/<div class="encounter-announcement">[\s\S]*?<\/h2><\/div>/, '')))!.catchlist).toBeUndefined();
+  });
+
   it('returns null without an encounter card', () => {
     expect(readWild(load('<div class="page-title">Grasslands 3</div>'))).toBeNull();
   });

@@ -158,6 +158,8 @@ export interface WildTarget {
   inBox?: number;
   /** From the game's encounter card: Pokédex icon (registered as obtained). */
   registered?: boolean;
+  /** From the game's encounter card: on this week's Catchlist. */
+  catchlist?: boolean;
 }
 
 export interface CatchDecision {
@@ -165,35 +167,43 @@ export interface CatchDecision {
   reasons: string[];
   /** Short line for the badge. */
   summary: string;
+  /** Things that may still make a catch worth it; they never change the verdict. */
+  hints: string[];
 }
 
 /** Items not worth a ball on their own (common medicine the shop sells). */
 const CHEAP_ITEMS: ReadonlySet<string> = new Set(['potion', 'oranberry', 'berryjuice']);
 
-export function fightOrCatch(ds: Dataset, t: WildTarget, box: BoxMon[], wanted: ReadonlySet<number> = new Set()): CatchDecision {
+/**
+ * CATCH only when it is on this week's Catchlist or not registered in your Pokédex (the card's
+ * icon); anything else is FIGHT for EXP. Shiny, a held item, good IVs or countering the NPC you
+ * selected are listed as hints but never flip the verdict. Without the card (manual mode) the
+ * Pokédex is unknown, so your box stands in for it.
+ */
+export function fightOrCatch(ds: Dataset, t: WildTarget, box: BoxMon[], wanted: ReadonlySet<number> = new Set(), opts: { npcName?: string } = {}): CatchDecision {
   const s = ds.species[t.species];
   const name = s?.name ?? 'It';
-  // The game's own count beats MeowHelper's copy of your box.
-  const owned = t.inBox !== undefined ? t.inBox > 0 : ownedSpecies(box).has(t.species);
-  const reasons: string[] = [];
-  if (t.registered === false) reasons.push(`${name} is not in your Pokédex yet: new entry.`);
-  else if (!owned && t.inBox !== undefined) reasons.push(`You own no ${name} right now (in box: 0).`);
-  else if (!owned) reasons.push(`${name} is not in your box (MeowHelper can't read your Pokédex): likely a new entry.`);
-  if (t.shiny) reasons.push('It is shiny.');
-  if (wanted.has(t.species) && !owned) reasons.push(`${name} counters the NPC you selected.`);
+  const hints: string[] = [];
+  if (t.shiny) hints.push('shiny');
   if (t.item) {
     const it = ds.items[t.item] ?? Object.values(ds.items).find((i) => norm(i.name) === norm(t.item!));
     const id = it?.id ?? norm(t.item);
-    if (!CHEAP_ITEMS.has(id)) reasons.push(`It holds ${it?.name ?? t.item}: catching it keeps the item.`);
+    if (!CHEAP_ITEMS.has(id)) hints.push(`holds ${it?.name ?? t.item}`);
   }
-  if (t.goodIvs) reasons.push('Its IVs look good.');
-  if (owned && s?.rarity === 'legendary') reasons.push('Legendary spawn: a spare is rarely wasted.');
-  if (reasons.length) return { verdict: 'catch', reasons, summary: 'CATCH' };
-  return {
-    verdict: 'fight',
-    reasons: [`You already own ${name}, it holds nothing worth keeping: defeat it for EXP.`],
-    summary: 'FIGHT',
-  };
+  if (t.goodIvs) hints.push('good IVs');
+  if (wanted.has(t.species)) hints.push(`counters ${opts.npcName ?? 'the NPC you selected'}`);
+  if (s?.rarity === 'legendary') hints.push('legendary');
+
+  const catchIt = (why: string): CatchDecision => ({ verdict: 'catch', reasons: [why], summary: 'CATCH', hints });
+  if (t.catchlist) return catchIt("On this week's Catchlist.");
+  if (t.registered === false) return catchIt(`Not in your Pokédex yet: ${name} is a new entry.`);
+  if (t.registered === undefined && !ownedSpecies(box).has(t.species)) {
+    return catchIt(`${name} is not in your box (MeowHelper can't see your Pokédex here): likely a new entry.`);
+  }
+  const why = t.registered === undefined
+    ? `You have ${name} in your box → fight for EXP.`
+    : t.catchlist === undefined ? 'Registered (no Catchlist marker read) → fight for EXP.' : 'Registered, not on Catchlist → fight for EXP.';
+  return { verdict: 'fight', reasons: [why], summary: 'FIGHT', hints };
 }
 
 /* ---------- matching the game's encounter card ---------- */
