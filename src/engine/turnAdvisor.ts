@@ -392,7 +392,7 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
     let critKo: number | undefined;
     let line: string | undefined;
     const lv = lookMove(g.id);
-    planA1 = Math.max(planA1, score);
+    if (lv) planA1 = Math.max(planA1, score); // same move set as bestAttackLook (no Explosion etc.)
     if (look && lv) {
       score = Math.round(lv.score);
       // Win/lose follows the lookahead (55+ = you win), not the plain one-turn projection.

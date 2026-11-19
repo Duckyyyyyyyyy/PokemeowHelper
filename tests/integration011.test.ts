@@ -93,11 +93,21 @@ describe('Battle Tower: carry-over HP, no item rows, lookahead still on', () => 
     expect(items(gym).length).toBeGreaterThan(0);
   });
 
-  it('the lookahead reads the carried-over HP (lower HP never scores higher)', () => {
-    const best = (a: TurnAdvice) => Math.max(...a.actions.filter((x) => x.kind === 'move').map((x) => x.score ?? -1));
+  it('the lookahead reads the carried-over HP: their KO odds rise as your HP drops', () => {
     const full = adviseTurn(ds, tower(1), cottonee);
-    const low = adviseTurn(ds, tower(0.15), cottonee);
-    expect(best(low)).toBeLessThanOrEqual(best(full));
+    const low = adviseTurn(ds, tower(0.05), cottonee);
+    expect(full.threat?.koChance).toBeTypeOf('number');
+    expect(low.threat!.koChance!).toBeGreaterThan(full.threat!.koChance!);
+  });
+
+  it('a move carried over at 0 PP is out of the lookahead rows', () => {
+    const snap = tower(1);
+    const noPp = { ...snap, moves: snap.moves.map((m) => (/mega drain/i.test(m.name) ? { ...m, pp: 0, disabled: true } : m)) };
+    const a = adviseTurn(ds, noPp, cottonee);
+    const md = a.actions.find((x) => x.moveId === 'megadrain')!;
+    expect(md.score).toBeNull();
+    expect(md.koChance).toBeUndefined();
+    expect(lookedAhead(a)).toBe(true);
   });
 });
 
@@ -118,6 +128,15 @@ describe('doubles: the singles lookahead never runs', () => {
   });
 });
 
+describe('doubles under Gen III rules (smoke)', () => {
+  it('adviseDoubles with the Gen III switch still scores rows', async () => {
+    const { adviseDoubles } = await import('../src/engine/doublesAdvisor');
+    const tl = read('tate-liza-doubles-turn1.reconstructed.html');
+    const on = adviseDoubles(ds, { ...tl, kind: undefined, opponentName: 'Frontier Pair' }, [], { gen3: true, movesByMon: { slowbro: ['Surf', 'Psychic'] } });
+    expect(on.mine[0]?.actions.some((x) => x.score !== null)).toBe(true);
+  });
+});
+
 describe('itemAdvisor under lookahead', () => {
   it('item rows are still offered, rebased onto the lookahead scale (same gain over the best attack)', () => {
     const snap = hurt(brock, 0.3);
@@ -134,6 +153,23 @@ describe('itemAdvisor under lookahead', () => {
       const gainDeep = di[i].score! - bestMove(deep);
       // Clamped at 0–100 and rounded; otherwise the same gain over plan A.
       if (di[i].score! > 0 && di[i].score! < 100) expect(Math.abs(gainDeep - gainCheap)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('a self-KO move (Explosion) does not drag item rows down (plan A = moves the lookahead plays)', () => {
+    const geo: BoxMon[] = [{ ...mon('Graveler', 25, ['explosion', 'tackle']), uid: 'geo' }];
+    // Explosion KOs the Onix at 9 HP now (its one-turn score is ~100 before the self-KO cap); Tackle doesn't.
+    const s2: BattleSnapshot = {
+      ...brock, player: { ...brock.player!, name: 'Graveler', level: 25, item: undefined, hp: 21, maxHp: 70 }, opponent: { ...brock.opponent!, hp: 9 },
+      moves: [{ name: 'Explosion', pp: 5, maxPp: 5, disabled: false }, { name: 'Tackle', pp: 35, maxPp: 35, disabled: false }],
+    };
+    const cheap = adviseTurn(ds, s2, geo, { items: bag, lookahead: 0 });
+    const deep = adviseTurn(ds, s2, geo, { items: bag });
+    const tackle = (a: TurnAdvice) => a.actions.find((x) => x.moveId === 'tackle')!.score!;
+    expect(items(deep).length).toBeGreaterThan(0);
+    for (const it of items(deep)) {
+      const c = items(cheap).find((x) => x.label === it.label)!;
+      if (it.score! > 0 && it.score! < 100) expect(Math.abs((it.score! - tackle(deep)) - (c.score! - tackle(cheap)))).toBeLessThanOrEqual(1);
     }
   });
 
