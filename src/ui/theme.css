@@ -370,3 +370,4 @@ details.card[open] > summary.title::after { content: "▾"; }
 .plate .pf { flex-wrap: wrap; }
 .plate .hit { white-space: nowrap; margin-left: auto; }
 @media (max-width: 350px) { .plate.foe { margin-left: 10px; } .plate.me { margin-right: 10px; } }
+.rate.calc, .pill.calc { background: var(--warn-soft); color: var(--warn); }

@@ -45,6 +45,52 @@ function validItem(id?: string | null, g: Gen = gen) {
   const it = id ? g.items.get(toID(id)) : undefined;
   return it?.name;
 }
+/**
+ * A nature the calc knows, else undefined (the calc then uses a neutral one). An unknown nature
+ * string does not stop the stats, but makes @smogon/calc throw on every normal hit when it writes
+ * the description (`nature.plus`), while immunities and fixed-damage moves (Night Shade) return
+ * before that. Suspected cause of the 0.11.0 report where every move read "No effect" (vs Drasna);
+ * the actual nature string there was not seen.
+ */
+export function validNature(name?: string, g: Gen = gen): string | undefined {
+  const n = name ? g.natures.get(toID(name)) : undefined;
+  return n?.name;
+}
+
+/* ---------------- calc errors ---------------- */
+
+/** A calc call that threw (a bug or unexpected data): kept so the UI can say "calc error", never "No effect". */
+export interface CalcError {
+  moveId: string;
+  attacker: string;
+  defender: string;
+  message: string;
+}
+let calcErrors: CalcError[] = [];
+let calcErrorSeq = 0;
+const logged = new Set<string>();
+
+function recordCalcError(atk: CalcPokemon, def: CalcPokemon, moveId: string, e: unknown) {
+  const err: CalcError = { moveId, attacker: atk.name, defender: def.name, message: e instanceof Error ? e.message : String(e) };
+  calcErrors.push(err);
+  calcErrorSeq++;
+  if (calcErrors.length > 50) calcErrors = calcErrors.slice(-50);
+  const key = `${err.attacker}|${err.defender}|${moveId}|${err.message}`;
+  if (!logged.has(key)) {
+    logged.add(key);
+    console.warn(`[MeowHelper] damage calc failed: ${err.attacker} ${moveId} → ${err.defender}: ${err.message}`, e);
+  }
+}
+
+/** How many calc errors so far (compare before/after a call to see whether it hit one). */
+export const calcErrorCount = () => calcErrorSeq;
+
+/** Calc errors since the last call (and clears them). adviseTurn reads them once per turn. */
+export function takeCalcErrors(): CalcError[] {
+  const out = calcErrors;
+  calcErrors = [];
+  return out;
+}
 
 interface MonInput {
   species: number;
@@ -66,7 +112,7 @@ function build(ds: Dataset, m: MonInput): CalcPokemon {
   const ability = g.num === 3 ? gen3AbilityFor(s?.name ?? m.name, m.ability) : m.ability;
   return new CalcPokemon(g, name, {
     level: m.level,
-    nature: m.nature,
+    nature: validNature(m.nature, g),
     ability: validAbility(ability, g),
     item: validItem(m.item, g),
     ivs: { ...PERFECT, ...(m.ivs ?? {}) },
@@ -164,6 +210,24 @@ const accOf = (ds: Dataset, id: string) => {
   return a === true || a === undefined ? 1 : a / 100;
 };
 
+function runCalc(cg: Gen, atk: CalcPokemon, def: CalcPokemon, mv: CalcMove, moveId: string, field?: Field) {
+  try {
+    return calculate(cg, atk, def, mv, field);
+  } catch (e) {
+    recordCalcError(atk, def, moveId, e);
+    return null;
+  }
+}
+
+/**
+ * Like moveDamage, but says whether a null came from a calc error (show "calc error", not "No effect").
+ */
+export function tryMoveDamage(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, moveId: string, field?: Field, opts?: { singleTarget?: boolean }): { d: MoveDamage | null; error?: string } {
+  const before = calcErrorSeq;
+  const d = moveDamage(ds, atk, def, moveId, field, opts);
+  return d || calcErrorSeq === before ? { d } : { d, error: calcErrors[calcErrors.length - 1]?.message ?? 'unknown error' };
+}
+
 /**
  * The ruleset reaches the calc two ways: the generation follows the attacker (built from the Gen III
  * view in Frontier battles), and the game type (singles/doubles, spread moves) follows `field`.
@@ -173,12 +237,8 @@ export function moveDamage(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, move
   const cg = atk.gen as Gen;
   const mv = calcMove(ds, moveId, cg, !!opts?.singleTarget);
   if (!mv) return null;
-  let r;
-  try {
-    r = calculate(cg, atk, def, mv, field);
-  } catch {
-    return null;
-  }
+  const r = runCalc(cg, atk, def, mv, moveId, field);
+  if (!r) return null;
   const [lo, hi] = r.range();
   const hp = def.maxHP();
   const minPct = (lo / hp) * 100;
@@ -216,11 +276,9 @@ export function damageRolls(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, mov
   if (!mv) return null;
   if (crit) mv.isCrit = true;
   let d: number | number[] | number[][];
-  try {
-    d = calculate(cg, atk, def, mv, field).damage as number | number[] | number[][];
-  } catch {
-    return null;
-  }
+  const r = runCalc(cg, atk, def, mv, moveId, field);
+  if (!r) return null;
+  d = r.damage as number | number[] | number[][];
   if (typeof d === 'number') return [d];
   if (!d.length) return [0];
   if (Array.isArray(d[0])) {

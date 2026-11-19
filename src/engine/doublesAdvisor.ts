@@ -1,7 +1,7 @@
 import { Field, type Pokemon as CalcPokemon } from '@smogon/calc';
 import type { BattleMon, BattleSnapshot } from '../shared/battle';
 import type { BoxMon, Dataset, Npc, NpcTeamVariant } from '../shared/types';
-import { SELF_KO_MOVES, boxToCalc, defenderVsNpc, moveDamage, npcToCalc, type MoveDamage } from './damage';
+import { SELF_KO_MOVES, boxToCalc, calcErrorCount, defenderVsNpc, moveDamage, npcToCalc, type MoveDamage } from './damage';
 import { predictNpcMove } from './npcModel';
 import { npcKey, observedMoves, type ObservedStore } from './observed';
 import { battleSpeed } from './projection';
@@ -333,8 +333,11 @@ function trickRoomUp(snap: BattleSnapshot, moveId: (n: string) => string | undef
 
 function singleAction(ds: Dataset, f: FieldState, me: Unit, foe: Unit, id: string, danger: (u: Unit) => number, snap: BattleSnapshot): DoublesAction {
   const mv = ds.moves[id];
+  const errBefore = calcErrorCount();
   const d = hitOn(ds, f, me, foe, id, 1);
   const target = { side: 'opponent' as Side, name: foe.mon.name, position: foe.mon.position };
+  // A calc that threw is not "no effect": say so (details in the console).
+  if (!d && calcErrorCount() !== errBefore) return { user: me.mon.name, kind: 'move', label: mv.name, moveId: id, target, score: null, reason: `Calc error vs ${foe.mon.name}: not scored (details in the console).` };
   if (!d || d.maxPct <= 0) return { user: me.mon.name, kind: 'move', label: mv.name, moveId: id, target, score: 0, reason: `No effect on ${foe.mon.name}.` };
   const hp = curPct(foe.calc);
   const acc = d.expectedPct / Math.max(0.01, avgPct(d));

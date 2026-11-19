@@ -103,8 +103,8 @@ export function Plate({ ds, mon, boosts, foe, threat, small, children }: {
   );
 }
 
-export function RatePill({ score, top, unknown, cls = 'pill' }: { score: number | null | undefined; top?: number | null; unknown?: boolean; cls?: string }) {
-  const r = unknown ? { label: 'Moves ?', tone: 'none' as const } : rate(score, top);
+export function RatePill({ score, top, unknown, calcError, cls = 'pill' }: { score: number | null | undefined; top?: number | null; unknown?: boolean; calcError?: boolean; cls?: string }) {
+  const r = calcError ? { label: 'Calc error', tone: 'calc' } : unknown ? { label: 'Moves ?', tone: 'none' } : rate(score, top);
   return <span class={`${cls} ${r.tone}`}>{r.label}</span>;
 }
 
@@ -120,7 +120,7 @@ export function DangerStrip({ threat }: { threat?: ThreatInfo }) {
   return (
     <div class={`danger ${d}`} role="status">
       <span class="lvl">{DANGER_LABEL[d]}</span>
-      <span class="grow">{text} {speedLine(threat.youFirst)}.{extra}</span>
+      <span class="grow">{text} {speedLine(threat.youFirst)}.{extra}{threat.calcError && <span class="chip warn sm" style={{ marginLeft: '4px' }} title="The damage calc failed for some of their moves: this may not be their best hit.">calc error</span>}</span>
       <span class="meter" aria-hidden="true"><i class="on" /><i class={lvl >= 2 ? 'on' : ''} /><i class={lvl >= 3 ? 'on' : ''} /></span>
     </div>
   );

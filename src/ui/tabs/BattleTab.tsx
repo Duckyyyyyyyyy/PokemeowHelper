@@ -143,7 +143,7 @@ function Turn({ ds, snap, advice }: { ds: Dataset; snap: BattleSnapshot; advice:
               <button class={openSwitch === a.label ? 'on' : ''} aria-expanded={openSwitch === a.label} onClick={() => setOpenSwitch(openSwitch === a.label ? null : a.label)}>
                 <TypeAvatar name={name} types={speciesTypes(ds, name)} size={28} />
                 <span>{name}</span>
-                <RatePill score={a.score} top={top} unknown={a.unknownMoves} />
+                <RatePill score={a.score} top={top} unknown={a.unknownMoves} calcError={a.calcError} />
               </button>
             );
           })}
@@ -165,10 +165,11 @@ function MoveTile({ ds, snap, a, top, best }: { ds: Dataset; snap: BattleSnapsho
   const m = a.moveId ? ds.moves[a.moveId] : undefined;
   const shown = a.slot !== undefined ? snap.moves[a.slot] : undefined;
   const type = m?.type ?? shown?.type;
-  const r = a.score === null ? { label: a.tag === 'setup' ? 'Support' : 'Not rated', tone: 'none' } : rate(a.score, top);
-  const range = a.minPct !== undefined ? `${Math.round(a.minPct)}–${Math.round(a.maxPct!)}%` : m?.category === 'Status' ? 'Status' : '—';
+  // A calc that threw is not "No effect" or "Weak": say so (0.11.1 fix).
+  const r = a.calcError ? { label: 'Calc error', tone: 'calc' } : a.score === null ? { label: a.tag === 'setup' ? 'Support' : 'Not rated', tone: 'none' } : rate(a.score, top);
+  const range = a.calcError ? '—' : a.minPct !== undefined ? `${Math.round(a.minPct)}–${Math.round(a.maxPct!)}%` : m?.category === 'Status' ? 'Status' : '—';
   const pp = shown?.pp !== undefined ? `PP ${shown.pp}${shown.maxPp ? `/${shown.maxPp}` : ''}` : '';
-  const info = factsLine(a.facts) ?? a.reason;
+  const info = a.calcError ? a.reason : factsLine(a.facts) ?? a.reason;
   return (
     <div class={`tile${best ? ' best' : ''}${a.score === 0 || a.score === null ? ' off' : ''}`} style={type ? { '--tc': `var(--t-${type.toLowerCase()})` } : undefined} title={a.reason}>
       <span class={`rate ${best ? 'best' : r.tone === 'best' ? 'good' : r.tone}`}>{best ? '★ Best' : r.tone === 'best' ? 'Good' : r.label}</span>
@@ -258,11 +259,12 @@ function DetailBody({ advice }: { ds: Dataset; snap: BattleSnapshot; advice: Tur
 export function Action({ a, top, topScore: ts, showScore }: { a: ActionAdvice; top: boolean; topScore?: number | null; showScore?: boolean }) {
   return (
     <div class={`act${top ? ' top' : ''}`}>
-      <RatePill score={a.score} top={ts ?? (top ? a.score : undefined)} unknown={a.unknownMoves} />
+      <RatePill score={a.score} top={ts ?? (top ? a.score : undefined)} unknown={a.unknownMoves} calcError={a.calcError} />
       <div class="grow">
         <b>{a.label}</b>
         {a.minPct !== undefined && <span class="muted"> · {Math.round(a.minPct)}–{Math.round(a.maxPct!)}%</span>}
         {showScore && a.score !== null && <span class="muted small"> ({a.score})</span>}
+        {a.calcError && <span class="chip warn sm" style={{ marginLeft: '4px' }} title="The damage calc failed for this row (details in the notes and the console). Please report it.">calc error</span>}
         {a.threat?.ko && <span class="chip sm" style={{ marginLeft: '4px' }}>{a.threat.ko === 'sure' ? 'They KO it' : 'They can KO it'}</span>}
         {a.threat && a.threat.ko !== 'sure' && (a.threat.critKo ?? 0) >= 0.01 && <span class="chip sm" style={{ marginLeft: '4px' }}>Crit risk {pct(a.threat.critKo!)}</span>}
         <div class="small muted">{a.reason}</div>
@@ -390,6 +392,7 @@ function DoublesSlot({ ds, m, planned }: { ds: Dataset; m: DoublesMonAdvice; pla
   const top = topScore(scored);
   const pick = scored.find((a) => planned.has(a)) ?? scored[0];
   const rest = scored.filter((a) => a !== pick).slice(0, 3);
+  const calcErrors = m.actions.filter((a) => a.score === null && /^Calc error/.test(a.reason));
   const threat: ThreatInfo | undefined = m.danger ? { name: m.danger.from.join(' + '), minPct: m.danger.minPct, maxPct: m.danger.maxPct, ko: m.danger.ko, youFirst: null } : undefined;
   const type = pick?.moveId ? ds.moves[pick.moveId]?.type : undefined;
   return (
@@ -425,6 +428,9 @@ function DoublesSlot({ ds, m, planned }: { ds: Dataset; m: DoublesMonAdvice; pla
           ))}
         </div>
       )}
+      {calcErrors.map((a) => (
+        <div class="alts"><div title={a.reason}><span class="pill calc">Calc error</span><b>{a.label}</b><span class="grow">{targetText(a) ? `→ ${targetText(a)}` : ''} not scored</span></div></div>
+      ))}
       {m.movesFrom === 'box' && <div class="note">Moves from your box (not seen on the battle screen yet).</div>}
     </section>
   );
