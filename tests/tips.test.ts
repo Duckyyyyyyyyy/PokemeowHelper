@@ -103,6 +103,19 @@ describe('tip generation from wiki data', () => {
     expect(k.order).toBe(-1);
   });
 
+  it('tells "all, any order" groups apart from version alternatives', () => {
+    const t = (id: string, name: string, edition: string, prereq: string[]) => ({ id, name, region: 'galar', regionName: 'Galar', category: 'gym', title: 'Gym Leader', badge: '', edition, prerequisiteTrainerIds: prereq, rewardItems: [], team: [] });
+    const g = generateTips({
+      challenges: [
+        t('a', 'Ann', 'Sword and Shield', []), t('b', 'Bea', 'Sword', ['a']), t('c', 'Cal', 'Shield', ['a']),
+        t('d', 'Dee', 'Sword and Shield', ['a', 'b', 'c']), t('e', 'Eve', 'Sword and Shield', ['a', 'b', 'c']),
+      ],
+    });
+    const steps = byId('league:galar', g).steps;
+    expect(steps[1]).toMatch(/^Bea or Cal \(either one\)/);
+    expect(steps[2]).toMatch(/^Dee, Eve \(all, any order\)/);
+  });
+
   it('aggregates item sources and special evolution methods', () => {
     const chests = byId('source:chests');
     expect(chests.items).toEqual(['tmrocktomb', 'tmdig']);

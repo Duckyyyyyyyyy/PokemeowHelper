@@ -99,7 +99,7 @@ export function progressPath(tips: GameTip[], ds: Dataset | null): PathStage[] {
         const region = regionOf[stage] ?? `stage ${stage}`;
         const champ = ds?.npcs.find((n) => n.category === 'champion' && n.id.startsWith(`challenge:${region}-`));
         const name = region.charAt(0).toUpperCase() + region.slice(1);
-        label = champ ? `${champ.group ?? name}: League, then Champion ${champ.name}` : `${name} League`;
+        label = champ ? `${champ.group ?? name}: League, then ${champ.title} ${champ.name}` : `${name} League`;
       }
       return { stage, label, tips: list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.title.localeCompare(b.title)) };
     });
@@ -107,9 +107,12 @@ export function progressPath(tips: GameTip[], ds: Dataset | null): PathStage[] {
 
 /* ---------- cross-links ---------- */
 
-/** Tips about reaching or using a map (map unlocks and field moves first). */
+/**
+ * Tips about reaching or using a map: map unlocks and field moves. Only these carry
+ * hand-checked map tags; other tips' map tags can come from place names in prose.
+ */
 export function tipsForMap(tips: GameTip[], mapId: string): GameTip[] {
-  const rank: Partial<Record<TipCategory, number>> = { maps: 0, hm: 1, key: 2, catching: 3 };
+  const rank: Partial<Record<TipCategory, number>> = { maps: 0, hm: 1 };
   return tips
     .filter((t) => t.maps?.includes(mapId) && (t.category in rank))
     .sort((a, b) => (rank[a.category] ?? 9) - (rank[b.category] ?? 9));

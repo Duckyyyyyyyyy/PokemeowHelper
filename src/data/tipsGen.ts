@@ -153,11 +153,16 @@ function leagueTips(raw: Raw, ctx: Ctx): GameTip[] {
     const ordered = [...steps.entries()].sort((a, b) => a[0] - b[0]).map(([, cs]) => cs);
     const lineFor = (cs: Raw[]) => {
       const c = cs[0];
-      const who = cs.map((x) => x.name).join(' or ');
+      // Trainers with the same prerequisites: different game editions are alternatives
+      // (Galar's version-exclusive Gyms); otherwise all of them are needed, in any order.
+      const editions = new Set(cs.map((x) => x.edition ?? ''));
+      const caps = new Set(cs.map((x) => x.levelCap));
+      const nm = (x: Raw) => (caps.size > 1 && x.levelCap ? `${x.name} (cap Lv ${x.levelCap})` : x.name);
+      const who = cs.length === 1 ? c.name : editions.size === cs.length ? `${cs.map(nm).join(' or ')} (either one)` : `${cs.map(nm).join(', ')} (all, any order)`;
       const bits = [c.title];
       const badges = uniq(cs.map((x) => x.badge).filter(Boolean));
       if (badges.length) bits.push(`${badges.join('/')} Badge`);
-      if (c.levelCap) bits.push(`team cap Lv ${c.levelCap}`);
+      if (c.levelCap && caps.size === 1) bits.push(`team cap Lv ${c.levelCap}`);
       const special = uniq(cs.flatMap((x) => (x.rewardItems ?? []).filter((id: string) => /^hm/.test(id) || ctx.items.get(id)?.category === 'key-items')));
       if (special.length) bits.push(`gives ${special.map((id) => ctx.itemName(id).replace(' · ', ' ')).join(', ')}`);
       return `${who} – ${bits.join(' · ')}`;

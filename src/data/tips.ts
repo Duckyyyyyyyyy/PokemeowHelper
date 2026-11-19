@@ -1,7 +1,7 @@
 import type { GameTip, TipSource } from '../shared/types';
 
 /**
- * Hand-curated progression tips (reviewed). Written in our own words from the game wiki's
+ * Hand-curated progression tips. Written in our own words from the game wiki's
  * guide pages – never copied – and each one links its page. Facts the wiki data file
  * already holds (HM givers, Key Item sources, spawn unlocks…) are generated at sync time
  * in tipsGen.ts instead, so they stay current.
@@ -182,11 +182,11 @@ export const CURATED_TIPS: GameTip[] = [
   {
     id: 'field:waterfall', title: 'Waterfall: climb to Crown Pool', category: 'hm', stage: 7, order: 6,
     steps: [
-      'Needs HM07 Waterfall (Alola Champion Hau) plus Surf.',
+      'Needs HM07 Waterfall (Alola Champion Hau).',
       'Climb the waterfall in Hidden Cove (The Blue Sea 5) to reach Crown Pool (The Blue Sea 7).',
       'Partner Scuba Gear lies on Crown Pool\'s western beach – it lets your partner follow you underwater.',
     ],
-    moves: ['waterfall'], items: ['hmwaterfall'], maps: [SEA], npcs: [HAU], requires: ['HM07 Waterfall', 'HM03 Surf'],
+    moves: ['waterfall'], items: ['hmwaterfall'], maps: [SEA], npcs: [HAU], requires: ['HM07 Waterfall'],
     source: [FIELD],
   },
   {
@@ -314,6 +314,7 @@ export const CURATED_TIPS: GameTip[] = [
     maps: [GRAVE, VOID], species: [487], requires: ['Giratina on your team'], source: [MAPS],
   },
   {
+    // Path placement is ours: the ticket drops on starting-area maps, so it fits the first stage.
     id: 'map:safari', title: 'Get into the Safari Zone', category: 'maps', stage: 0, order: 16,
     steps: [
       'You need a Safari Ticket in your Bag (a held ticket does not count). Wild Pokémon in Grasslands, Dark Forest, Violet Town and Fairy Meadow sometimes hold one (1 in 200); it can also be bought on the Market.',
@@ -328,7 +329,7 @@ export const CURATED_TIPS: GameTip[] = [
     id: 'catch:kecleon', title: 'Find the hidden Kecleon', category: 'catching', order: 20,
     steps: [
       'Needs the Silph Scope. In Violet Town, normal walking steps can reveal a faint Kecleon nearby (1 in 2,000 per step).',
-      'Walk – don\'t run – next to it to start the encounter. Running from it or leaving Violet Town makes it vanish for good.',
+      'Walk – don\'t run – next to it to start the encounter. Running from it or leaving Violet Town makes it disappear, and going back to its tile will not bring it back.',
     ],
     maps: [VIOLET], items: ['silphscope'], species: [352], requires: ['Silph Scope'], source: [MAPS],
   },

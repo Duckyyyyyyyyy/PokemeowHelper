@@ -38,6 +38,8 @@ for (const n of npcs) for (const v of n.variants) {
 
 const fixture: Dataset = {
   ...full,
+  // Generated tips carry wiki prose: never commit them to the public repo.
+  tips: undefined,
   species: Object.fromEntries([...speciesIds].filter((id) => full.species[id]).map((id) => [id, full.species[id]])),
   moves: Object.fromEntries(Object.entries(full.moves).map(([k, m]) => [k, { ...m, description: m.description.slice(0, 160) }])),
   items: Object.fromEntries([...items].filter((i) => full.items[i]).map((i) => [i, full.items[i]])),
