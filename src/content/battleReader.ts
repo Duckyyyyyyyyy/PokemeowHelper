@@ -1,4 +1,4 @@
-import { activeFainted, type BattleEvent, type BattleMon, type BattleMove, type BattleSnapshot, type BoostKey, type Boosts, type RosterMon } from '../shared/battle';
+import { activeFainted, type BattleEvent, type EventHit, type BattleMon, type BattleMove, type BattleSnapshot, type BoostKey, type Boosts, type RosterMon } from '../shared/battle';
 
 /**
  * Reads the PokeMeowRPG battle screen into a BattleSnapshot. Pure and read-only:
@@ -31,6 +31,8 @@ export const SEL = {
   /** Doubles (seen live 2026-11-19): one card per field position inside each side's stats box. */
   activeCard: '.double-active-card',
   positionLabel: '.double-position-label',
+  /** "Choose for Slowbro · Position 1" above the moves of the position being chosen. */
+  commandHeading: '.double-command-heading',
 } as const;
 
 /** Seen live (Drake, 2026-11-18) after your Pokémon fainted. Matched as text: its markup is not known yet. */
@@ -88,7 +90,7 @@ export function monName(el: Element | null): string {
     .trim();
 }
 
-function readCombatant(root: Element | null): BattleMon | undefined {
+function readCombatant(root: Element | null, position?: number): BattleMon | undefined {
   if (!root) return undefined;
   const name = monName(root.querySelector(SEL.name));
   if (!name) return undefined;
@@ -105,7 +107,16 @@ function readCombatant(root: Element | null): BattleMon | undefined {
     status: statusEl?.getAttribute('data-status') || undefined,
     item,
     stages: stages && Object.keys(stages).length ? stages : undefined,
+    ...(position ? { position } : {}),
   };
+}
+
+/** Doubles: one card per field position inside the side's stats box ("Position 2", "Opponent 1"). */
+function readActives(stats: Element | null): BattleMon[] {
+  if (!stats) return [];
+  return [...stats.querySelectorAll(SEL.activeCard)]
+    .map((card, i) => readCombatant(card, num(card.querySelector(SEL.positionLabel)?.textContent?.match(/(\d+)/)?.[1]) ?? i + 1))
+    .filter((m): m is BattleMon => !!m);
 }
 
 /** "Evasion +1" (seen live), also "Attack +2, Speed -1" style lists. */
@@ -120,6 +131,11 @@ export function parseStatChanges(text: string): Boosts {
 
 /** "Fairy Wind · Fairy · Special · Power 40 · Accuracy 100% · 30/30 PP. No additional effect." */
 export function parseMoveLabel(label: string): Omit<BattleMove, 'disabled'> {
+  // Doubles screen (seen live 2026-11-19): "Surf, Water, Special, 15 of 15 PP" (no power/accuracy).
+  if (!label.includes('·')) {
+    const c = label.match(/^(.+?),\s*([A-Za-z]+),\s*(Physical|Special|Status),\s*(\d+)\s*of\s*(\d+)\s*PP/);
+    if (c) return { name: c[1].trim(), type: c[2], category: c[3] as BattleMove['category'], power: undefined, accuracy: undefined, pp: num(c[4]), maxPp: num(c[5]) };
+  }
   const head = label.split(/ PP\b/)[0];
   const parts = head.split('·').map((s) => s.trim());
   const cat = parts.find((p) => /^(Physical|Special|Status)$/.test(p)) as BattleMove['category'];
@@ -146,6 +162,9 @@ export function readMoves(doc: ParentNode): BattleMove[] {
 export function readBench(doc: ParentNode): RosterMon[] {
   return [...doc.querySelectorAll(SEL.switchCard)].map((card) => {
     const label = card.querySelector(SEL.switchButton)?.getAttribute('aria-label') ?? '';
+    // Doubles (seen live 2026-11-19): label "Send out Slowbro. Choose a healthy reserve Pokémon.",
+    // with <strong>Slowbro · Lv. 45</strong><small>120/144 HP · Active</small> inside the button.
+    if (/^Send out\s/i.test(label)) return readSendOutCard(card, label);
     // "Active: Cottonee, level 19, 45 of 45 HP, …" / "Switch to Timburr, level 16, 51 of 51 HP"
     const name = clean(label.replace(/^(Active:|Switch to)\s*/i, '').split(',')[0]);
     const moves = [...card.querySelectorAll(SEL.switchMovePp)].map((pp) => {
@@ -163,6 +182,31 @@ export function readBench(doc: ParentNode): RosterMon[] {
       moves: moves.length ? moves : undefined,
     };
   }).filter((r) => r.name);
+}
+
+function switchCardMoves(card: Element): RosterMon['moves'] {
+  const moves = [...card.querySelectorAll(SEL.switchMovePp)].map((pp) => {
+    const parent = pp.parentElement;
+    const moveName = clean((parent?.textContent ?? '').replace(pp.textContent ?? '', ''));
+    const m = (pp.textContent ?? '').match(/(\d+)\s*\/\s*(\d+)/);
+    return { name: moveName, pp: num(m?.[1]), maxPp: num(m?.[2]) };
+  }).filter((m) => m.name);
+  return moves.length ? moves : undefined;
+}
+
+function readSendOutCard(card: Element, label: string): RosterMon {
+  const button = card.querySelector(SEL.switchButton);
+  const head = clean(button?.querySelector('strong')?.textContent);
+  const info = clean(button?.querySelector('small')?.textContent);
+  const name = clean(head.split(/\s·\s*Lv\.?/i)[0]) || clean(label.replace(/^Send out\s+/i, '').replace(/\.\s.*$/, ''));
+  return {
+    name,
+    level: num(head.match(/Lv\.?\s*(\d+)/i)?.[1]),
+    ...parseHp(info),
+    active: /\bActive\b/i.test(info),
+    fainted: card.getAttribute('data-fainted') === 'true' || /faint/i.test(info),
+    moves: switchCardMoves(card),
+  };
 }
 
 function readOpponentTeam(doc: ParentNode): RosterMon[] {
@@ -194,7 +238,7 @@ const STAT_WORDS: [RegExp, BoostKey][] = [
  * Stage change in one log line, mainline wording (seen in-game: "Your Timburr's Defense
  * fell harshly!", "Your Turtwig's Speed fell!"). Returns null when the line has none.
  */
-export function parseBoostLine(text: string, who: Who = {}): { side: 'player' | 'opponent'; stats: BoostKey[]; delta: number } | null {
+export function parseBoostLine(text: string, who: Who = {}): { side: 'player' | 'opponent'; mon: string; stats: BoostKey[]; delta: number } | null {
   const subj = splitSubject(text, who);
   if (!subj) return null;
   const m = subj.rest.match(/^(.+?)[’']s\s+(.+?)\s+(rose|fell)(?:\s+(sharply|harshly|drastically|severely))?!/i);
@@ -208,7 +252,7 @@ export function parseBoostLine(text: string, who: Who = {}): { side: 'player' | 
   }
   if (!stats.length) return null;
   const size = /drastically|severely/i.test(m[4] ?? '') ? 3 : m[4] ? 2 : 1;
-  return { side, stats, delta: /rose/i.test(m[3]) ? size : -size };
+  return { side, mon: m[1].trim(), stats, delta: /rose/i.test(m[3]) ? size : -size };
 }
 
 /** A line where a side sends in a new Pokémon (its stat stages start fresh). */
@@ -227,6 +271,8 @@ export function switchedIn(text: string): string | undefined {
 export interface Who {
   trainer?: string;
   active?: { player?: string; opponent?: string };
+  /** Every name seen on each side so far (lower-cased): doubles has two active per side. */
+  seen?: { player: Set<string>; opponent: Set<string> };
 }
 type Side = 'player' | 'opponent';
 const lcName = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -259,11 +305,17 @@ function resolveSide(subj: { side?: Side }, mon: string, who: Who): Side | undef
   const { player, opponent } = who.active ?? {};
   if (player && n === lcName(player)) return 'player';
   if (opponent && n === lcName(opponent)) return 'opponent';
+  // Doubles: the other Pokémon on the field ("Slowbro used Calm Mind!" after "Go, Scrafty!").
+  if (who.seen?.player.has(n) && !who.seen.opponent.has(n)) return 'player';
+  if (who.seen?.opponent.has(n) && !who.seen.player.has(n)) return 'opponent';
   return player || opponent ? undefined : 'player';
 }
 
-/** "Opponent’s Onix used Rock Tomb! It dealt 12 damage." / "Lt. Surge’s Voltorb used Screech!" / "Gloom used Giga Drain!" */
-export function parseUseLine(text: string, who: Who = {}): { side: Side; mon: string; move: string; damage?: number } | null {
+/**
+ * "Opponent’s Onix used Rock Tomb! It dealt 12 damage." / "Lt. Surge’s Voltorb used Screech!" / "Gloom used Giga Drain!"
+ * Doubles (seen live 2026-11-19): "Scrafty used Crunch on Tate & Liza’s Claydol! It's super effective! It dealt 86 damage."
+ */
+export function parseUseLine(text: string, who: Who = {}): { side: Side; mon: string; move: string; damage?: number; target?: { side: Side; mon: string } } | null {
   const subj = splitSubject(text, who);
   if (!subj) return null;
   const m = subj.rest.match(/^(.+?)\s+used\s+(.+?)!/i);
@@ -271,7 +323,16 @@ export function parseUseLine(text: string, who: Who = {}): { side: Side; mon: st
   const side = resolveSide(subj, m[1], who);
   if (!side) return null;
   const dmg = text.match(/dealt (\d+) damage/i);
-  return { side, mon: m[1].trim(), move: m[2].trim(), damage: dmg ? parseInt(dmg[1], 10) : undefined };
+  let move = m[2].trim();
+  let target: { side: Side; mon: string } | undefined;
+  const on = move.match(/^(.+?)\s+on\s+(.+)$/i);
+  if (on) {
+    move = on[1].trim();
+    const t = splitSubject(on[2].trim(), who);
+    const tSide = t && resolveSide(t, t.rest, who);
+    if (t && tSide) target = { side: tSide, mon: t.rest.trim() };
+  }
+  return { side, mon: m[1].trim(), move, damage: dmg ? parseInt(dmg[1], 10) : undefined, ...(target ? { target } : {}) };
 }
 
 /** "X fainted." / "X’s attack missed." / "X avoided the attack." in either wording. */
@@ -291,25 +352,40 @@ interface LogLine {
   turn?: number;
 }
 
-export function parseLog(lines: LogLine[], trainer?: string): { boosts: BattleSnapshot['boosts']; events: BattleEvent[] } {
+export function parseLog(lines: LogLine[], trainer?: string): { boosts: BattleSnapshot['boosts']; events: BattleEvent[]; monBoosts: Record<string, Boosts> } {
   const boosts: { player: Boosts; opponent: Boosts } = { player: {}, opponent: {} };
+  /** Stages per Pokémon ("side|name"): doubles has two Pokémon per side. */
+  const monBoosts: Record<string, Boosts> = {};
+  const key = (side: Side, mon: string) => `${side}|${lcName(mon)}`;
   const active: { player?: string; opponent?: string } = {};
-  const who: Who = { trainer, active };
+  const seen = { player: new Set<string>(), opponent: new Set<string>() };
+  const who: Who = { trainer, active, seen };
   const events: BattleEvent[] = [];
   const other = (s: 'player' | 'opponent') => (s === 'player' ? 'opponent' : 'player');
+  const note = (side: Side, mon?: string) => mon && seen[side].add(lcName(mon));
   lines.forEach(({ text, turn }, idx) => {
     const sw = switchSide(text);
     if (sw) {
       boosts[sw] = {};
       active[sw] = switchedIn(text);
+      note(sw, active[sw]);
+      if (active[sw]) monBoosts[key(sw, active[sw]!)] = {};
     }
     const use = parseUseLine(text, who);
     if (use) {
       active[use.side] ??= use.mon;
+      note(use.side, use.mon);
+      const targetSide = use.target?.side ?? other(use.side);
+      const target = use.target?.mon ?? active[other(use.side)];
+      // Doubles (a target was named, or two Pokémon of a side are known): stages per Pokémon.
+      const perMon = !!use.target || seen.player.size > 1 || seen.opponent.size > 1;
       events.push({
-        idx, turn, side: use.side, mon: use.mon, move: use.move, target: active[other(use.side)], damage: use.damage,
+        idx, turn, side: use.side, mon: use.mon, move: use.move, target, damage: use.damage,
+        ...(use.target ? { targetSide } : {}),
         unusual: UNUSUAL.test(text) || undefined,
-        stages: { attacker: { ...boosts[use.side] }, target: { ...boosts[other(use.side)] } },
+        stages: perMon
+          ? { attacker: { ...monBoosts[key(use.side, use.mon)] }, target: target ? { ...monBoosts[key(targetSide, target)] } : {} }
+          : { attacker: { ...boosts[use.side] }, target: { ...boosts[other(use.side)] } },
       });
       return;
     }
@@ -322,16 +398,41 @@ export function parseLog(lines: LogLine[], trainer?: string): { boosts: BattleSn
       const dmg = text.match(/^It dealt (\d+) damage/i);
       if (dmg && last.damage === undefined) last.damage = parseInt(dmg[1], 10);
       if (UNUSUAL.test(text) && idx === last.idx + 1) last.unusual = true;
+      // Spread move, one line per Pokémon hit (seen live): "Slowbro took 24 damage." / "It doesn't affect Tate & Liza’s Xatu."
+      const took = subjectLine(text, /^(.+?)\s+took\s+\d+\s+damage/i, who);
+      const immune = text.match(/^It doesn[’']t affect\s+(.+?)[.!]?$/i);
+      let hit: EventHit | undefined;
+      if (took) hit = { side: took.side, mon: took.mon, damage: parseInt(text.match(/took\s+(\d+)\s+damage/i)![1], 10) };
+      else if (immune) {
+        const t = splitSubject(immune[1], who);
+        const tSide = t && resolveSide(t, t.rest, who);
+        if (t && tSide) hit = { side: tSide, mon: t.rest.trim(), immune: true };
+      }
+      if (hit) {
+        hit.stages = { ...monBoosts[key(hit.side, hit.mon)] };
+        (last.hits ??= []).push(hit);
+      }
       const fainted = subjectLine(text, /^(.+?)\s+fainted/i, who);
-      if (fainted && fainted.side !== last.side && fainted.mon === last.target) last.targetFainted = true;
+      if (fainted) {
+        const tSide = last.targetSide ?? other(last.side);
+        if (fainted.side === tSide && fainted.mon === last.target) last.targetFainted = true;
+        const h = last.hits?.find((x) => x.side === fainted.side && lcName(x.mon) === lcName(fainted.mon));
+        if (h) h.fainted = true;
+      }
     }
     const b = parseBoostLine(text, who);
-    if (b) for (const s of b.stats) boosts[b.side][s] = Math.max(-6, Math.min(6, (boosts[b.side][s] ?? 0) + b.delta));
+    if (b) {
+      for (const st of b.stats) {
+        boosts[b.side][st] = Math.max(-6, Math.min(6, (boosts[b.side][st] ?? 0) + b.delta));
+        const mb = (monBoosts[key(b.side, b.mon)] ??= {});
+        mb[st] = Math.max(-6, Math.min(6, (mb[st] ?? 0) + b.delta));
+      }
+    }
   });
-  return { boosts, events };
+  return { boosts, events, monBoosts };
 }
 
-function readLog(doc: ParentNode, trainer?: string): { lines: string[]; boosts: BattleSnapshot['boosts']; events: BattleEvent[] } {
+function readLog(doc: ParentNode, trainer?: string): { lines: string[]; boosts: BattleSnapshot['boosts']; events: BattleEvent[]; monBoosts: Record<string, Boosts> } {
   let turn: number | undefined;
   const lines: LogLine[] = [...doc.querySelectorAll(SEL.logLine)].map((li) => {
     const label = li.querySelector(SEL.logTurn)?.textContent ?? '';
@@ -340,8 +441,8 @@ function readLog(doc: ParentNode, trainer?: string): { lines: string[]; boosts: 
     // Gender is shown as text after the name ("CottoneeFemale"); drop it so lines read naturally.
     return { text: clean((li.textContent ?? '').replace(label, '')).replace(/(\S)(Male|Female)\b/g, '$1'), turn };
   });
-  const { boosts, events } = parseLog(lines, trainer);
-  return { lines: lines.slice(-12).map((l) => l.text), boosts, events: events.slice(-80) };
+  const { boosts, events, monBoosts } = parseLog(lines, trainer);
+  return { lines: lines.slice(-12).map((l) => l.text), boosts, events: events.slice(-80), monBoosts };
 }
 
 /** Active Pokémon shown on a side: one card per position in doubles, else one per stats box. */
@@ -354,8 +455,18 @@ export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | 
   const arena = doc.querySelector(SEL.arena);
   if (!arena) return null;
   const log = readLog(arena, clean(arena.querySelector(SEL.opponentName)?.textContent) || undefined);
-  const player = readCombatant(arena.querySelector(SEL.playerStats));
-  const opponent = readCombatant(arena.querySelector(SEL.opponentStats));
+  const myActives = readActives(arena.querySelector(SEL.playerStats));
+  const theirActives = readActives(arena.querySelector(SEL.opponentStats));
+  const doubles = myActives.length > 1 || theirActives.length > 1;
+  // Doubles: position 1 stands in for "the" active Pokémon (singles callers keep working).
+  const player = doubles ? myActives[0] : readCombatant(arena.querySelector(SEL.playerStats));
+  const opponent = doubles ? theirActives[0] : readCombatant(arena.querySelector(SEL.opponentStats));
+  // Stages: the on-screen badge wins; else the log's per-Pokémon stages.
+  const withStages = (side: 'player' | 'opponent') => (m: BattleMon): BattleMon => {
+    const fromLog = log.monBoosts[`${side}|${lcName(m.name)}`];
+    return m.stages || !fromLog || !Object.keys(fromLog).length ? m : { ...m, stages: fromLog };
+  };
+  const movesFor = clean(arena.querySelector(SEL.commandHeading)?.textContent).match(/^Choose for\s+(.+?)(?:\s*·\s*Position\s*\d+)?$/i)?.[1]?.trim();
   const bench = readBench(arena);
   const playerRoot = arena.querySelector(SEL.playerStats);
   // Your active Pokémon is down and the game asks for the next one: only switch-ins make sense.
@@ -382,5 +493,7 @@ export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | 
     ...(forcedSwitch ? { forcedSwitch: true } : {}),
     // Seen live (Tate & Liza, 2026-11-19): doubles has ONE stats box per side holding a card per position.
     sides: { player: countActives(arena, SEL.playerStats), opponent: countActives(arena, SEL.opponentStats) },
+    ...(doubles ? { actives: { player: myActives.map(withStages('player')), opponent: theirActives.map(withStages('opponent')) } } : {}),
+    ...(doubles && movesFor ? { movesFor } : {}),
   };
 }

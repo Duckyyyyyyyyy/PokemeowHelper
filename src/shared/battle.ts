@@ -17,6 +17,8 @@ export interface BattleMon {
   item?: string;
   /** Stat stages shown on screen next to the name ("Evasion +1"), when any. */
   stages?: Boosts;
+  /** Doubles: field position (1 = left card, "Position 1" / "Opponent 1"). */
+  position?: number;
 }
 
 export interface BattleMove {
@@ -56,8 +58,18 @@ export interface BattleEvent {
   side: 'player' | 'opponent';
   mon: string;
   move: string;
-  /** The other side's active Pokémon when the move was used. */
+  /**
+   * The Pokémon hit: the other side's active one in singles; in doubles the one named in
+   * "X used Crunch on Tate & Liza’s Claydol!" (seen live 2026-11-19).
+   */
   target?: string;
+  /** Side of `target` (doubles: a move can target your own ally). */
+  targetSide?: 'player' | 'opponent';
+  /**
+   * Doubles spread move ("Slowbro used Surf!" then one "<Pokémon> took N damage." line per
+   * Pokémon hit, "It doesn't affect <Pokémon>." for an immune one; seen live 2026-11-19).
+   */
+  hits?: EventHit[];
   damage?: number;
   missed?: boolean;
   /** The target fainted right after this hit (damage may be capped by its HP). */
@@ -66,6 +78,16 @@ export interface BattleEvent {
   unusual?: boolean;
   /** Stat stages of attacker and target at that moment. */
   stages: { attacker: Boosts; target: Boosts };
+}
+
+export interface EventHit {
+  side: 'player' | 'opponent';
+  mon: string;
+  damage?: number;
+  immune?: boolean;
+  fainted?: boolean;
+  /** Stat stages of the Pokémon hit at that moment. */
+  stages?: Boosts;
 }
 
 export interface BattleSnapshot {
@@ -100,6 +122,16 @@ export interface BattleSnapshot {
    * Not checked against a live doubles battle yet: see doublesReason().
    */
   sides?: { player: number; opponent: number };
+  /**
+   * Doubles (format "doubles", one card per field position; seen live 2026-11-19): every active
+   * Pokémon of each side in position order. `player` / `opponent` stay the first ones.
+   */
+  actives?: { player: BattleMon[]; opponent: BattleMon[] };
+  /**
+   * Doubles: whose moves `moves` are. The game shows one position's moves at a time
+   * ("Choose for Slowbro · Position 1"), and none while a target is being picked.
+   */
+  movesFor?: string;
 }
 
 /**

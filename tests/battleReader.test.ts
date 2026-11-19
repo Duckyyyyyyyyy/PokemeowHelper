@@ -79,12 +79,12 @@ describe('text parsers', () => {
   });
 
   it('stat-stage lines (real wording from the game, plus mainline variants)', () => {
-    expect(parseBoostLine("Your Timburr's Defense fell harshly!")).toEqual({ side: 'player', stats: ['def'], delta: -2 });
-    expect(parseBoostLine("Your Turtwig's Speed fell!")).toEqual({ side: 'player', stats: ['spe'], delta: -1 });
-    expect(parseBoostLine("Opponent’s Onix's Attack rose sharply!")).toEqual({ side: 'opponent', stats: ['atk'], delta: 2 });
-    expect(parseBoostLine("Opponent’s Gyarados's Attack and Speed rose!")).toEqual({ side: 'opponent', stats: ['atk', 'spe'], delta: 1 });
-    expect(parseBoostLine("Your Lapras's Sp. Atk rose drastically!")).toEqual({ side: 'player', stats: ['spa'], delta: 3 });
-    expect(parseBoostLine("Your Lapras's Special Defense fell severely!")).toEqual({ side: 'player', stats: ['spd'], delta: -3 });
+    expect(parseBoostLine("Your Timburr's Defense fell harshly!")).toEqual({ side: 'player', mon: 'Timburr', stats: ['def'], delta: -2 });
+    expect(parseBoostLine("Your Turtwig's Speed fell!")).toMatchObject({ side: 'player', stats: ['spe'], delta: -1 });
+    expect(parseBoostLine("Opponent’s Onix's Attack rose sharply!")).toMatchObject({ side: 'opponent', stats: ['atk'], delta: 2 });
+    expect(parseBoostLine("Opponent’s Gyarados's Attack and Speed rose!")).toMatchObject({ side: 'opponent', stats: ['atk', 'spe'], delta: 1 });
+    expect(parseBoostLine("Your Lapras's Sp. Atk rose drastically!")).toMatchObject({ side: 'player', stats: ['spa'], delta: 3 });
+    expect(parseBoostLine("Your Lapras's Special Defense fell severely!")).toMatchObject({ side: 'player', stats: ['spd'], delta: -3 });
     expect(parseBoostLine('Opponent’s Onix used Rock Tomb! It dealt 12 damage.')).toBeNull();
     expect(parseBoostLine("Your Onix's Attack won't go any higher!")).toBeNull();
   });
