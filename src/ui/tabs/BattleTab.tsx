@@ -84,6 +84,7 @@ function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
               Their best hit: <b>{advice.threat.name}</b> {Math.round(advice.threat.minPct)}–{Math.round(advice.threat.maxPct)}% of your max HP
               {advice.threat.ko === 'sure' ? ' – KOs you' : advice.threat.ko ? ' – can KO you' : ''}.{' '}
               {advice.threat.youFirst === null ? 'Speed tie.' : advice.threat.youFirst ? 'You are faster.' : 'They are faster.'}
+              {advice.threat.calcError && <span class="chip warn" style={{ padding: '0 7px', marginLeft: '4px' }} title="The damage calc failed for some of their moves: this may not be their best hit.">calc error</span>}
               <CritChip t={advice.threat} />
               {advice.threat.ko !== 'sure' && (advice.threat.koChance ?? 0) >= 0.01 && (advice.threat.koChance! - (advice.threat.critKo ?? 0)) >= 0.01 && (
                 <span class="small"> ~{pct(advice.threat.koChance!)} they KO you this turn (likely moves).</span>
@@ -181,6 +182,7 @@ export function Action({ a, top }: { a: ActionAdvice; top: boolean }) {
       <div class="grow">
         <b>{a.kind === 'switch' ? '⇄ ' : a.kind === 'item' ? '🎒 ' : ''}{a.label}</b>
         {a.minPct !== undefined && <span class="muted"> · {Math.round(a.minPct)}–{Math.round(a.maxPct!)}%</span>}
+        {a.calcError && <span class="chip warn" style={{ padding: '0 7px', marginLeft: '4px' }} title="The damage calc failed for this row (details in the notes and the console). Please report it.">calc error</span>}
         {a.tag === 'setup' && <span class="chip" style={{ padding: '0 7px', marginLeft: '4px' }} title="Support move: compared with attacking right away (stat stages, status, screens, weather, hazards).">Setup</span>}
         {a.ko === 'sure' && <span class="chip on" style={{ padding: '0 7px', marginLeft: '4px' }}>KO</span>}
         {a.threat?.ko && <span class="chip" style={{ padding: '0 7px', marginLeft: '4px' }}>{a.threat.ko === 'sure' ? 'They KO it' : 'They can KO it'}</span>}
