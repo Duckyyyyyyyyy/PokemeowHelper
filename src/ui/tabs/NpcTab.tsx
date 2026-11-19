@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'preact/hooks';
 import type { Dataset, Npc, NpcMon } from '../../shared/types';
-import { activeTab, dataset, selectedNpc, selectedNpcId, selectedVariant } from '../store';
+import { activeTab, box, dataset, selectedNpc, selectedNpcId, selectedVariant } from '../store';
 import { Avatar, Empty, MoveChip, Tip, TypeBadge, Types } from '../components/common';
 import { bestAttackTypes, bestDefensiveTypes, monTypes, teamNotes } from '../../engine/analysis';
-import { RULES_TEXT, rulesFor } from '../../engine/rules';
+import { RULES_TEXT, dsFor, rulesFor } from '../../engine/rules';
+import { FacilityRules, LevelModeSeg } from '../components/FacilityRules';
+import { frontierVariant, levelMode } from '../frontierPrefs';
 import { NoData } from './shared';
 import { ASSUMED_NPC_LEVEL, npcToCalc } from '../../engine/damage';
 import { observedForNpc } from '../../engine/observed';
@@ -139,9 +141,12 @@ function MonRow({ ds, m, seen }: { ds: Dataset; m: NpcMon; seen?: string[] }) {
   );
 }
 
-function NpcDetail({ ds, npc }: { ds: Dataset; npc: Npc }) {
+function NpcDetail({ ds: base, npc }: { ds: Dataset; npc: Npc }) {
   const vi = Math.min(selectedVariant.value, npc.variants.length - 1);
-  const v = npc.variants[vi];
+  // Battle Frontier: Gen III types/stats and the Brain's real level (Level 50 / Open Level).
+  const ds = dsFor(base, rulesFor(npc.category));
+  const frontier = npc.category === 'frontier' ? frontierVariant(base, box.value, npc, npc.variants[vi], levelMode.value) : null;
+  const v = frontier?.v ?? npc.variants[vi];
   const attack = bestAttackTypes(ds, v);
   const defense = bestDefensiveTypes(ds, v).slice(0, 5);
   const notes = teamNotes(ds, v);
@@ -168,6 +173,8 @@ function NpcDetail({ ds, npc }: { ds: Dataset; npc: Npc }) {
           ))}
         </div>
       )}
+
+      {frontier && <LevelModeSeg level={frontier.level} estimated={frontier.estimated} />}
 
       <div class="card">
         <p class="title">
@@ -210,11 +217,11 @@ function NpcDetail({ ds, npc }: { ds: Dataset; npc: Npc }) {
 
       <NpcUnlocks ds={ds} npc={npc} />
       {rulesFor(npc.category).npcIgnoresWonderGuard && <Tip kind="info"><b>Special rules:</b> {RULES_TEXT}</Tip>}
-      {!rulesFor(npc.category).bagItems && <Tip kind="info"><b>Battle Tower rules:</b> Bag medicine cannot be used, and HP, status and PP carry over between opponents.</Tip>}
+      <FacilityRules npc={npc} />
       <div class="btns">
         <button class="btn primary" onClick={() => (activeTab.value = 'team')}>Suggest team →</button>
       </div>
-      <div class="foot">Types use the game's type chart and known abilities. Damage numbers are in the Team tab.</div>
+      <div class="foot">Types use the {frontier ? 'Gen III' : "game's"} type chart and known abilities. Damage numbers are in the Team tab.</div>
     </>
   );
 }

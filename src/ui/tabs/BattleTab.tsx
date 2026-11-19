@@ -4,7 +4,9 @@ import type { BattleMon, BattleSnapshot, Boosts } from '../../shared/battle';
 import type { Dataset } from '../../shared/types';
 import { Empty, Tip, Types, scoreClass } from '../components/common';
 import { adviseTurn, type ActionAdvice } from '../../engine/turnAdvisor';
-import { battle, damageChecks, guessScore, loadSampleBattle, observed } from '../battleStore';
+import { battle, damageChecks, forceGen3, guessScore, loadSampleBattle, observed, setForceGen3, towerRun } from '../battleStore';
+import { runSummary } from '../../engine/towerPlan';
+import type { TurnAdvice } from '../../engine/turnAdvisor';
 import { box, dataset, isExtension } from '../store';
 import { NoData } from './shared';
 import { timeAgo } from '../boxStore';
@@ -32,7 +34,8 @@ export function BattleTab() {
 }
 
 function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
-  const advice = useMemo(() => (snap.status === 'active' ? adviseTurn(ds, snap, box.value, { observed: observed.value, items: ownedItems.value }) : null), [ds, snap, box.value, observed.value, ownedItems.value]);
+  const gen3 = forceGen3.value;
+  const advice = useMemo(() => (snap.status === 'active' ? adviseTurn(ds, snap, box.value, { observed: observed.value, items: ownedItems.value, gen3 }) : null), [ds, snap, box.value, observed.value, ownedItems.value, gen3]);
   const ended = snap.status === 'won' || snap.status === 'lost';
   const ranked = advice?.actions.filter((a) => a.score !== null) ?? [];
   const unscored = advice?.actions.filter((a) => a.score === null) ?? [];
@@ -91,7 +94,12 @@ function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
         </>
       )}
 
-      <CalcCheck />
+      <TowerRun advice={advice} />
+      <CalcCheck gen3={gen3 || advice?.npc?.category === 'frontier'} />
+      <label class="small muted row" style={{ gap: '6px', padding: '0 4px' }} title="Battle Frontier battles use Gen III rules. Turn this on if MeowHelper does not recognise a Frontier battle by itself.">
+        <input type="checkbox" checked={gen3} onChange={(e) => setForceGen3((e.target as HTMLInputElement).checked)} />
+        Battle Frontier: use Gen III rules{advice?.npc?.category === 'frontier' ? ' (on automatically for this Brain)' : ''}
+      </label>
 
       {snap.log.length > 0 && (
         <details class="card">
@@ -151,7 +159,26 @@ export function Action({ a, top }: { a: ActionAdvice; top: boolean }) {
 const VERDICT = { ok: '✓', off: '✗', 'set-mismatch': '≠' } as const;
 
 /** Real damage from the battle log vs the calc range for the same hit. */
-function CalcCheck() {
+/** Battle Tower attempt: what is left and what your team still has (HP, status and PP carry over). */
+function TowerRun({ advice }: { advice: TurnAdvice | null }) {
+  const run = towerRun.value;
+  const snap = battle.value;
+  if (!run || !snap || advice?.npc?.category !== 'tower' || run.key !== advice.npc.id) return null;
+  const s = runSummary(run, advice.variant);
+  return (
+    <div class="card">
+      <p class="title">Tower run <span class="r">{s.beaten}/{s.total || '?'} beaten</span></p>
+      <div class="small">
+        Your team: {s.teamHpPct !== undefined ? <b>{s.teamHpPct}% HP left</b> : 'HP unknown'} · {s.alive} standing.
+        {s.left.length > 0 && <> Still to come ({s.left.length}): {s.left.slice(0, 8).join(', ')}{s.left.length > 8 ? '…' : ''}.</>}
+      </div>
+      {s.lowPp.length > 0 && <div class="small bad-t">Low PP: {s.lowPp.slice(0, 4).join(' · ')}</div>}
+      <div class="small muted">Nothing heals between opponents and Bag medicine is off: save PP and HP for the ones still to come. Order can change with switches.</div>
+    </div>
+  );
+}
+
+function CalcCheck({ gen3 }: { gen3?: boolean }) {
   const checks = damageChecks.value;
   if (!checks.length) return null;
   const judged = checks.filter((c) => c.verdict !== 'set-mismatch');
@@ -169,7 +196,7 @@ function CalcCheck() {
           </div>
         ))}
       </div>
-      <div class="small muted" style={{ marginTop: '4px' }}>Damage the game reported vs the Gen 9 calc. Only hits where both Pokémon's exact sets are known; crits and unusual hits are skipped.</div>
+      <div class="small muted" style={{ marginTop: '4px' }}>Damage the game reported vs the {gen3 ? 'Gen III' : 'Gen 9'} calc. Only hits where both Pokémon's exact sets are known; crits and unusual hits are skipped.</div>
     </details>
   );
 }

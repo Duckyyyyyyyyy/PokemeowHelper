@@ -2,7 +2,7 @@ import type { Pokemon as CalcPokemon } from '@smogon/calc';
 import { activeFainted, type BattleMon, type BattleSnapshot, type Boosts, type RosterMon } from '../shared/battle';
 import type { BoxMon, Dataset, Npc, NpcMon, NpcTeamVariant } from '../shared/types';
 import { ASSUMED_NPC_LEVEL, SELF_KO_MOVES, bestMove, boxToCalc, defenderVsNpc, makeField, moveDamage, npcToCalc, repeatable, type MoveDamage } from './damage';
-import { rulesFor, type BattleRules } from './rules';
+import { battleRulesFor, dsFor, type BattleRules } from './rules';
 import { movesForBox } from './teamSuggest';
 import { guessNpcSwitch, predictNpcMove, type NpcGuess, type NpcSwitchGuess } from './npcModel';
 import { npcKey, observedMoves, type ObservedStore } from './observed';
@@ -70,6 +70,8 @@ export interface AdviseOptions {
   observed?: ObservedStore;
   /** Items in your bag (id → count), from the game's Bag page. Enables item advice. */
   items?: ReadonlyMap<string, number>;
+  /** Force Battle Frontier (Gen III) rules: the Battle tab switch, for battles the reader can't place. */
+  gen3?: boolean;
 }
 
 /**
@@ -115,7 +117,9 @@ export function matchNpc(ds: Dataset, snap: BattleSnapshot): { npc: Npc; variant
   for (const npc of ds.npcs) {
     for (const v of npc.variants) {
       const who = v.trainerName ?? npc.name;
-      if (lc(who) !== lc(name) && lc(npc.name) !== lc(name)) continue;
+      // Battle Towers are named after the tower; the screen may show the guardian (title "Battle Tower · Ingo").
+      const guardian = npc.category === 'tower' ? npc.title.split(' · ')[1] : undefined;
+      if (lc(who) !== lc(name) && lc(npc.name) !== lc(name) && (!guardian || lc(guardian) !== lc(name))) continue;
       let score = cats?.includes(npc.category) ? 2 : 0;
       const seen = [...snap.opponentTeam];
       if (snap.opponent && !seen.some((r) => lc(r.name) === lc(snap.opponent!.name))) seen.push({ ...snap.opponent, active: true, fainted: false });
@@ -178,9 +182,10 @@ const pctTxt = (d: { minPct: number; maxPct: number }) => `${Math.round(d.minPct
 
 export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts: AdviseOptions = {}): TurnAdvice {
   const notes: string[] = [];
-  const idx = indexes(ds);
   const match = matchNpc(ds, snap);
-  const rules: BattleRules = rulesFor(match?.npc.category);
+  const rules: BattleRules = battleRulesFor(match?.npc.category, snap.kind, opts.gen3);
+  ds = dsFor(ds, rules); // Battle Frontier: Gen III data and calc
+  const idx = indexes(ds);
   const field = makeField('singles');
   const out: TurnAdvice = { npc: match?.npc, variant: match?.variant, actions: [], notes };
 
@@ -397,7 +402,8 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
     out.actions.push(switchAdvice(ds, idx, box, r, foeCalc, foeMoves, rules, field));
   }
 
-  if (!rules.bagItems) notes.push('Bag medicine cannot be used in Battle Towers; HP, status and PP carry over between opponents.');
+  if (rules.gen === 3) notes.push('Battle Frontier: Gen III rules (no Fairy, the type decides physical/special, Gen III moves and items only). Bag items cannot be used.');
+  else if (!rules.bagItems) notes.push('Bag medicine cannot be used in Battle Towers; HP, status and PP carry over between opponents.');
 
   out.actions.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
   if (Object.keys(snap.boosts.player).length || Object.keys(snap.boosts.opponent).length) notes.push('Stat stages come from the battle log and are included.');

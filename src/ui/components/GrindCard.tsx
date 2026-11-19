@@ -13,18 +13,20 @@ const versCache = new Map<string, Versatility>();
  * "Worth grinding": a full team of low-level Pokémon from your box to train for this fight (scored
  * as if trained to its level), plus more candidates. Shown under the ready-now team; never changes it.
  */
-export function GrindCard({ ds, v, ready, rules, locked, excluded }: {
+export function GrindCard({ ds, v, ready, rules, locked, excluded, size }: {
   ds: Dataset;
   v: NpcTeamVariant;
   ready: Suggestion;
   rules: BattleRules;
   locked: readonly string[];
   excluded: readonly string[];
+  /** Team size (Battle Frontier: 3). */
+  size?: number;
 }) {
   const tms = ownedTms.value;
   const grind = useMemo(
-    () => worthGrinding(ds, v, ready, { levelCap: v.levelCap, rules, locked, excluded, ownedTms: tms }),
-    [ds, v, ready, tms],
+    () => worthGrinding(ds, v, ready, { levelCap: v.levelCap, rules, locked, excluded, ownedTms: tms, size }),
+    [ds, v, ready, tms, excluded, size],
   );
   // Team first, so its versatility is rated first.
   const list = useMemo(() => [...grind.team, ...grind.more], [grind]);
