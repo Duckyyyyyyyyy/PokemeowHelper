@@ -222,7 +222,7 @@ function NpcDetail({ ds: base, npc }: { ds: Dataset; npc: Npc }) {
       <div class="btns">
         <button class="btn primary" onClick={() => goPrep('team')}>Suggest team →</button>
       </div>
-      <div class="foot">Types use the {frontier ? 'Gen III' : "game's"} type chart and known abilities. Damage numbers are in the Team tab.</div>
+      <div class="foot">Types use the {frontier ? 'Gen III' : "game's"} type chart and known abilities. Damage numbers are in step 2, Team.</div>
     </>
   );
 }

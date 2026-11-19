@@ -15,7 +15,7 @@ export function UiModeCard() {
   }
   return (
     <div class="card">
-      <h3>Where MeowRPGAdvisor opens</h3>
+      <p class="title">Where MeowRPGAdvisor opens</p>
       <label style="display:block;margin:6px 0">
         <input type="radio" name="uimode" checked={mode === 'window'} onChange={() => choose('window')} /> Floating window (default){' '}
         <span class="muted">– a small window that stays put when you switch tabs. Chrome cannot keep it always on top, so the browser can cover it.</span>

@@ -334,7 +334,7 @@ function DoublesLive({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
         <Tip kind={snap.status === 'won' ? 'ok' : 'danger'}>{snap.status === 'won' ? 'You won the battle!' : 'You lost this one.'}</Tip>
       ) : snap.status !== 'active' ? (
         <Tip kind="info">Battle state: {snap.status}. Advice shows while the battle is active.</Tip>
-      ) : advice && <DoublesBody ds={ds} advice={advice} />}
+      ) : advice && <DoublesBody ds={ds} advice={advice} snap={snap} />}
 
       <Fold title="Details">
         {advice && advice.foes.length > 0 && (
@@ -362,7 +362,7 @@ function targetText(a: DoublesAction) {
   return `${a.target.side === 'opponent' ? '' : 'ally '}${a.target.name}`;
 }
 
-function DoublesBody({ ds, advice }: { ds: Dataset; advice: DoublesAdvice }) {
+function DoublesBody({ ds, advice, snap }: { ds: Dataset; advice: DoublesAdvice; snap: BattleSnapshot }) {
   const planned = new Set(advice.plan?.picks ?? []);
   return (
     <>
@@ -374,6 +374,13 @@ function DoublesBody({ ds, advice }: { ds: Dataset; advice: DoublesAdvice }) {
         </div>
       )}
       {advice.mine.map((m) => <DoublesSlot ds={ds} m={m} planned={planned} />)}
+      {/* Your Pokémon the advisor could not place (not in the data): still shown, so both slots are there. */}
+      {(snap.actives?.player ?? []).filter((p) => !advice.mine.some((m) => m.mon.name === p.name) && (p.hp ?? 1) > 0).map((p) => (
+        <section class="slot" aria-label={p.name}>
+          <div class="sh"><span class="side">{p.position === 2 ? 'RIGHT' : p.position === 1 ? 'LEFT' : 'YOU'}</span><TypeAvatar name={p.name} types={speciesTypes(ds, p.name)} size={26} /><b>{p.name}</b><Hp pct={hpPct(p.hp, p.maxHp)} label={`${p.name} HP`} /></div>
+          <div class="small muted">No advice for {p.name}: it is not in the synced wiki data, or its moves are unknown. Sync the data and your box.</div>
+        </section>
+      ))}
     </>
   );
 }
@@ -404,7 +411,7 @@ function DoublesSlot({ ds, m, planned }: { ds: Dataset; m: DoublesMonAdvice; pla
           <b>{pick.label}</b>
           <span class="d">{targetText(pick) ? `→ ${targetText(pick)}` : ''}{pick.hits?.some((h) => h.ko === 'sure' && h.side === 'opponent') ? ' · KO' : ''}</span>
           <span class="f">{pick.reason}{pick.combo ? ` ${pick.combo}.` : ''}</span>
-          {(pick.allyHit || pick.allyUnknown) && <span class="f bad-t">Also hits your {pick.allyHit?.name ?? pick.allyUnknown}.</span>}
+          {(pick.allyHit || pick.allyUnknown) && !/hits your/.test(pick.reason) && <span class="f bad-t">Also hits your {pick.allyHit?.name ?? pick.allyUnknown}.</span>}
         </div>
       ) : <div class="small muted">Moves not known yet: open {m.mon.name}'s command (or its Switch card) in the game once, or sync your box.</div>}
       {rest.length > 0 && (

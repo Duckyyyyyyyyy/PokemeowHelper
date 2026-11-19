@@ -168,7 +168,7 @@ export function SettingsTab() {
 
       <div class="card">
         <p class="title">Seen in battle<span class="r">{Object.keys(observed.value).length} Pokémon</span></p>
-        <div class="small muted">Moves NPC Pokémon actually used in your battles, remembered across battles and shown in the NPC and Battle tabs. Stored on this computer only; a wiki sync does not touch it.</div>
+        <div class="small muted">Moves NPC Pokémon actually used in your battles, remembered across battles and shown in Prep and Battle. Stored on this computer only; a wiki sync does not touch it.</div>
         <div class="btns" style={{ marginTop: '6px' }}>
           <button class="btn" disabled={!Object.keys(observed.value).length} onClick={() => confirm('Forget all moves seen in battle?') && clearObserved()}>Forget</button>
         </div>

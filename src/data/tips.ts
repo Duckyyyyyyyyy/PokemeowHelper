@@ -95,7 +95,7 @@ export const CURATED_TIPS: GameTip[] = [
     steps: [
       'Every Pokémon you bring to a Gym, Elite Four or Champion fight must be at or below that trainer\'s level cap.',
       'Leaving an ordinary League battle counts as a forfeit and a loss.',
-      'MeowRPGAdvisor\'s NPC and Team tabs show each trainer\'s cap and real team.',
+      'MeowRPGAdvisor\'s Prep tab shows each trainer\'s cap and real team.',
     ],
     source: [P('#/challenges')], keywords: ['level cap', 'league'],
   },

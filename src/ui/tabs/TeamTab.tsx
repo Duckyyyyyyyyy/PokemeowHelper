@@ -165,7 +165,7 @@ function Suggestion({ ds: base, part }: { ds: Dataset; part: 'team' | 'hunt' }) 
                   <TypeAvatar name={s?.name ?? '?'} types={s?.types ?? []} size={34} />
                   <span class="nm">{s?.name}{res.lead === c && v.format !== 'doubles' ? <> <span class="lead">LEAD</span></> : null}<Types types={s?.types ?? []} /></span>
                   <span class="row">
-                    <RatePill score={c.avg} top={res.team[0]?.avg} />
+                    <RatePill score={c.avg} />
                     <button class={`btn sm${c.locked ? ' primary' : ''}`} onClick={() => toggleLock(c.mon.uid)} aria-pressed={!!c.locked}
                       title={c.locked ? 'Locked: always on the team. Tap to unlock.' : 'Lock this slot'} aria-label={`${c.locked ? 'Unlock' : 'Lock'} ${s?.name}`}>{c.locked ? 'Locked' : 'Lock'}</button>
                     <button class="btn sm" onClick={() => toggleExclude(c.mon.uid)} title="Don't suggest this Pokémon" aria-label={`Exclude ${s?.name}`}>✕</button>

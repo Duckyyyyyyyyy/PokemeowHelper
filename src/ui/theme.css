@@ -367,3 +367,6 @@ details.card[open] > summary.title::after { content: "▾"; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 @media (max-width: 350px) { .btable .bn small { display: none; } }
+.plate .pf { flex-wrap: wrap; }
+.plate .hit { white-space: nowrap; margin-left: auto; }
+@media (max-width: 350px) { .plate.foe { margin-left: 10px; } .plate.me { margin-right: 10px; } }
