@@ -8,7 +8,7 @@ import { FacilityRules, LevelModeSeg } from '../components/FacilityRules';
 import { frontierVariant, levelMode } from '../frontierPrefs';
 import { NoData } from './shared';
 import { ASSUMED_NPC_LEVEL, npcToCalc } from '../../engine/damage';
-import { observedByOthersForNpc, observedForNpc } from '../../engine/observed';
+import { observedByOthersForNpc, observedForNpc, seenFor } from '../../engine/observed';
 import { lc } from '../../engine/turnAdvisor';
 import { observed } from '../battleStore';
 import { allTips, tipsForNpc } from '../../engine/tips';
@@ -182,7 +182,7 @@ function NpcDetail({ ds: base, npc }: { ds: Dataset; npc: Npc }) {
           {v.trainerName ? `${v.trainerName}'s team` : 'Team'}
           <span class="r">{v.team.length} Pokémon · {v.format === 'doubles' ? 'Doubles' : 'Singles'}{v.levelCap ? ` · Cap Lv ${v.levelCap}` : npc.variants.length > 1 && v.label === 'Rematch' ? ' · No cap' : ''}</span>
         </p>
-        {v.team.map((m) => <MonRow ds={ds} m={m} seen={seen.get(lc(m.name))} others={seenOthers.get(lc(m.name))} />)}
+        {v.team.map((m) => <MonRow ds={ds} m={m} seen={seenFor(seen.get(lc(m.name)) ?? [], m, v.team, true)} others={seenOthers.get(lc(m.name))} />)}
       </div>
 
       <div class="card">
