@@ -1,4 +1,5 @@
-import type { BattleEvent, BattleMon, BattleSnapshot } from '../shared/battle';
+import { Field } from '@smogon/calc';
+import type { BattleEvent, BattleMon, BattleSnapshot, Boosts } from '../shared/battle';
 import type { BoxMon, Dataset } from '../shared/types';
 import { boxToCalc, makeField, moveDamage, npcToCalc } from './damage';
 import { applyState, foeSet, indexes, lc, matchNpc, mySet } from './turnAdvisor';
@@ -25,10 +26,19 @@ export interface DamageCheck {
    * set-mismatch = the target's max HP on screen differs from the calc, so the set (IVs/EVs/level) is off, not the formula.
    */
   verdict: 'ok' | 'off' | 'set-mismatch';
+  /** Doubles spread hit (×0.75 applied). */
+  spread?: boolean;
 }
 
 function find(snap: BattleSnapshot, side: 'player' | 'opponent', name?: string): { mon: BattleMon; moves: string[] } | undefined {
   if (!name) return undefined;
+  // Doubles: either Pokémon on the field.
+  const onField = snap.actives?.[side].find((m) => lc(m.name) === lc(name));
+  if (onField) {
+    const shown = side === 'player' && snap.movesFor && lc(snap.movesFor) === lc(name) ? snap.moves.map((m) => m.name) : [];
+    const card = snap.bench.find((r) => lc(r.name) === lc(name));
+    return { mon: onField, moves: shown.length ? shown : (card?.moves ?? []).map((m) => m.name) };
+  }
   const active = side === 'player' ? snap.player : snap.opponent;
   if (active && lc(active.name) === lc(name)) {
     return { mon: active, moves: side === 'player' ? snap.moves.map((m) => m.name) : [] };
@@ -84,4 +94,56 @@ export function newEvents(prev: BattleSnapshot | null, next: BattleSnapshot): Ba
   if (prev.opponentName !== next.opponentName || (next.turn ?? 0) < (prev.turn ?? 0)) return [];
   const last = prev.events.length ? prev.events[prev.events.length - 1].idx : -1;
   return next.events.filter((e) => e.idx > last);
+}
+
+/**
+ * Doubles calc check: one row per Pokémon hit. Single-target hits use the named target
+ * ("X used Crunch on Y! … It dealt 86 damage."); spread hits use each "<Pokémon> took N damage."
+ * line, with the ×0.75 spread reduction when the move had more than one target (seen live).
+ */
+export function checkDoublesEvent(ds: Dataset, box: BoxMon[], before: BattleSnapshot, ev: BattleEvent): DamageCheck[] {
+  if (ev.missed || ev.unusual) return [];
+  const idx = indexes(ds);
+  const move = idx.moves.get(lc(ev.move));
+  if (!move || move.category === 'Status') return [];
+  const variant = matchNpc(ds, before)?.variant;
+  type T = { side: 'player' | 'opponent'; mon: string; damage: number; fainted: boolean; stages: Boosts };
+  const targets: T[] = ev.hits?.length
+    ? ev.hits.filter((h) => h.damage !== undefined).map((h) => ({ side: h.side, mon: h.mon, damage: h.damage!, fainted: !!h.fainted, stages: h.stages ?? {} }))
+    : ev.target && ev.damage !== undefined
+      ? [{ side: ev.targetSide ?? (ev.side === 'player' ? 'opponent' : 'player'), mon: ev.target, damage: ev.damage, fainted: !!ev.targetFainted, stages: ev.stages.target }]
+      : [];
+  if (!targets.length) return [];
+  const spread = (ev.hits?.length ?? 0) > 1;
+  const atkState = find(before, ev.side, ev.mon);
+  if (!atkState) return [];
+  const build = (side: 'player' | 'opponent', st: { mon: BattleMon; moves: string[] }) => {
+    if (side === 'player') {
+      const m = mySet(idx, box, st.mon, st.moves);
+      return m?.known ? boxToCalc(ds, m.mon) : undefined;
+    }
+    const f = foeSet(ds, idx, variant, st.mon);
+    return f?.known ? npcToCalc(ds, f.mon) : undefined;
+  };
+  const atk = build(ev.side, atkState);
+  if (!atk) return [];
+  applyState(atk, atkState.mon, ev.stages.attacker);
+  const out: DamageCheck[] = [];
+  for (const t of targets) {
+    const defState = find(before, t.side, t.mon);
+    if (!defState) continue;
+    const def = build(t.side, defState);
+    if (!def) continue;
+    applyState(def, defState.mon, t.stages);
+    const d = moveDamage(ds, atk, def, move.id, new Field({ gameType: spread ? 'Doubles' : 'Singles' }));
+    if (!d) continue;
+    const hpBefore = defState.mon.hp;
+    const capped = t.fainted && hpBefore !== undefined && t.damage >= hpBefore;
+    let verdict: DamageCheck['verdict'];
+    if (defState.mon.maxHp !== undefined && defState.mon.maxHp !== def.maxHP()) verdict = 'set-mismatch';
+    else if (capped) verdict = t.damage <= d.hi ? 'ok' : 'off';
+    else verdict = t.damage >= d.lo && t.damage <= d.hi ? 'ok' : 'off';
+    out.push({ idx: ev.idx, turn: ev.turn, side: ev.side, attacker: ev.mon, target: t.mon, move: ev.move, damage: t.damage, lo: d.lo, hi: d.hi, capped, verdict, ...(spread ? { spread: true } : {}) });
+  }
+  return out;
 }

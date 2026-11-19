@@ -1,6 +1,7 @@
 import { effect, signal } from '@preact/signals';
 import { doublesReason, type BattleSnapshot } from '../shared/battle';
-import { checkEvent, newEvents, type DamageCheck } from '../engine/damageCheck';
+import { checkDoublesEvent, checkEvent, newEvents, type DamageCheck } from '../engine/damageCheck';
+import { adviseDoubles } from '../engine/doublesAdvisor';
 import { adviseTurn, lc, matchNpc } from '../engine/turnAdvisor';
 import { recordObserved, type ObservedStore } from '../engine/observed';
 import { box, dataset, isExtension } from './store';
@@ -9,6 +10,11 @@ import { box, dataset, isExtension } from './store';
 export const battle = signal<BattleSnapshot | null>(null);
 /** Calc checks for hits seen since the panel started following this battle. */
 export const damageChecks = signal<DamageCheck[]>([]);
+/**
+ * Doubles: moves of your Pokémon seen this battle (lower-cased name → move names). The game shows
+ * one position's moves at a time (and the Switch list only when opened), so remember them.
+ */
+export const doublesMoves = signal<Record<string, string[]>>({});
 /** How often the NPC's actual move was MeowHelper's top guess, this battle. */
 export const guessScore = signal<{ hit: number; total: number }>({ hit: 0, total: 0 });
 const KEY = 'mdBattle';
@@ -66,12 +72,29 @@ function judge(prev: BattleSnapshot | null, next: BattleSnapshot) {
   if (!sameBattle) {
     damageChecks.value = [];
     guessScore.value = { hit: 0, total: 0 };
+    doublesMoves.value = {};
   }
+  rememberMoves(next);
   const fresh = newEvents(prev, next);
   const ds = dataset.value;
   if (!ds || !prev || !fresh.length) return;
-  // Doubles: the log's target and the 1v1 guess assume one Pokémon per side, so they would be judged wrongly.
-  if (doublesReason(prev, matchNpc(ds, prev)?.variant.format)) return;
+  if (doublesReason(prev, matchNpc(ds, prev)?.variant.format)) {
+    // Doubles: one check per Pokémon hit; the guess is judged per NPC Pokémon.
+    if (!prev.actives) return; // detected but not readable: no checks rather than wrong ones
+    const checks = fresh.flatMap((e) => checkDoublesEvent(ds, box.value, prev, e));
+    if (checks.length) damageChecks.value = [...damageChecks.value, ...checks].slice(-30);
+    if (prev.status !== 'active') return;
+    const advice = adviseDoubles(ds, prev, box.value, { observed: observed.value, movesByMon: doublesMoves.value });
+    let { hit, total } = guessScore.value;
+    for (const foe of advice.foes) {
+      const used = fresh.find((e) => e.side === 'opponent' && lc(e.mon) === lc(foe.mon.name));
+      if (!used || !foe.likely[0]) continue;
+      total++;
+      if (lc(used.move) === lc(foe.likely[0].name)) hit++;
+    }
+    guessScore.value = { hit, total };
+    return;
+  }
 
   const checks = fresh.map((e) => checkEvent(ds, box.value, prev, e)).filter((c): c is DamageCheck => !!c);
   if (checks.length) damageChecks.value = [...damageChecks.value, ...checks].slice(-30);
@@ -84,6 +107,22 @@ function judge(prev: BattleSnapshot | null, next: BattleSnapshot) {
       guessScore.value = { hit: guessScore.value.hit + (hit ? 1 : 0), total: guessScore.value.total + 1 };
     }
   }
+}
+
+/** Keeps the moves the doubles screen showed (current position's buttons, Switch list cards). */
+function rememberMoves(snap: BattleSnapshot) {
+  if (!snap.actives) return;
+  const next = { ...doublesMoves.value };
+  let changed = false;
+  const put = (name: string, moves: string[]) => {
+    const k = name.toLowerCase();
+    if (!moves.length || next[k]?.join('|') === moves.join('|')) return;
+    next[k] = moves;
+    changed = true;
+  };
+  if (snap.movesFor && snap.moves.length) put(snap.movesFor, snap.moves.map((m) => m.name));
+  for (const r of snap.bench) if (r.moves?.length) put(r.name, r.moves.map((m) => m.name));
+  if (changed) doublesMoves.value = next;
 }
 
 export function initBattle() {
