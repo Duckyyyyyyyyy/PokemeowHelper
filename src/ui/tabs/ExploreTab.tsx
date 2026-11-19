@@ -41,6 +41,7 @@ interface Target {
   /** Filled from the game's encounter card (live). */
   inBox?: number;
   registered?: boolean;
+  catchlist?: boolean;
   myLevel?: number;
   /** Quick-catch ball counts shown on the card, by item id. */
   cardBalls?: [string, number][];
@@ -77,6 +78,7 @@ export function targetFromWild(ds: Dataset, snap: WildSnapshot, prev: Target | n
     hpPct,
     inBox: snap.inBox,
     registered: snap.registered,
+    catchlist: snap.catchlist,
     myLevel: snap.lead?.level,
     cardBalls,
     liveKey: key,
@@ -319,7 +321,7 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
   const map = ds.wild!.maps.find((m) => m.id === t.mapId);
   const night = nightNow();
   const snap = isLive ? wild.value : null;
-  const decision = useMemo(() => fightOrCatch(ds, { species: t.species, level: t.level, item: t.item || null, shiny: t.shiny, goodIvs: t.goodIvs, inBox: t.inBox, registered: t.registered }, box.value, wanted.ids), [ds, t, box.value, wanted]);
+  const decision = useMemo(() => fightOrCatch(ds, { species: t.species, level: t.level, item: t.item || null, shiny: t.shiny, goodIvs: t.goodIvs, inBox: t.inBox, registered: t.registered, catchlist: t.catchlist }, box.value, wanted.ids, { npcName: wanted.npc?.name }), [ds, t, box.value, wanted]);
   const held = useMemo(() => wildHeldItems(ds, t.species, t.mapId || undefined), [ds, t.species, t.mapId]);
   // Weaken / Status from the team you carry (active first); the box only as a swap-in list.
   const tplan = useMemo(() => teamCatchPlan(ds, box.value, snap, { species: t.species, level: t.level }, { hpPct: t.hpPct }), [ds, box.value, snap, t.species, t.level, t.hpPct]);
@@ -401,6 +403,9 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
           <span class="grow muted enc-reason" title={decision.reasons.join(' ')}>{decision.reasons[0]}</span>
           <button class="link" onClick={() => setAdjust(!adjust)} aria-expanded={adjust}>{adjust ? 'Done' : 'Adjust'}</button>
         </div>
+        {decision.verdict === 'fight' && decision.hints.length > 0 && (
+          <div class="small c-y enc-hint">Worth a catch anyway? {decision.hints.join(' / ')}</div>
+        )}
         <div class="seg enc-mode" role="tablist" aria-label="Catch or defeat">
           {(['catch', 'defeat'] as const).map((m) => (
             <button class={mode === m ? 'on' : ''} role="tab" aria-selected={mode === m} onClick={() => setModePick({ key: encKey, mode: m })}>

@@ -35,6 +35,11 @@ export interface WildSnapshot {
   item?: string;
   /** Pokédex icon: registered as obtained (true) / not yet (false). */
   registered?: boolean;
+  /**
+   * On this week's Catchlist: the card shows a .catchlist-target-button next to the name in
+   * "A wild X appeared!". Undefined when the announcement is not on the card.
+   */
+  catchlist?: boolean;
   /** "[in box: N]" – currently owned, including team and reserved. */
   inBox?: number;
   hp?: number;
