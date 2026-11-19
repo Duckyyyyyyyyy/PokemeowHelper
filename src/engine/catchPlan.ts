@@ -90,6 +90,12 @@ export interface WeakenOption {
   guessed: boolean;
 }
 
+/** A hit that may KO it at its current HP: the "next best" when nothing is safe. */
+export interface RiskyHit extends WeakenOption {
+  /** Chance one hit KOs it (rolls spread evenly over min–max; crits not counted), 0–1. */
+  koChance: number;
+}
+
 export interface StatusOption {
   uid: string;
   monName: string;
@@ -107,6 +113,8 @@ export interface StatusOption {
 export interface CatchPlan {
   weaken: WeakenOption[];
   status: StatusOption[];
+  /** Hits dropped because they could KO, gentlest first. */
+  risky: RiskyHit[];
   /** Targets types / abilities that matter. */
   notes: string[];
 }
@@ -135,12 +143,33 @@ export interface PlanOptions {
   /** Its current HP, % of max (default 100). Hits whose max roll reaches it are dropped. */
   hpPct?: number;
   limit?: number;
+  /** Rank Pokémon by their `rank` (team: active first) before ranking moves. */
+  keepOrder?: boolean;
+}
+
+/** One Pokémon to plan with: its moves (ids) and whether they are a guess. */
+export interface PlanMon {
+  b: BoxMon;
+  guessed: boolean;
+  /** With `keepOrder`: lower comes first (team: 0 for the active Pokémon, 1 for the rest). */
+  rank?: number;
 }
 
 export function planCatch(ds: Dataset, box: BoxMon[], wild: { species: number; level: number }, opts: PlanOptions = {}): CatchPlan {
+  return planCatchFor(ds, box.map((b) => {
+    const { ids, guessed } = knownMoves(ds, b);
+    return { b: { ...b, moves: ids }, guessed };
+  }), wild, opts);
+}
+
+/**
+ * The plan for a given set of Pokémon (your box, or the team you carry). Options keep the
+ * order of `mons` as a tie-break, so a team listed active-first stays active-first.
+ */
+export function planCatchFor(ds: Dataset, mons: PlanMon[], wild: { species: number; level: number }, opts: PlanOptions = {}): CatchPlan {
   const s = ds.species[wild.species];
   const notes: string[] = [];
-  if (!s) return { weaken: [], status: [], notes: ['Unknown species.'] };
+  if (!s) return { weaken: [], status: [], risky: [], notes: ['Unknown species.'] };
   const hpPct = Math.min(100, Math.max(1, opts.hpPct ?? 100));
   const limit = opts.limit ?? 8;
   const foes = weakestFoes(ds, s.id, wild.level);
@@ -149,9 +178,10 @@ export function planCatch(ds: Dataset, box: BoxMon[], wild: { species: number; l
 
   const weaken: WeakenOption[] = [];
   const status: StatusOption[] = [];
-  for (const b of box) {
+  const risky: RiskyHit[] = [];
+  for (const { b, guessed } of mons) {
     const monName = ds.species[b.species]?.name ?? '?';
-    const { ids, guessed } = knownMoves(ds, b);
+    const ids = b.moves.filter((id) => ds.moves[id]);
     if (!ids.length) continue;
     let me;
     try {
@@ -181,18 +211,27 @@ export function planCatch(ds: Dataset, box: BoxMon[], wild: { species: number; l
       }
       if (!d || d.hi <= 0) continue;
       const safe = FALSE_SWIPE_MOVES.has(id);
-      if (!safe && d.maxPct >= hpPct) continue; // could KO at its current HP
-      weaken.push({
+      const opt = {
         uid: b.uid, monName, level: b.level, moveId: id, moveName: d.name, safe,
         minPct: d.minPct, maxPct: d.maxPct,
         critSafe: safe || d.maxPct * 1.5 < hpPct, guessed,
-      });
+      };
+      if (!safe && d.maxPct >= hpPct) {
+        // Could KO at its current HP: kept aside as a last resort.
+        const koChance = d.minPct >= hpPct ? 1 : (d.maxPct - hpPct) / Math.max(0.01, d.maxPct - d.minPct);
+        risky.push({ ...opt, critSafe: false, koChance: Math.min(1, Math.max(0, koChance)) });
+        continue;
+      }
+      weaken.push(opt);
     }
   }
-  weaken.sort((a, b) => Number(b.safe) - Number(a.safe) || Number(a.guessed) - Number(b.guessed) || Number(b.critSafe) - Number(a.critSafe) || b.minPct - a.minPct);
-  status.sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || b.accuracy - a.accuracy || Number(a.guessed) - Number(b.guessed));
+  const order = new Map(mons.map((m) => [m.b.uid, m.rank ?? 0]));
+  const byMon = (a: { uid: string }, b: { uid: string }) => (opts.keepOrder ? (order.get(a.uid) ?? 0) - (order.get(b.uid) ?? 0) : 0);
+  weaken.sort((a, b) => byMon(a, b) || Number(b.safe) - Number(a.safe) || Number(a.guessed) - Number(b.guessed) || Number(b.critSafe) - Number(a.critSafe) || b.minPct - a.minPct);
+  status.sort((a, b) => byMon(a, b) || STATUS_RANK[a.status] - STATUS_RANK[b.status] || b.accuracy - a.accuracy || Number(a.guessed) - Number(b.guessed));
+  risky.sort((a, b) => a.koChance - b.koChance || a.maxPct - b.maxPct);
   if (status.some((o) => o.status !== 'slp' && o.status !== 'par')) notes.push('Burn and poison hurt it every turn: at low HP that chip damage can make it faint.');
-  return { weaken: dedupe(weaken).slice(0, limit), status: dedupe(status).slice(0, limit), notes };
+  return { weaken: dedupe(weaken).slice(0, limit), status: dedupe(status).slice(0, limit), risky: dedupe(risky).slice(0, limit), notes };
 }
 
 /** One line per (Pokémon, move). */

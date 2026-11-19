@@ -275,6 +275,6 @@ describe('after the plan', () => {
     expect(a.label).toBe('weaken');
   });
   it('changes nothing with an empty plan', () => {
-    expect(afterPlan({ weaken: [], status: [], notes: [] }, { hpPct: 60 })).toEqual({ hpFrac: 0.6, status: undefined, label: '' });
+    expect(afterPlan({ weaken: [], status: [], risky: [], notes: [] }, { hpPct: 60 })).toEqual({ hpFrac: 0.6, status: undefined, label: '' });
   });
 });

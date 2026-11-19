@@ -13,7 +13,9 @@ import {
   type EncounterRow,
 } from '../../engine/explore';
 import { ballItems, BALL_RULES, isUltraBeast, NOT_AWARDED, rankBalls, type BallAdvice, type BallOption } from '../../engine/catching';
-import { afterPlan, planCatch, STATUS_LABEL } from '../../engine/catchPlan';
+import { afterPlan, STATUS_LABEL, type CatchPlan, type StatusOption, type WeakenOption } from '../../engine/catchPlan';
+import { teamCatchPlan } from '../../engine/catchTeam';
+import type { RosterMon } from '../../shared/battle';
 import { defeatPlan } from '../../engine/wildDefeat';
 import { Action } from './BattleTab';
 import type { BoxMon } from '../../shared/types';
@@ -319,7 +321,9 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
   const snap = isLive ? wild.value : null;
   const decision = useMemo(() => fightOrCatch(ds, { species: t.species, level: t.level, item: t.item || null, shiny: t.shiny, goodIvs: t.goodIvs, inBox: t.inBox, registered: t.registered }, box.value, wanted.ids), [ds, t, box.value, wanted]);
   const held = useMemo(() => wildHeldItems(ds, t.species, t.mapId || undefined), [ds, t.species, t.mapId]);
-  const plan = useMemo(() => planCatch(ds, box.value, { species: t.species, level: t.level }, { hpPct: t.hpPct }), [ds, box.value, t.species, t.level, t.hpPct]);
+  // Weaken / Status from the team you carry (active first); the box only as a swap-in list.
+  const tplan = useMemo(() => teamCatchPlan(ds, box.value, snap, { species: t.species, level: t.level }, { hpPct: t.hpPct }), [ds, box.value, snap, t.species, t.level, t.hpPct]);
+  const plan = tplan.source === 'team' ? tplan.team : tplan.box;
   const dexCount = ownedSpecies(box.value).size;
   // Ball counts on the game's quick-catch row are fresher than the last Bag read.
   const owned = useMemo(() => {
@@ -441,29 +445,20 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
 
       {catching && (
         <div class="card">
-          <p class="title">Plan</p>
+          <p class="title">Plan{tplan.source === 'team' ? <span class="r small muted">your team</span> : null}</p>
           <div class="enc-step"><span class="enc-n">1</span><b>Weaken</b><span class="muted small"> without a KO</span></div>
-          {weaken.map((w) => (
-            <div class="small enc-opt">
-              <b>{w.monName}</b>{w.level ? <span class="muted"> Lv {w.level}</span> : ''} · {w.moveName}{' '}
-              {w.safe ? <span class="ok-t">never KOs</span> : <span>{Math.round(w.minPct)}–{Math.round(w.maxPct)}%{w.critSafe ? '' : <span class="c-y"> crit could KO</span>}</span>}
-              {w.guessed && <span class="muted"> · guessed</span>}
-            </div>
-          ))}
+          {weaken.map((w) => <WeakenLine w={w} member={tplan.memberOf[w.uid]} />)}
           {plan.weaken.length > 3 && <button class="link small enc-opt" onClick={() => setMoreWeaken(!moreWeaken)}>{moreWeaken ? 'less' : `more (${plan.weaken.length - 3})`}</button>}
-          {!plan.weaken.length && <div class="small muted enc-opt">No safe hit in your box{plan.notes.some((n) => /Ghost/.test(n)) ? ' (Ghost: False Swipe does nothing)' : ''}. Sync your box (⚙) so MeowHelper knows your moves.</div>}
+          {tplan.weakenHint && <div class="small c-y enc-opt">{tplan.weakenHint}</div>}
+          {tplan.source === 'box' && !plan.weaken.length && <div class="small muted enc-opt">No safe hit in your box{plan.notes.some((n) => /Ghost/.test(n)) ? ' (Ghost: False Swipe does nothing)' : ''}. Sync your box (⚙) so MeowHelper knows your moves.</div>}
 
           <div class="enc-step"><span class="enc-n">2</span><b>Status</b><span class="muted small"> sleep ×2.5 › paralysis ×1.5 › burn/poison</span></div>
-          {status.map((o) => (
-            <div class="small enc-opt">
-              <b>{o.monName}</b> · {o.moveName} <span class="muted">{STATUS_LABEL[o.status]} · {o.accuracy}%</span>
-              {o.note ? <span class="muted"> · {o.note}</span> : ''}{o.mayFail ? <span class="c-y"> · {o.mayFail}</span> : ''}
-              {o.guessed && <span class="muted"> · guessed</span>}
-            </div>
-          ))}
+          {status.map((o) => <StatusLine o={o} member={tplan.memberOf[o.uid]} />)}
           {plan.status.length > 3 && <button class="link small enc-opt" onClick={() => setMoreStatus(!moreStatus)}>{moreStatus ? 'less' : `more (${plan.status.length - 3})`}</button>}
-          {!plan.status.length && <div class="small muted enc-opt">No status move that works on it in your box.</div>}
-          {plan.notes.filter((n) => !/Ghost/.test(n)).map((n) => <div class="small muted enc-opt">• {n}</div>)}
+          {tplan.statusHint && <div class="small c-y enc-opt">{tplan.statusHint}</div>}
+          {tplan.source === 'box' && !plan.status.length && <div class="small muted enc-opt">No status move that works on it in your box.</div>}
+          {[...tplan.notes, ...plan.notes.filter((n) => !/Ghost/.test(n))].map((n) => <div class="small muted enc-opt">• {n}</div>)}
+          {tplan.source === 'team' && <BoxPicks plan={tplan.box} />}
         </div>
       )}
 
@@ -495,6 +490,40 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
         <p>After a failed 2nd throw it can flee (5%, then 10%, 20%); sleep or freeze stops that. {night ? 'It is night (UTC): Dusk Ball ×3.' : 'Daytime (UTC).'}</p>
       </details>
     </>
+  );
+}
+
+function WeakenLine({ w, member }: { w: WeakenOption; member?: RosterMon }) {
+  return (
+    <div class="small enc-opt">
+      <b>{w.monName}</b>{w.level ? <span class="muted"> Lv {w.level}</span> : ''}
+      {member?.active ? <span class="chip on enc-chip">active</span> : ''}
+      {member?.hp !== undefined && member.maxHp ? <span class="muted"> {member.hp}/{member.maxHp} HP</span> : ''} · {w.moveName}{' '}
+      {w.safe ? <span class="ok-t">never KOs</span> : <span>{Math.round(w.minPct)}–{Math.round(w.maxPct)}%{w.critSafe ? '' : <span class="c-y"> crit could KO</span>}</span>}
+      {w.guessed && <span class="muted"> · guessed</span>}
+    </div>
+  );
+}
+
+function StatusLine({ o, member }: { o: StatusOption; member?: RosterMon }) {
+  return (
+    <div class="small enc-opt">
+      <b>{o.monName}</b>{member?.active ? <span class="chip on enc-chip">active</span> : ''} · {o.moveName} <span class="muted">{STATUS_LABEL[o.status]} · {o.accuracy}%</span>
+      {o.note ? <span class="muted"> · {o.note}</span> : ''}{o.mayFail ? <span class="c-y"> · {o.mayFail}</span> : ''}
+      {o.guessed && <span class="muted"> · guessed</span>}
+    </div>
+  );
+}
+
+/** Box picks, collapsed: useful only before the next exploration, when you can change the team. */
+function BoxPicks({ plan }: { plan: CatchPlan }) {
+  if (!plan.weaken.length && !plan.status.length) return null;
+  return (
+    <details class="small enc-opt enc-box">
+      <summary class="muted">From your box (swap in before exploring)</summary>
+      {plan.weaken.slice(0, 3).map((w) => <WeakenLine w={w} />)}
+      {plan.status.slice(0, 3).map((o) => <StatusLine o={o} />)}
+    </details>
   );
 }
 
