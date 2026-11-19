@@ -12,6 +12,7 @@ import { excludedUids, lockedUids, resetTeamPrefs, teamToText, toggleExclude, to
 import { assignHeldItems, suggestHeldItems } from '../../engine/heldItems';
 import { bag, ownedItems } from '../bagStore';
 import { GrindCard } from '../components/GrindCard';
+import { leadPairs } from '../../engine/leadPairs';
 
 export function TeamTab() {
   const ds = dataset.value;
@@ -49,6 +50,8 @@ function Suggestion({ ds }: { ds: Dataset }) {
     if (!res || !v) return null;
     return new Map(res.team.map((c) => [c.mon.uid, supportLead(ds, c.mon, v, { levelCap: v.levelCap, rules })]));
   }, [ds, res, v]);
+  // Phase 4b: doubles NPCs open with two Pokémon, so rate lead PAIRS.
+  const pairs = useMemo(() => (res && v?.format === 'doubles' ? leadPairs(ds, res.team, v, v.levelCap) : []), [ds, res, v]);
   const [copied, setCopied] = useState<string | null>(null);
   useEffect(() => setCopied(null), [res]); // the copied text belongs to the old team
   const bench = res ? res.ranked.filter((c) => c.eligible && !res.team.includes(c)) : [];
@@ -185,7 +188,22 @@ function Suggestion({ ds }: { ds: Dataset }) {
             </div>
           )}
 
-          {res.lead && (
+          {pairs.length > 0 && (
+            <div class="card">
+              <p class="title">Lead pair · Doubles <span class="r small muted">vs {v.team.slice(0, 2).map((m) => m.name).join(' + ')}</span></p>
+              {pairs.map((p, i) => (
+                <div class={`act${i === 0 ? ' top' : ''}`}>
+                  <span class={`score ${scoreClass(p.score)}`}>{p.score}</span>
+                  <div class="grow">
+                    <b>{name(p.a)} + {name(p.b)}</b>
+                    <div class="small muted">{p.why.length ? p.why.join(' · ') : 'Covers both leads; no special teamwork.'}</div>
+                  </div>
+                </div>
+              ))}
+              <div class="small muted" style={{ marginTop: '4px' }}>Score = how well the pair answers both NPC leads (1v1 view) + teamwork rules of thumb (spread moves vs your partner, Fake Out, Follow Me, Helping Hand, Tailwind / Trick Room, KO together).</div>
+            </div>
+          )}
+          {res.lead && v.format !== 'doubles' && (
             <Tip kind="info">
               Lead with <b>{name(res.lead)}</b>: scores {res.lead.pairs[0]?.score} vs the NPC's first Pokémon ({v.team[0]?.name}).
             </Tip>
