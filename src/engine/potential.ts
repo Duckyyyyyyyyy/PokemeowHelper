@@ -2,7 +2,8 @@ import type { Pokemon as CalcPokemon } from '@smogon/calc';
 import type { BoxMon, Dataset, Npc, NpcMon, NpcTeamVariant, StatKey, StatTable } from '../shared/types';
 import { ASSUMED_NPC_LEVEL, SELF_KO_MOVES, SLEEP_ONLY_MOVES, boxToCalc, duel, makeField, npcToCalc } from './damage';
 import { suggestMoveset, type MoveChoice } from './moveset';
-import { rulesFor } from './rules';
+import { dsFor, rulesFor } from './rules';
+import { baseOf } from './gen3';
 import { scoreAgainstTeam, scorePair, type Candidate, type PairResult, type SuggestOptions, type Suggestion } from './teamSuggest';
 
 /**
@@ -297,12 +298,14 @@ export function versatility(ds: Dataset, mon: BoxMon, npcs: readonly Npc[], opts
     const cap = v.levelCap;
     if (cap !== undefined && mon.level !== undefined && mon.level > cap) continue; // can't be used there
     const level = Math.max(mon.level ?? 0, targetLevel(v));
-    const moves = movePool(ds, mon, level, opts.ownedTms);
-    const me = boxToCalc(ds, { ...mon, level });
-    const field = makeField(v.format);
     const rules = rulesFor(npc.category);
+    // Each NPC under its own rules: Gen III data only for Battle Frontier Brains.
+    const nds = dsFor(baseOf(ds), rules);
+    const moves = movePool(nds, mon, level, opts.ownedTms);
+    const me = boxToCalc(nds, { ...mon, level });
+    const field = makeField(v.format);
     const team = v.team.slice(0, opts.maxTeam ?? 6);
-    const w = team.filter((n) => duel(ds, me, moves, foeCalc(ds, n), n.moves, field, rules).win).length;
+    const w = team.filter((n) => duel(nds, me, moves, foeCalc(nds, n), n.moves, field, rules).win).length;
     total++;
     sum += w / team.length;
     if (w * 2 >= team.length) good++;

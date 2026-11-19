@@ -4,7 +4,8 @@ import { monAbilities, monTypes } from './analysis';
 import { boxToCalc, duel, makeField, npcToCalc, repeatable, type Duel } from './damage';
 import { rateSupport, supportEffect } from './supportMoves';
 import type { Pokemon as CalcPokemon } from '@smogon/calc';
-import { NORMAL_RULES, abilityVsNpc, type BattleRules } from './rules';
+import { NORMAL_RULES, abilityVsNpc, dsFor, type BattleRules } from './rules';
+import { enduranceScore, sustainBonus } from './towerPlan';
 
 /**
  * Team suggestion. Two scorers, both 0–100 per (your Pokémon, NPC Pokémon) pair:
@@ -116,24 +117,35 @@ export interface SuggestOptions {
   locked?: readonly string[];
   /** uids you never want suggested. */
   excluded?: readonly string[];
+  /** uids that cannot enter (Battle Frontier eligibility), with the reason. */
+  blocked?: ReadonlyMap<string, string>;
+  /** Species clause: never two of the same species on the team (Battle Frontier). */
+  uniqueSpecies?: boolean;
+  /** Value HP kept and sustain (default: on when the rules carry HP over, i.e. Battle Towers). */
+  endurance?: boolean;
 }
 
 /** Scores one of your Pokémon against every NPC Pokémon of a team variant. */
 export function scoreAgainstTeam(ds: Dataset, mon: BoxMon, v: NpcTeamVariant, opts: SuggestOptions = {}, npcCalc?: CalcPokemon[]): PairResult[] {
+  ds = dsFor(ds, opts.rules); // Battle Frontier: Gen III view (no-op otherwise)
   if (opts.mode === 'type') return v.team.map((n) => scorePair(ds, mon, n, opts.rules));
   const field = makeField(v.format);
   const me = boxToCalc(ds, mon, opts.levelCap ?? 50);
   const myMoves = movesForBox(ds, mon);
   const foes = npcCalc ?? v.team.map((n) => npcToCalc(ds, n));
+  // Battle Towers: HP kept and sustain count more (nothing heals between the 20 opponents).
+  const sustain = opts.endurance ?? opts.rules?.carryOver ? sustainBonus(mon) : undefined;
   return v.team.map((n, j) => {
     const typeView = scorePair(ds, mon, n, opts.rules);
     const d = duel(ds, me, myMoves, foes[j], n.moves, field, opts.rules);
-    return { ...typeView, score: d.score, duel: d };
+    const pair = { ...typeView, score: d.score, duel: d };
+    return sustain === undefined ? pair : { ...pair, score: enduranceScore(pair, sustain) };
   });
 }
 
 export function suggestTeam(ds: Dataset, box: BoxMon[], v: NpcTeamVariant, opts: SuggestOptions = {}): Suggestion {
   const size = opts.size ?? 6;
+  ds = dsFor(ds, opts.rules);
   const npcCalc = opts.mode === 'type' ? undefined : v.team.map((n) => npcToCalc(ds, n));
   const excluded = new Set(opts.excluded ?? []);
   const locked = new Set(opts.locked ?? []);
@@ -141,11 +153,12 @@ export function suggestTeam(ds: Dataset, box: BoxMon[], v: NpcTeamVariant, opts:
     const pairs = scoreAgainstTeam(ds, mon, v, opts, npcCalc);
     const tooHigh = opts.levelCap !== undefined && mon.level !== undefined && mon.level > opts.levelCap;
     const out = excluded.has(mon.uid);
+    const blocked = opts.blocked?.get(mon.uid);
     return {
       mon,
-      eligible: !tooHigh && !out,
-      locked: locked.has(mon.uid) && !out,
-      reason: tooHigh ? `Over level cap ${opts.levelCap}` : out ? 'Excluded by you' : undefined,
+      eligible: !tooHigh && !out && !blocked,
+      locked: locked.has(mon.uid) && !out && !blocked,
+      reason: tooHigh ? `Over level cap ${opts.levelCap}` : out ? 'Excluded by you' : blocked,
       pairs,
       avg: pairs.length ? Math.round(pairs.reduce((s, p) => s + p.score, 0) / pairs.length) : 0,
     };
@@ -158,9 +171,16 @@ export function suggestTeam(ds: Dataset, box: BoxMon[], v: NpcTeamVariant, opts:
   // Pinned members go in first (highest average first), then the greedy picks fill the rest.
   for (const c of pool.filter((c) => c.locked).slice(0, size)) {
     pool.splice(pool.indexOf(c), 1);
+    if (opts.uniqueSpecies && team.some((t) => t.mon.species === c.mon.species)) continue; // species clause
     team.push(c);
     c.pairs.forEach((p, j) => (bestPer[j] = Math.max(bestPer[j], p.score)));
   }
+  // Species clause: a species already on the team is out of the pool.
+  const clause = () => {
+    if (!opts.uniqueSpecies) return;
+    for (let i = pool.length - 1; i >= 0; i--) if (team.some((t) => t.mon.species === pool[i].mon.species)) pool.splice(i, 1);
+  };
+  clause();
   while (team.length < size && pool.length) {
     let pick = 0;
     let gain = -1;
@@ -176,6 +196,7 @@ export function suggestTeam(ds: Dataset, box: BoxMon[], v: NpcTeamVariant, opts:
     const c = pool.splice(pick, 1)[0];
     team.push(c);
     c.pairs.forEach((p, j) => (bestPer[j] = Math.max(bestPer[j], p.score)));
+    clause();
   }
 
   const lead = team.length ? [...team].sort((a, b) => (b.pairs[0]?.score ?? 0) - (a.pairs[0]?.score ?? 0))[0] : undefined;
@@ -201,7 +222,8 @@ export function supportLead(ds: Dataset, mon: BoxMon, v: NpcTeamVariant, opts: S
   const lead = v.team[0];
   if (!lead || v.format !== 'singles') return undefined;
   const rules = opts.rules ?? NORMAL_RULES;
-  const own = mon.moves.filter((id) => ds.moves[id]?.category === 'Status' && !rules.bannedMoves.has(id) && supportEffect(ds, id));
+  ds = dsFor(ds, rules);
+  const own =mon.moves.filter((id) => ds.moves[id]?.category === 'Status' && !rules.bannedMoves.has(id) && supportEffect(ds, id));
   if (!own.length) return undefined;
   const me = boxToCalc(ds, mon, opts.levelCap ?? 50);
   const foe = npcToCalc(ds, lead);

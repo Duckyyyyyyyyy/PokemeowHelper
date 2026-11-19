@@ -19,6 +19,10 @@ const gen = Generations.get(9);
  * One constant so a Gen III ruleset (Battle Frontier) can swap it: Gen III is 1/16, 1/8, 1/4, 1/3, 1/2 and ×2.
  */
 export const CRIT_TABLE = { chance: [1 / 24, 1 / 8, 1 / 2, 1], mul: 1.5 } as const;
+/** Gen III (Battle Frontier): 1/16, 1/8, 1/4, 1/3, 1/2 and ×2. */
+export const CRIT_TABLE_GEN3 = { chance: [1 / 16, 1 / 8, 1 / 4, 1 / 3, 1 / 2], mul: 2 } as const;
+/** The crit table for the attacker's calc generation. */
+export const critTable = (atk: CalcPokemon): { chance: readonly number[]; mul: number } => (atk.gen.num === 3 ? CRIT_TABLE_GEN3 : CRIT_TABLE);
 
 const CRIT_ITEMS: Record<string, number> = { 'Scope Lens': 1, 'Razor Claw': 1 };
 /** Species-only items: Leek / Stick (Farfetch'd line), Lucky Punch (Chansey). */
@@ -52,9 +56,11 @@ export function alwaysCrits(ds: Dataset, moveId: string): boolean {
  * (or Dire Hit) and is still in (+2). Merciless crits poisoned targets; Battle/Shell Armor block.
  */
 export function critInfo(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, moveId: string, focusEnergy = false): CritInfo {
-  const mul = atk.ability === 'Sniper' ? CRIT_TABLE.mul * 1.5 : CRIT_TABLE.mul;
+  const table = critTable(atk);
+  const mul = atk.ability === 'Sniper' ? table.mul * 1.5 : table.mul;
   if (CRIT_BLOCKERS.includes(def.ability ?? '') && atk.ability !== 'Mold Breaker') return { chance: 0, always: false, mul };
-  const always = alwaysCrits(ds, moveId);
+  // Gen III has no always-crit moves (Frost Breath, Storm Throw came later).
+  const always = atk.gen.num !== 3 && alwaysCrits(ds, moveId);
   if (always) return { chance: 1, always, mul };
   if (atk.ability === 'Merciless' && (def.status === 'psn' || def.status === 'tox')) return { chance: 1, always: false, mul };
   let stage = moveCritStage(ds, moveId) + (focusEnergy ? 2 : 0) + (atk.ability === 'Super Luck' ? 1 : 0);
@@ -63,7 +69,7 @@ export function critInfo(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, moveId
     const sp = SPECIES_CRIT_ITEMS[atk.item];
     if (sp && sp[0].some((n) => n.toLowerCase() === atk.name.toLowerCase())) stage += sp[1];
   }
-  const t = CRIT_TABLE.chance;
+  const t = table.chance;
   return { chance: t[Math.min(t.length - 1, stage)], always: false, mul };
 }
 

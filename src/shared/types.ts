@@ -182,6 +182,11 @@ export interface Dataset {
   wild?: WildData;
   /** Progression tips built from the wiki data at sync time (schema 5+). */
   tips?: GameTip[];
+  /**
+   * Set only on the derived Battle Frontier view (engine/gen3.ts, never stored): the data already
+   * carries Gen III types/stats/moves and damage.ts runs the calc with gen 3 mechanics.
+   */
+  ruleset?: 'gen3';
 }
 
 // ---------- Tips (progression guide) ----------
