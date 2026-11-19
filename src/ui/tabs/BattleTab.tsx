@@ -3,7 +3,7 @@ import { ownedItems } from '../bagStore';
 import type { BattleMon, BattleSnapshot, Boosts } from '../../shared/battle';
 import type { Dataset } from '../../shared/types';
 import { Empty, Tip, Types, scoreClass } from '../components/common';
-import { adviseTurn, matchNpc, type ActionAdvice } from '../../engine/turnAdvisor';
+import { adviseTurn, matchNpc, type ActionAdvice, type ThreatInfo } from '../../engine/turnAdvisor';
 import { npcKey, seenByOthers, seenByYou } from '../../engine/observed';
 import { battle, damageChecks, guessScore, loadSampleBattle, observed } from '../battleStore';
 import { box, dataset, isExtension } from '../store';
@@ -65,6 +65,10 @@ function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
               Their best hit: <b>{advice.threat.name}</b> {Math.round(advice.threat.minPct)}–{Math.round(advice.threat.maxPct)}% of your max HP
               {advice.threat.ko === 'sure' ? ' – KOs you' : advice.threat.ko ? ' – can KO you' : ''}.{' '}
               {advice.threat.youFirst === null ? 'Speed tie.' : advice.threat.youFirst ? 'You are faster.' : 'They are faster.'}
+              <CritChip t={advice.threat} />
+              {advice.threat.ko !== 'sure' && (advice.threat.koChance ?? 0) >= 0.01 && (advice.threat.koChance! - (advice.threat.critKo ?? 0)) >= 0.01 && (
+                <span class="small"> ~{pct(advice.threat.koChance!)} they KO you this turn (likely moves).</span>
+              )}
             </Tip>
           )}
           {advice.prediction && advice.prediction.length > 0 && (
@@ -114,7 +118,7 @@ function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
         </details>
       )}
       <div class="foot">
-        Read from the battle screen {timeAgo(snap.at)}. Score = short 1v1 projection from the current HP, status and stat stages (best move each turn, no crits). Advice only – you pick the move.
+        Read from the battle screen {timeAgo(snap.at)}. Score = 2–3 turns looked ahead from the current HP, status and stat stages (their likely replies, damage rolls, crits, secondary effects), then a 1v1 projection; 55+ = you win the 1v1. Advice only – you pick the move.
       </div>
     </>
   );
@@ -156,9 +160,23 @@ export function Action({ a, top }: { a: ActionAdvice; top: boolean }) {
         {a.tag === 'setup' && <span class="chip" style={{ padding: '0 7px', marginLeft: '4px' }} title="Support move: compared with attacking right away (stat stages, status, screens, weather, hazards).">Setup</span>}
         {a.ko === 'sure' && <span class="chip on" style={{ padding: '0 7px', marginLeft: '4px' }}>KO</span>}
         {a.threat?.ko && <span class="chip" style={{ padding: '0 7px', marginLeft: '4px' }}>{a.threat.ko === 'sure' ? 'They KO it' : 'They can KO it'}</span>}
+        {a.threat && a.threat.ko !== 'sure' && <CritChip t={a.threat} />}
         <div class="small muted">{a.reason}</div>
+        {a.line && (top || a.tag === 'setup' || a.kind === 'switch') && <div class="small" title="Most likely line of play (lookahead): your moves, their likely replies.">▸ {a.line}</div>}
       </div>
     </div>
+  );
+}
+
+const pct = (x: number) => (x > 0 && x < 0.01 ? '<1%' : `${Math.round(x * 100)}%`);
+
+/** Chance a critical hit KOs (only shown when it is the crit that does it). */
+function CritChip({ t }: { t: ThreatInfo }) {
+  if ((t.critKo ?? 0) < 0.01) return null;
+  return (
+    <span class="chip" style={{ padding: '0 7px', marginLeft: '4px' }} title="Chance their crit KOs this turn when a normal hit would not (their likely moves).">
+      Crit risk {pct(t.critKo!)}
+    </span>
   );
 }
 
@@ -179,11 +197,11 @@ function CalcCheck() {
         {checks.slice(-8).map((c) => (
           <div title={c.verdict === 'set-mismatch' ? 'Max HP on screen differs from the calc: IVs/EVs/level in the data differ, so this hit is not judged.' : undefined}>
             <b class={c.verdict === 'ok' ? 'ok-t' : c.verdict === 'off' ? 'bad-t' : 'muted'}>{VERDICT[c.verdict]}</b>{' '}
-            {c.attacker} {c.move} → {c.target}: <b>{c.damage}</b> <span class="muted">(calc {c.lo}–{c.hi}{c.capped ? ', KO: capped' : ''})</span>
+            {c.attacker} {c.move} → {c.target}: <b>{c.damage}</b>{c.crit && <span class="chip" style={{ padding: '0 7px', marginLeft: '4px' }}>Crit</span>} <span class="muted">(calc {c.crit ? 'crit ' : ''}{c.lo}–{c.hi}{c.capped ? ', KO: capped' : ''})</span>
           </div>
         ))}
       </div>
-      <div class="small muted" style={{ marginTop: '4px' }}>Damage the game reported vs the Gen 9 calc. Only hits where both Pokémon's exact sets are known; crits and unusual hits are skipped.</div>
+      <div class="small muted" style={{ marginTop: '4px' }}>Damage the game reported vs the Gen 9 calc. Only hits where both Pokémon's exact sets are known; crits are checked against the crit range, multi-hit and other unusual hits are skipped.</div>
     </details>
   );
 }

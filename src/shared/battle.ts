@@ -47,7 +47,7 @@ export interface RosterMon {
 
 /**
  * One move use from the battle log, e.g. "Opponent’s Onix used Rock Tomb! It dealt 12 damage."
- * Only wording seen in a real battle is parsed; crits/multi-hit lines are flagged, not parsed.
+ * Only wording seen in a real battle is parsed; crits are flagged (`crit`), multi-hit lines too (`unusual`).
  */
 export interface BattleEvent {
   /** Position in the full log (stable while the battle lasts). */
@@ -62,8 +62,10 @@ export interface BattleEvent {
   missed?: boolean;
   /** The target fainted right after this hit (damage may be capped by its HP). */
   targetFainted?: boolean;
-  /** Line has wording we don't model (critical hit, multi-hit…): keep out of damage checks. */
+  /** Line has wording we don't model (multi-hit, recoil…): keep out of damage checks. */
   unusual?: boolean;
+  /** The hit was a critical hit (checked against the crit damage range). */
+  crit?: boolean;
   /** Stat stages of attacker and target at that moment. */
   stages: { attacker: Boosts; target: Boosts };
 }

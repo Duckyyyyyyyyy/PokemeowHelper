@@ -147,9 +147,13 @@ describe('log events (real lines from two Brock battles, 2026-11-18)', () => {
     expect(r.events.map((e) => [e.move, !!e.missed, e.damage ?? null])).toEqual([['Stun Spore', true, null], ['Rock Tomb', false, 9]]);
   });
 
-  it('flags wording it does not model, and accepts straight apostrophes', () => {
+  it('labels critical hits (same line or a later one), flags wording it does not model, accepts straight apostrophes', () => {
     const r = parseLog([{ text: "Opponent's Onix used Rock Throw! A critical hit! It dealt 20 damage." }]);
-    expect(r.events[0]).toMatchObject({ side: 'opponent', mon: 'Onix', move: 'Rock Throw', damage: 20, unusual: true });
+    expect(r.events[0]).toMatchObject({ side: 'opponent', mon: 'Onix', move: 'Rock Throw', damage: 20, crit: true });
+    expect(r.events[0].unusual).toBeUndefined();
+    const later = parseLog([{ text: "Opponent's Onix used Rock Throw!" }, { text: 'It dealt 20 damage.' }, { text: 'A critical hit!' }, { text: "Opponent's Onix used Tackle!" }]);
+    expect(later.events.map((e) => !!e.crit)).toEqual([true, false]);
+    expect(parseLog([{ text: "Opponent's Onix used Double Kick! It hit 2 times!" }]).events[0].unusual).toBe(true);
   });
 
   it('new log wording (seen live, Lt. Surge battle 2): trainer’s name for theirs, no prefix for yours', () => {

@@ -180,16 +180,19 @@ interface NpcMon {
 }
 ```
 
-### 3.3 Thuật toán gợi ý move (Phase 3)
-Chấm điểm mỗi hành động (4 move + switch) bằng **expectimax 1–2 lượt**:
+### 3.3 Thuật toán gợi ý move (Phase 3) ✅ expectimax 2–3 lượt (2026-11-19, xem 4d)
+Chấm điểm mỗi hành động (4 move + switch) bằng **expectimax 2–3 lượt** (`src/engine/lookahead.ts`):
 ```
-score = P(KO đối thủ) × wKO  + E[damage%] × wDmg
-      − P(bị KO trước) × wRisk − (mất lợi thế speed/priority) × wSpeed
-      + giá trị setup/status (nếu an toàn)
+nút quyết định (mình) → move tấn công, move hỗ trợ, đổi Pokémon
+nút ngẫu nhiên (NPC)  → nước đáp của NPC: 75% theo npcModel + 25% đòn mạnh nhất (vì npcModel dựa trên ít quan sát)
+nút ngẫu nhiên (roll) → mỗi đòn: KO / không KO (16 roll damage, tỉ lệ crit, độ chính xác, tê liệt/rối loạn/đóng băng)
+                        + 1 nhánh hiệu ứng phụ (flinch chỉ khi ra đòn trước, trạng thái, rối loạn, hạ chỉ số)
+lá                    → projection 1v1 cũ (cùng thang 0–100, 55+ = thắng 1v1)
 ```
-- Thứ tự ra đòn: speed, priority, Trick Room, paralysis.
-- Phản đòn của NPC lấy từ `npcModel`, tính theo phân bố xác suất.
-- Mỗi gợi ý kèm **lý do ngắn** để người dùng tự quyết.
+- Thứ tự ra đòn: priority, speed (stage, tê liệt, Scarf); hoà tốc độ tính là địch đi trước.
+- Pokémon NPC bị KO → con tiếp theo theo thứ tự đội vào sân (buff của mình còn nguyên: "set up rồi quét"). Pokémon mình ngất → con tốt nhất trên bench vào miễn phí ("chip trước để con sau KO"), điểm bị chặn < 55.
+- Mỗi gợi ý kèm **lý do ngắn** + **đường đi** (vd. "Swords Dance → Brick Break KOs both remaining").
+- Đường rẻ (`lookahead: 0`): projection 1 lượt cũ — dùng cho Explore (Defeat it) và bộ đếm "guess right"; tab Team vẫn dùng `duel`/`rateSupport`.
 
 ### 3.4 Tech stack
 - **Vite 5 + TypeScript + Preact + @preact/signals.** Manifest viết tay trong `public/manifest.json`, không dùng CRXJS.
@@ -310,7 +313,7 @@ Xem mockup: **[`docs/design/ui-mockup.html`](design/ui-mockup.html)**
 - [x] `BattleReader` bằng MutationObserver (3a). Không cần state machine riêng: log được parse thành sự kiện theo lượt (3b).
 - [x] `turnAdvisor` cùng `npcModel` heuristic, tab Battle (3a, 3b). Mini HUD: **không làm** (bạn chọn chỉ dùng side panel).
 - [x] Ghi lại các move NPC thực sự dùng (`battle-observed`, 3c).
-- Chưa làm: expectimax nhiều lượt (mục 3.3; hiện là dự đoán 1v1), crit và hiệu ứng phụ, chấm điểm status move, Doubles (Giai đoạn 4).
+- Đã làm (4a, 4d): chấm điểm status move, expectimax 2–3 lượt (mục 3.3), crit và hiệu ứng phụ. Chưa làm: Doubles (Giai đoạn 4b).
 
 ### Giai đoạn 4 — Mở rộng
 - ✅ 2026-11-18: admin game đồng ý cho dùng/chia sẻ, **với điều kiện không có automation**. Đổi tên MeowDex → **MeowHelper** (0.5.0); `npm run package` tạo zip để chia sẻ.
@@ -354,6 +357,29 @@ Trước đây status move không có điểm trong tab Battle. Người chơi h
   - **Trạng thái sân từ log**: Reflect/Light Screen/Tailwind/Safeguard/thời tiết/Misty Terrain/bẫy dựng lại từ các move đã dùng trong log + số lượt (màn hình trận không hiện trạng thái sân).
   - **UI**: tab Battle — move hỗ trợ là lựa chọn bình thường, có chip "Setup" + 1 dòng lý do ("+2 Atk: you win the 1v1 instead of losing (2 hits after this turn); lost if you switch."). Tab Team — mỗi thành viên đội gợi ý có move hỗ trợ đáng dùng (hơn đánh ngay ≥ 5 điểm **và** thắng 1v1 với kế hoạch B) vs Pokémon đầu tiên của NPC được gắn "Setup lead" / "Debuff lead" / "Support lead" (`supportLead` trong `teamSuggest.ts`, chỉ singles). Tab Explore (Defeat it) chỉ liệt kê đòn đánh, không hiện move Setup.
 - **Đoán (cần kiểm tra trong trận thật)**: ngủ kéo dài 2 lượt (mainline 1–3); tê liệt 25% không đánh được; Toxic trừ ~1/8 mỗi lượt (trung bình); bỏng 1/16; số lượt màn/thời tiết/Tailwind theo mainline và "lượt" trong log khớp số lượt của game; game có Safeguard/Misty Terrain/ability chặn status giống mainline không; World Boss/Mega Chamber có miễn trạng thái hay hạ chỉ số không (hiện coi như không); NPC có xoá stage khi đổi Pokémon như mainline; Aurora Veil, Trick Room, Leech Seed, rối loạn chưa mô hình. Trạng thái sân đọc từ log chỉ dùng cho move hỗ trợ, chưa đưa vào điểm đòn đánh. Điểm màn/thời tiết cho Pokémon sau giả định nó vào sân ngay lượt kế. Dấu "lead" ở tab Team chưa xem trong UI thật (chỉ test).
+
+#### 4d — Nhìn trước nhiều lượt, crit, hiệu ứng phụ ✅ (code + test 2026-11-19; chưa chạy thử trong trận thật)
+- **Lookahead** (`src/engine/lookahead.ts`, nối vào `adviseTurn`): expectimax 2 lượt (tự lên 3 lượt khi cây nhỏ, < 400 nút), giới hạn theo **số nút** (6000) chứ không theo thời gian → kết quả xác định. Damage cache theo (người đánh, stage, người nhận, stage, move, trạng thái, Focus Energy); không tính chuỗi `kochance`. Ở lượt sâu chỉ xét: đòn mạnh nhất, 1 đòn priority, move hỗ trợ còn có ích (không đổi Pokémon, trừ khi Pokémon mình ngất); NPC chỉ giữ tối đa 3 nước đáp ≥ 8%. Thay thế cho Pokémon ngất: chỉ 2 con tốt nhất được tìm sâu.
+  - Bắt được: **set up rồi quét** (SD → Brick Break hạ cả 2 con còn lại), **đổi Pokémon để chịu đòn rồi thắng** (NPC chọn đòn theo con đang ra sân, damage áp vào con vào thay), **chip trước để con sau KO** (điểm < 55, cao hơn Growl / đổi Pokémon khi con đang đánh đằng nào cũng ngất).
+  - **Một mô hình**: move hỗ trợ dạng tăng/hạ chỉ số/trạng thái (trừ Yawn) được chấm bằng lookahead (`setupScore`: trừ 2 điểm hoà nếu đã thắng; phải hơn đòn tốt nhất ≥ 1 điểm mới là "hơn", nếu không thì giữ luật 4a: ≤ min(50, đòn tốt nhất − 10)); lý do vẫn lấy từ `rateSupport` (4a) + "Looking ahead, it beats attacking now." / "…attacking now is as good or better." Màn/thời tiết/Tailwind/bẫy/Yawn vẫn dùng plan B của 4a nhưng **đặt lên thang của lookahead**: điểm đòn tốt nhất (lookahead) + phần hơn của plan B so với plan A. Test so khớp chạy đúng đường của tab Battle (độ sâu tự động + `setupScore`): cùng kết luận "hơn đánh ngay" với 4a ở 6 tình huống.
+  - Điểm > 90 được nén (không cắt) vào 90–100 để "KO ngay" vẫn đứng trên "KO lượt sau".
+  - Đổi Pokémon vẫn trừ 8 điểm như cũ; Destiny Bond, move tự ngất, Snore/Dream Eater, move bị cấm giữ cách chấm cũ (chặn điểm sau lookahead).
+- **Crit** (`moveEffects.ts`): bảng Gen 7+ (stage 0: 1/24, +1: 1/8, +2: 1/2, +3: 100%, ×1,5) trong 1 hằng số `CRIT_TABLE` (để Battle Frontier Gen III đổi được). Nguồn stage: move "higher chance for a critical hit" (+1), Focus Energy (+2, đọc từ log kể từ lúc vào sân), Super Luck, Scope Lens/Razor Claw, Leek/Lucky Punch; Sniper ×2,25; Merciless; Battle Armor/Shell Armor chặn; Frost Breath/Storm Throw/Wicked Blow luôn crit (calc đã tính sẵn). Crit tính đúng bằng calc (`isCrit`) khi có stage âm của mình / dương của địch, còn lại ×1,5.
+  - Lý do của đòn: "~40% to KO now (5% via crit)" hoặc "KO 6% via crit". Ô "Their best hit": chip **Crit risk N%** (xác suất crit của NPC KO mình khi đòn thường không KO, theo phân bố nước đi của NPC) + "~N% they KO you this turn". Hàng đổi Pokémon cũng có chip crit risk cho con vào thay.
+  - **Log**: dòng "critical hit" giờ được gắn `crit` (cùng dòng hoặc dòng sau, tới lượt dùng move kế tiếp), không còn là `unusual`; Calc check so với **khoảng damage crit** và gắn nhãn "Crit".
+- **Hiệu ứng phụ** (đọc từ mô tả move): flinch (**chỉ khi mình ra đòn trước**, Inner Focus/Shield Dust chặn; Fake Out/First Impression chỉ lượt đầu trên sân), bỏng/tê liệt/đóng băng/độc/độc nặng/ngủ (Tri Attack, Dire Claw chia đều), rối loạn, hạ chỉ số địch, tăng chỉ số mình (theo xác suất), tự hạ chỉ số (Close Combat), recoil, hút máu. Serene Grace ×2, Sheer Force/Shield Dust/Covert Cloak = 0; miễn theo hệ/ability. Tính bằng **giá trị kỳ vọng** qua nhánh trong cây (1 nhánh/đòn, hiệu ứng 100% áp luôn). Lý do: "30% flinch – you're faster", "10% burn", "heals ~20%", "~10% recoil", "−1 Def −1 SpD to you".
+  - Thấy khi test: đốt Machoke có **Guts** bị chấm **thấp hơn** (Guts tăng công) — đúng ý.
+- **UI**: dòng "▸ đường đi" chỉ ở hàng đầu, hàng Setup và hàng đổi Pokémon (khi đường đi dài hơn 1 bước). Khi Pokémon mình ngất trong đường đi, ghi rõ "Machamp faints, Vaporeon comes in" và không rút gọn thành "KOs both remaining". Chữ "you win/lose the trade" theo điểm lookahead (55+). Chip "Crit risk"; chân trang ghi "2–3 turns looked ahead". Đã xem trong bản dev (dữ liệu dev không có Cottonee nên dùng snapshot tự tạo Machamp vs Quagsire). Đường rẻ cho Explore và đoán NPC.
+- **Tốc độ** (lần nhanh nhất trong 7 lần, sau khi JIT ấm): Brock (4 move, 4 bench, 1 địch): ~5 ms/lượt cho cả `adviseTurn`. Bàn đầy (4 move có SD, 5 bench × 4 move, 6 địch): độ sâu 2, 562 nút, 174 lần calc, ~8 ms. Trường hợp xấu nhất là cây vừa dưới ngưỡng lên độ sâu 3 (< 400 nút ở độ sâu 2, thêm tối đa 2500 nút, **dùng lại cùng engine** nên damage đã cache): 4 move, 2 bench, 1 địch → 2496 nút, 69 calc, ~25 ms. Khi cả bộ test chạy song song: 40–70 ms. Lần đầu mở (JIT lạnh) chậm hơn. Test kiểm tra độ sâu, số nút, số calc; giới hạn thời gian để lỏng (< 100 ms).
+- **Đoán (cần trận thật để xác nhận)**:
+  - Game dùng tỉ lệ crit Gen 7+ (1/24, ×1,5) và câu log có chữ "critical hit"; dòng crit nằm cùng dòng hoặc ngay sau "It dealt N damage."
+  - Flinch, tỉ lệ hiệu ứng phụ, Serene Grace/Sheer Force/Shield Dust giống mainline; Fake Out chỉ dùng được lượt đầu.
+  - Rối loạn: 33% tự đánh (bỏ qua damage tự đánh), kéo dài ~3 lượt; đóng băng: 20% tan mỗi lượt; ngủ thấy trên màn hình (không có số lượt) còn 1 lượt; ngủ do mình gây: 2 lượt (như 4a).
+  - Focus Energy chỉ đọc được từ log (màn hình không hiện), coi như mất khi Pokémon rút ra (xấp xỉ: Pokémon khác cùng phe vừa ra đòn).
+  - NPC đưa con tiếp theo **theo thứ tự đội** khi con trước ngất; NPC không đổi Pokémon giữa trận trong cây tìm kiếm.
+  - Nước đáp của NPC: 75% npcModel + 25% đòn mạnh nhất (tỉ lệ tự chọn). Move trạng thái NPC không mô hình được (Protect, Destiny Bond…) coi như mất lượt trong cây.
+  - "Lượt đầu trên sân" = chưa dùng move nào kể từ khi Pokémon cùng phe khác ra đòn lần cuối (log không có dòng đổi Pokémon đáng tin).
+  - Multi-hit: damage cộng theo từng roll (không tách từng hit), crit tính 1 lần cho cả đòn.
 
 #### 4b — Doubles
 Wiki có format `doubles` (vd. Tate & Liza, một số Gym/E4). Hiện tab Battle chỉ đọc 1 Pokémon mỗi bên → trong trận đôi có thể sai.

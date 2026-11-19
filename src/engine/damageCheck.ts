@@ -1,6 +1,6 @@
 import type { BattleEvent, BattleMon, BattleSnapshot } from '../shared/battle';
 import type { BoxMon, Dataset } from '../shared/types';
-import { boxToCalc, makeField, moveDamage, npcToCalc } from './damage';
+import { boxToCalc, damageRolls, makeField, moveDamage, npcToCalc } from './damage';
 import { applyState, foeSet, indexes, lc, matchNpc, mySet } from './turnAdvisor';
 
 /**
@@ -20,6 +20,8 @@ export interface DamageCheck {
   hi: number;
   /** The hit KO'd the target, so the game's number may be cut at the target's HP. */
   capped: boolean;
+  /** A critical hit: lo/hi are the crit range. */
+  crit?: boolean;
   /**
    * ok = inside the range · off = outside (formula or data differs) ·
    * set-mismatch = the target's max HP on screen differs from the calc, so the set (IVs/EVs/level) is off, not the formula.
@@ -65,6 +67,13 @@ export function checkEvent(ds: Dataset, box: BoxMon[], before: BattleSnapshot, e
   applyState(def, defState.mon, ev.stages.target);
   const d = moveDamage(ds, atk, def, move.id, makeField('singles'));
   if (!d) return null;
+  if (ev.crit) {
+    // Critical hit: compare with the crit range instead (stage rules handled by the calc).
+    const rolls = damageRolls(ds, atk, def, move.id, makeField('singles'), true);
+    if (!rolls) return null;
+    d.lo = rolls[0];
+    d.hi = rolls[rolls.length - 1];
+  }
 
   const hpBefore = defState.mon.hp;
   const capped = !!ev.targetFainted && hpBefore !== undefined && ev.damage >= hpBefore;
@@ -74,7 +83,7 @@ export function checkEvent(ds: Dataset, box: BoxMon[], before: BattleSnapshot, e
   else verdict = ev.damage >= d.lo && ev.damage <= d.hi ? 'ok' : 'off';
   return {
     idx: ev.idx, turn: ev.turn, side: ev.side, attacker: ev.mon, target: ev.target, move: ev.move,
-    damage: ev.damage, lo: d.lo, hi: d.hi, capped, verdict,
+    damage: ev.damage, lo: d.lo, hi: d.hi, capped, verdict, ...(ev.crit ? { crit: true } : {}),
   };
 }
 

@@ -131,7 +131,7 @@ export function defeatPlan(ds: Dataset, box: BoxMon[], w: WildSnapshot, maxMoves
   const options: DefeatOption[] = [];
   for (const r of party) {
     const snap = wildBattleSnapshot(ds, box, w, r);
-    const advice = adviseTurn(ds, snap, box);
+    const advice = adviseTurn(ds, snap, box, { lookahead: 0 });
     foe ??= advice.foe?.mon;
     const foeTypes = foe ? ds.species[foe.species]?.types ?? [] : [];
     const moves: DefeatMove[] = advice.actions

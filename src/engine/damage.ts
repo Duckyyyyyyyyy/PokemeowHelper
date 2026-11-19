@@ -165,6 +165,29 @@ export function moveDamage(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, move
   };
 }
 
+/**
+ * The 16 damage rolls (raw HP, ascending; multi-hit moves summed per roll) without the KO text,
+ * for the lookahead. `crit`: force a critical hit. null when the move does nothing we can compute.
+ */
+export function damageRolls(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, moveId: string, field?: Field, crit = false): number[] | null {
+  const mv = calcMove(ds, moveId);
+  if (!mv) return null;
+  if (crit) mv.isCrit = true;
+  let d: number | number[] | number[][];
+  try {
+    d = calculate(gen, atk, def, mv, field).damage as number | number[] | number[][];
+  } catch {
+    return null;
+  }
+  if (typeof d === 'number') return [d];
+  if (!d.length) return [0];
+  if (Array.isArray(d[0])) {
+    const hits = d as number[][];
+    return hits[0].map((_, i) => hits.reduce((s, h) => s + (h[i] ?? h[h.length - 1]), 0)).sort((a, b) => a - b);
+  }
+  return [...(d as number[])].sort((a, b) => a - b);
+}
+
 /** Moves that make the user faint: they can't be repeated, so they never "win a 1v1" by spamming. */
 export const SELF_KO_MOVES: ReadonlySet<string> = new Set(['selfdestruct', 'explosion', 'mistyexplosion', 'finalgambit', 'memento', 'healingwish', 'lunardance']);
 /** Moves a Pokémon can keep using turn after turn (for 1v1 projections). */

@@ -47,6 +47,16 @@ describe('calc check against the real battle log', () => {
     expect(checkEvent(ds, [turtwig(15)], before, { ...rockTomb, unusual: true })).toBeNull();
   });
 
+  it('a critical hit is checked against the crit range and labelled', () => {
+    const normal = checkEvent(ds, [turtwig(15)], before, rockTomb)!;
+    const c = checkEvent(ds, [turtwig(15)], before, { ...rockTomb, damage: 18, crit: true })!;
+    expect(c.crit).toBe(true);
+    expect(c.lo).toBeGreaterThan(normal.lo);
+    expect(c.hi).toBeGreaterThan(normal.hi);
+    expect(c.verdict).toBe(c.lo <= 18 && 18 <= c.hi ? 'ok' : 'off');
+    expect(normal.crit).toBeUndefined();
+  });
+
   it('a KO hit only needs to be at most the calc maximum (game number is cut at the HP left)', () => {
     const low = { ...before, player: { ...before.player!, hp: 5 } };
     const c = checkEvent(ds, [turtwig(15)], low, { ...rockTomb, damage: 5, targetFainted: true })!;
