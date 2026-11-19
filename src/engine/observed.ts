@@ -17,6 +17,11 @@ export interface ObservedMon {
   moves: string[];
   /** Last time a move of this Pokémon was recorded (ms). */
   lastSeen: number;
+  /**
+   * Moves seen by OTHER players (imported files, see share.ts): move id → number of imported
+   * sources that saw it. Never written by battle recording; `moves` stays "seen by you".
+   */
+  others?: Record<string, number>;
 }
 
 /** Key → observation. Key = `${npcKey}|${species}|${level}`, see obsKey(). */
@@ -59,13 +64,13 @@ export function recordObserved(ds: Dataset, store: ObservedStore, snap: BattleSn
     const cur = out[key];
     if (cur?.moves.includes(id)) continue;
     if (out === store) out = { ...store };
-    out[key] = { name: e.mon, level, moves: [...(cur?.moves ?? []), id], lastSeen: now };
+    out[key] = { ...cur, name: e.mon, level, moves: [...(cur?.moves ?? []), id], lastSeen: now };
   }
   return out === store ? store : prune(out);
 }
 
 /** Keeps the store small: wild and player battles add keys too (dropped first). */
-export const MAX_OBSERVED = 600;
+export const MAX_OBSERVED = 2500;
 function prune(store: ObservedStore): ObservedStore {
   const keys = Object.keys(store);
   if (keys.length <= MAX_OBSERVED) return store;
@@ -78,20 +83,57 @@ function prune(store: ObservedStore): ObservedStore {
 /** Moves recorded for one NPC Pokémon (exact level first, then any level of that variant). */
 export function observedMoves(store: ObservedStore, npc: string, name: string, level?: number): string[] {
   const exact = store[obsKey(npc, name, level)];
-  if (exact) return exact.moves;
+  if (exact) return allMoves(exact);
   const prefix = `${npc}|${lc(name)}|`;
-  const any = Object.entries(store).filter(([k]) => k.startsWith(prefix)).flatMap(([, v]) => v.moves);
+  const any = Object.entries(store).filter(([k]) => k.startsWith(prefix)).flatMap(([, v]) => allMoves(v));
   return [...new Set(any)];
+}
+
+/** Own moves first, then moves only other players saw. */
+const allMoves = (m: ObservedMon): string[] => [...new Set([...m.moves, ...Object.keys(m.others ?? {})])];
+
+/** For labelling: how many imported sources saw `move` for this NPC Pokémon (0 = none). */
+export function seenByOthers(store: ObservedStore, npc: string, name: string, level: number | undefined, move: string): number {
+  const exact = store[obsKey(npc, name, level)];
+  if (exact) return exact.others?.[move] ?? 0;
+  const prefix = `${npc}|${lc(name)}|`;
+  return Math.max(0, ...Object.entries(store).filter(([k]) => k.startsWith(prefix)).map(([, v]) => v.others?.[move] ?? 0));
+}
+
+/** True when `you` saw the move yourself (not only others). */
+export function seenByYou(store: ObservedStore, npc: string, name: string, level: number | undefined, move: string): boolean {
+  const exact = store[obsKey(npc, name, level)];
+  if (exact) return exact.moves.includes(move);
+  const prefix = `${npc}|${lc(name)}|`;
+  return Object.entries(store).some(([k, v]) => k.startsWith(prefix) && v.moves.includes(move));
 }
 
 /** Everything recorded for one NPC variant, by Pokémon name (for the NPC tab). */
 export function observedForNpc(store: ObservedStore, npc: Npc, variant: NpcTeamVariant): Map<string, string[]> {
+  return forNpc(store, npc, variant, allMoves);
+}
+
+/** Same, but only the moves other players saw (with source counts) — for labelling in the NPC tab. */
+export function observedByOthersForNpc(store: ObservedStore, npc: Npc, variant: NpcTeamVariant): Map<string, Record<string, number>> {
+  const prefix = `${npc.id}#${lc(variant.label)}|`;
+  const out = new Map<string, Record<string, number>>();
+  for (const [k, v] of Object.entries(store)) {
+    if (!k.startsWith(prefix) || !v.others) continue;
+    const name = lc(v.name);
+    const cur = { ...(out.get(name) ?? {}) };
+    for (const [id, n] of Object.entries(v.others)) cur[id] = Math.max(cur[id] ?? 0, n);
+    out.set(name, cur);
+  }
+  return out;
+}
+
+function forNpc(store: ObservedStore, npc: Npc, variant: NpcTeamVariant, pick: (m: ObservedMon) => string[]): Map<string, string[]> {
   const prefix = `${npc.id}#${lc(variant.label)}|`;
   const out = new Map<string, string[]>();
   for (const [k, v] of Object.entries(store)) {
     if (!k.startsWith(prefix)) continue;
     const name = lc(v.name);
-    out.set(name, [...new Set([...(out.get(name) ?? []), ...v.moves])]);
+    out.set(name, [...new Set([...(out.get(name) ?? []), ...pick(v)])]);
   }
   return out;
 }

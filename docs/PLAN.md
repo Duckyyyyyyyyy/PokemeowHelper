@@ -400,3 +400,11 @@ PokemeowHelper/
 │  └─ shared/       types, i18n, utils
 └─ tests/           fixtures/html-snapshots, engine tests
 ```
+
+
+---
+
+## Chia sẻ dữ liệu NPC (Settings → Share NPC data)
+- Xuất file JSON gồm: phiên bản định dạng, ngày xuất, phiên bản MeowHelper, id ngẫu nhiên và NPC → biến thể → Pokémon → các move đã thấy. Không có tên người chơi, box, đội hình, túi đồ hay id tài khoản; không upload lên server nào, người dùng tự gửi file (Discord/Drive).
+- Nhập file được kiểm tra chặt (tối đa 2 MB, chỉ NPC/move có trong dữ liệu wiki, bỏ qua trường lạ). Dữ liệu nhập lưu ở `others` của từng mục trong `mdObserved` (số nguồn đã thấy move) và sổ nhập `mdImports`; move bạn tự thấy vẫn nằm ở `moves`.
+- Chống tính trùng: cùng id nguồn thì file mới thay file cũ, cùng nội dung khác id bị từ chối. "Remove imported data" xóa sạch phần nhập, giữ phần của bạn. Tab NPC và dòng "Seen in earlier battles" hiển thị "seen by others (n)".

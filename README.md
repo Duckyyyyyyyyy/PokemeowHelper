@@ -50,6 +50,16 @@ This builds the extension and writes `release/MeowHelper-<version>.zip`. Send th
 
 Don't send a `.crx` file: Chrome on Windows blocks `.crx` files that don't come from the Chrome Web Store. Publishing on the Web Store (one-time $5 developer fee, a review, and a privacy policy) is the way to get one-click installs and automatic updates later.
 
+## Share what MeowHelper learned about NPCs
+
+MeowHelper remembers which moves NPC Pokémon used in your battles. You can swap that with friends, by file only (nothing is uploaded anywhere):
+
+1. **Export:** Settings → *Share NPC data* → *Export file*. Tick "Only NPCs I have data for" to skip empty NPCs. Send the `.json` through Discord, Drive, etc.
+2. **Import:** Settings → *Share NPC data* → *Import file*. The file is checked strictly (max 2 MB, known NPCs and moves only, unknown fields ignored) and merged: the NPC tab and the Battle tab's "Seen in earlier battles" line show those moves as "seen by others (n)", where n is how many imported files saw it. Moves you saw yourself have no label.
+3. **Undo:** *Remove imported data* drops everything imported and keeps your own observations. Importing the same file twice does nothing; a newer file from the same friend replaces their older one.
+
+The file contains: format version, export date, MeowHelper version, a random id (made on your computer, so a re-import isn't double-counted) and NPC id → variant → Pokémon → move ids. No player name, box, team, bag or account id. Wild and player battles are never exported.
+
 ## Features
 
 **NPC tab** – 460 NPCs (Gym, Elite Four, Champion, Tower, Frontier, Mega Chamber, Rival, Rocket, World Boss) with search and filters. Each shows its team, moves, ability, item, nature, EVs and Rematch/Silver/Gold versions, plus the best attacking/defensive types, priority and setup moves, the medicine it carries and challenge requirements. Moves an NPC was seen using in battle that the wiki doesn't list are marked.

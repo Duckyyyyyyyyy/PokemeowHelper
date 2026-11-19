@@ -3,7 +3,8 @@ import { ownedItems } from '../bagStore';
 import type { BattleMon, BattleSnapshot, Boosts } from '../../shared/battle';
 import type { Dataset } from '../../shared/types';
 import { Empty, Tip, Types, scoreClass } from '../components/common';
-import { adviseTurn, type ActionAdvice } from '../../engine/turnAdvisor';
+import { adviseTurn, matchNpc, type ActionAdvice } from '../../engine/turnAdvisor';
+import { npcKey, seenByOthers, seenByYou } from '../../engine/observed';
 import { battle, damageChecks, guessScore, loadSampleBattle, observed } from '../battleStore';
 import { box, dataset, isExtension } from '../store';
 import { NoData } from './shared';
@@ -74,7 +75,20 @@ function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
               ))}
               {guessScore.value.total > 0 && <> · guess right {guessScore.value.hit}/{guessScore.value.total} this battle</>}
               {advice.npcSwitch && <div title={advice.npcSwitch.reason}><b>May switch to {advice.npcSwitch.to}</b> (guess): {advice.npcSwitch.reason}</div>}
-              {advice.seenBefore && <div>Seen in earlier battles: {advice.seenBefore.map((id) => ds.moves[id]?.name ?? id).join(', ')}</div>}
+              {advice.seenBefore && snap.opponent && (() => {
+                const key = npcKey(matchNpc(ds, snap), snap);
+                const opp = snap.opponent;
+                return (
+                  <div>
+                    Seen in earlier battles:{' '}
+                    {advice.seenBefore.map((id, i) => {
+                      const others = seenByOthers(observed.value, key, opp.name, opp.level, id);
+                      const you = seenByYou(observed.value, key, opp.name, opp.level, id);
+                      return <>{i > 0 && ', '}{ds.moves[id]?.name ?? id}{others > 0 && (you ? ` (you + others ${others})` : ` (seen by others ${others})`)}</>;
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           )}
           <div class="card">

@@ -3,7 +3,8 @@ import { box, dataset, isExtension, loadDevFixture, resetDataset, runSync, setBo
 import { Tip } from '../components/common';
 import { BoxSyncCard } from '../components/BoxSync';
 import type { BoxMon } from '../../shared/types';
-import { clearObserved, observed } from '../battleStore';
+import { clearObserved, importLedger, observed, setObserved } from '../battleStore';
+import { MAX_IMPORT_BYTES, addImport, applyImports, buildExport, contentHash, importedCount, newSourceId, parseImport } from '../../engine/share';
 import { bag, forgetBag, loadSampleBag } from '../bagStore';
 import { UiModeCard } from '../components/UiModeCard';
 
@@ -59,6 +60,56 @@ export function SettingsTab() {
     }
   }
 
+  const [shareMsg, setShareMsg] = useState('');
+  const [onlyData, setOnlyData] = useState(true);
+  const ownCount = Object.values(observed.value).filter((m) => m.moves.length).length;
+
+  async function ownSourceId(create: boolean): Promise<string | undefined> {
+    if (!isExtension || !chrome.storage?.local) return create ? newSourceId() : undefined;
+    const r = await chrome.storage.local.get('mdShareId');
+    let id = r.mdShareId as string | undefined;
+    if (!id && create) {
+      id = newSourceId();
+      await chrome.storage.local.set({ mdShareId: id });
+    }
+    return id;
+  }
+
+  async function exportNpc() {
+    if (!ds) return;
+    const file = buildExport(ds, observed.value, { sourceId: (await ownSourceId(true))!, appVersion: APP_VERSION }, onlyData);
+    const n = Object.keys(file.npcs).length;
+    const blob = new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `meowhelper-npc-data-${file.exportedAt.slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setShareMsg(`Exported ${n} NPC${n === 1 ? '' : 's'}.`);
+  }
+
+  async function importNpc(file: File) {
+    try {
+      if (!ds) throw new Error('Sync the wiki data first.');
+      if (file.size > MAX_IMPORT_BYTES) throw new Error('File is too large (max 2 MB).');
+      const parsed = parseImport(await file.text(), ds);
+      const res = addImport(importLedger.value, parsed, await contentHash(parsed.mons), await ownSourceId(false));
+      if (!res.ok) throw new Error(res.reason);
+      setObserved(applyImports(observed.value, res.ledger), res.ledger);
+      setShareMsg(`${res.replaced ? 'Updated' : 'Imported'} ${parsed.accepted} Pokémon${parsed.skipped ? ` (${parsed.skipped} entries skipped)` : ''}.`);
+    } catch (e) {
+      setShareMsg(e instanceof Error ? e.message : 'Invalid file.');
+    }
+  }
+
+  function removeImported() {
+    if (!confirm('Remove all imported NPC data? Your own observations stay.')) return;
+    setObserved(applyImports(observed.value, {}), {});
+    setShareMsg('Imported data removed.');
+  }
+
+  const nImports = Object.keys(importLedger.value).length;
+
   return (
     <>
       <UiModeCard />
@@ -113,6 +164,25 @@ export function SettingsTab() {
         <div class="btns" style={{ marginTop: '6px' }}>
           <button class="btn" disabled={!Object.keys(observed.value).length} onClick={() => confirm('Forget all moves seen in battle?') && clearObserved()}>Forget</button>
         </div>
+      </div>
+
+      <div class="card">
+        <p class="title">Share NPC data<span class="r">{ownCount} yours · {importedCount(observed.value)} from others</span></p>
+        <div class="small muted">
+          Export what MeowHelper saw NPCs do into a file you send yourself (Discord, Drive…). The file has only NPC ids, Pokémon names and move ids: no name, box, team or bag. Nothing is uploaded.
+        </div>
+        <label class="small" style={{ display: 'block', marginTop: '6px' }}>
+          <input type="checkbox" checked={onlyData} onChange={(e) => setOnlyData(e.currentTarget.checked)} /> Only NPCs I have data for
+        </label>
+        <div class="btns" style={{ marginTop: '6px' }}>
+          <button class="btn" disabled={!ds || (onlyData && !ownCount)} onClick={exportNpc}>Export file</button>
+          <label class="btn" style={{ textAlign: 'center' }}>
+            Import file
+            <input type="file" accept="application/json" hidden onChange={(e) => { const f = e.currentTarget.files?.[0]; e.currentTarget.value = ''; if (f) importNpc(f); }} />
+          </label>
+          <button class="btn" disabled={!nImports} onClick={removeImported}>Remove imported data{nImports ? ` (${nImports})` : ''}</button>
+        </div>
+        {shareMsg && <div class="small muted" style={{ marginTop: '6px' }} role="status">{shareMsg}</div>}
       </div>
 
       <div class="card">
