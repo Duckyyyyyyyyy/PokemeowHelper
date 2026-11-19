@@ -216,7 +216,8 @@ function readOpponentTeam(doc: ParentNode): RosterMon[] {
     return {
       name,
       level: num(clean(heading?.textContent).match(/Lv\.?\s*(\d+)/i)?.[1]),
-      ...parseHp(clean(row.querySelector(SEL.rosterHealth)?.textContent ?? row.textContent)),
+      // Without a health element, drop the heading first: "Lv. 41" + "0/112 HP" would read as 410/112.
+      ...parseHp(clean(row.querySelector(SEL.rosterHealth)?.textContent ?? (row.textContent ?? '').replace(heading?.textContent ?? '', ' '))),
       active: row.getAttribute('data-active') === 'true',
       fainted: row.getAttribute('data-fainted') === 'true',
     };
@@ -399,8 +400,10 @@ export function parseLog(lines: LogLine[], trainer?: string): { boosts: BattleSn
       if (dmg && last.damage === undefined) last.damage = parseInt(dmg[1], 10);
       if (UNUSUAL.test(text) && idx === last.idx + 1) last.unusual = true;
       // Spread move, one line per Pokémon hit (seen live): "Slowbro took 24 damage." / "It doesn't affect Tate & Liza’s Xatu."
-      const took = subjectLine(text, /^(.+?)\s+took\s+\d+\s+damage/i, who);
-      const immune = text.match(/^It doesn[’']t affect\s+(.+?)[.!]?$/i);
+      // Only after a move with no named target, and only the exact wording (not recoil or weather lines).
+      const spreadFollow = !last.targetSide;
+      const took = spreadFollow ? subjectLine(text, /^(.+?)\s+took\s+\d+\s+damage[.!]?$/i, who) : null;
+      const immune = spreadFollow ? text.match(/^It doesn[’']t affect\s+(.+?)[.!]?$/i) : null;
       let hit: EventHit | undefined;
       if (took) hit = { side: took.side, mon: took.mon, damage: parseInt(text.match(/took\s+(\d+)\s+damage/i)![1], 10) };
       else if (immune) {
@@ -457,7 +460,8 @@ export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | 
   const log = readLog(arena, clean(arena.querySelector(SEL.opponentName)?.textContent) || undefined);
   const myActives = readActives(arena.querySelector(SEL.playerStats));
   const theirActives = readActives(arena.querySelector(SEL.opponentStats));
-  const doubles = myActives.length > 1 || theirActives.length > 1;
+  // Doubles layout: per-position cards (seen live). Kept even when a side is down to one card (end of a doubles battle).
+  const doubles = myActives.length > 0 && theirActives.length > 0 && arena.querySelector(SEL.activeCard) !== null;
   // Doubles: position 1 stands in for "the" active Pokémon (singles callers keep working).
   const player = doubles ? myActives[0] : readCombatant(arena.querySelector(SEL.playerStats));
   const opponent = doubles ? theirActives[0] : readCombatant(arena.querySelector(SEL.opponentStats));

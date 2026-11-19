@@ -1,8 +1,9 @@
-import { Field } from '@smogon/calc';
 import type { BattleEvent, BattleMon, BattleSnapshot, Boosts } from '../shared/battle';
 import type { BoxMon, Dataset } from '../shared/types';
 import { boxToCalc, makeField, moveDamage, npcToCalc } from './damage';
 import { applyState, foeSet, indexes, lc, matchNpc, mySet } from './turnAdvisor';
+import { doublesField } from './doublesAdvisor';
+import { fieldFromLog } from './supportMoves';
 
 /**
  * Calc check: compares damage the game reported in the log ("It dealt 12 damage.") with the
@@ -108,13 +109,14 @@ export function checkDoublesEvent(ds: Dataset, box: BoxMon[], before: BattleSnap
   if (!move || move.category === 'Status') return [];
   const variant = matchNpc(ds, before)?.variant;
   type T = { side: 'player' | 'opponent'; mon: string; damage: number; fainted: boolean; stages: Boosts };
-  const targets: T[] = ev.hits?.length
-    ? ev.hits.filter((h) => h.damage !== undefined).map((h) => ({ side: h.side, mon: h.mon, damage: h.damage!, fainted: !!h.fainted, stages: h.stages ?? {} }))
-    : ev.target && ev.damage !== undefined
-      ? [{ side: ev.targetSide ?? (ev.side === 'player' ? 'opponent' : 'player'), mon: ev.target, damage: ev.damage, fainted: !!ev.targetFainted, stages: ev.stages.target }]
-      : [];
+  // A named target ("used Crunch on Y") wins over any later "took N damage" line.
+  const targets: T[] = ev.targetSide && ev.target
+    ? (ev.damage !== undefined ? [{ side: ev.targetSide, mon: ev.target, damage: ev.damage, fainted: !!ev.targetFainted, stages: ev.stages.target }] : [])
+    : (ev.hits ?? []).filter((h) => h.damage !== undefined).map((h) => ({ side: h.side, mon: h.mon, damage: h.damage!, fainted: !!h.fainted, stages: h.stages ?? {} }));
   if (!targets.length) return [];
-  const spread = (ev.hits?.length ?? 0) > 1;
+  const spread = !ev.targetSide && (ev.hits?.length ?? 0) > 1;
+  // Screens from the log (×2/3 in doubles); a hit under a screen we can't see is still judged with it.
+  const screens = fieldFromLog((before.events ?? []).filter((e) => e.idx < ev.idx), ev.turn ?? before.turn, (n) => idx.moves.get(lc(n))?.id);
   const atkState = find(before, ev.side, ev.mon);
   if (!atkState) return [];
   const build = (side: 'player' | 'opponent', st: { mon: BattleMon; moves: string[] }) => {
@@ -135,7 +137,7 @@ export function checkDoublesEvent(ds: Dataset, box: BoxMon[], before: BattleSnap
     const def = build(t.side, defState);
     if (!def) continue;
     applyState(def, defState.mon, t.stages);
-    const d = moveDamage(ds, atk, def, move.id, new Field({ gameType: spread ? 'Doubles' : 'Singles' }));
+    const d = moveDamage(ds, atk, def, move.id, doublesField(screens, ev.side, t.side), { singleTarget: !spread });
     if (!d) continue;
     const hpBefore = defState.mon.hp;
     const capped = t.fainted && hpBefore !== undefined && t.damage >= hpBefore;

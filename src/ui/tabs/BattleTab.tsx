@@ -30,8 +30,8 @@ export function BattleTab() {
       </>
     );
   }
-  // Doubles with both Pokémon of each side readable (layout seen live 2026-11-19): doubles advice.
-  if (snap.actives && (snap.actives.player.length > 1 || snap.actives.opponent.length > 1)) return <DoublesLive ds={ds} snap={snap} />;
+  // Doubles layout read (per-position cards, seen live 2026-11-19): doubles advice, also once a side is down to one Pokémon.
+  if (snap.actives && (snap.actives.player.length || snap.actives.opponent.length)) return <DoublesLive ds={ds} snap={snap} />;
   return <Live ds={ds} snap={snap} />;
 }
 

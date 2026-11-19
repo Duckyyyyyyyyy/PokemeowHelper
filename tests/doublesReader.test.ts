@@ -109,3 +109,11 @@ describe('doubles log (real wording, turns 1–2)', () => {
     expect(events[6].stages.attacker).toEqual({ spa: 1, spd: 1 });
   });
 });
+
+describe('opponent roster row without a health element', () => {
+  it('does not glue the level onto the HP', () => {
+    document.body.innerHTML = `<section class="battle-arena" data-status="active"><div class="battle-opponent-roster"><ol>
+      <li data-fainted="true"><div class="battle-opponent-row-heading"><strong>Claydol</strong><span>Lv. 41</span></div><span>0/112 HP</span></li></ol></div></section>`;
+    expect(readBattle(document, 1)!.opponentTeam[0]).toMatchObject({ name: 'Claydol', level: 41, hp: 0, maxHp: 112, fainted: true });
+  });
+});

@@ -125,12 +125,16 @@ interface Unit {
   movesFrom?: DoublesMonAdvice['movesFrom'];
 }
 
-/** Field for one hit. Screens from the log (×2/3 in doubles, done by the calc), Helping Hand, Tailwind. */
-function fieldFor(spreadHit: boolean, f: FieldState, attacker: Side, opts: { helpingHand?: boolean } = {}): Field {
+/**
+ * Field for one hit: always 'Doubles' (the calc also keys screens on it: ×2/3 in doubles, not ½).
+ * Screens are the DEFENDER's side (your own when you hit your ally), from the log; Helping Hand,
+ * Tailwind on the attacker's side.
+ */
+export function doublesField(f: FieldState, attacker: Side, defender: Side, opts: { helpingHand?: boolean } = {}): Field {
   const atk = attacker === 'player' ? f.mine : f.theirs;
-  const def = attacker === 'player' ? f.theirs : f.mine;
+  const def = defender === 'player' ? f.mine : f.theirs;
   return new Field({
-    gameType: spreadHit ? 'Doubles' : 'Singles',
+    gameType: 'Doubles',
     attackerSide: { isHelpingHand: !!opts.helpingHand, isTailwind: !!atk.tailwind },
     defenderSide: { isReflect: !!def.reflect, isLightScreen: !!def.lightscreen },
   });
@@ -138,11 +142,13 @@ function fieldFor(spreadHit: boolean, f: FieldState, attacker: Side, opts: { hel
 
 /**
  * Damage of one move on one Pokémon. A spread move does ×0.75 only when it has more than one
- * target when used (mainline; immune targets still count, as Earthquake with Xatu showed live).
+ * target when used (mainline; immune targets still count, as Earthquake with Xatu showed live):
+ * with one target it is computed as a single-target hit.
  */
-function hitOn(ds: Dataset, f: FieldState, atk: Unit, def: Unit, moveId: string, targetsOnField: number, opts: { helpingHand?: boolean } = {}): MoveDamage | null {
+function hitOn(ds: Dataset, f: FieldState, atk: Unit, def: Unit, moveId: string, targetsOnField: number, opts: { helpingHand?: boolean; rules?: BattleRules } = {}): MoveDamage | null {
   const spread = SPREAD_TARGETS.has(ds.moves[moveId]?.target ?? '');
-  return moveDamage(ds, atk.calc, def.side === 'player' && atk.side === 'opponent' ? defenderVsNpc(def.calc) : def.calc, moveId, fieldFor(spread && targetsOnField > 1, f, atk.side, opts));
+  const target = def.side === 'player' && atk.side === 'opponent' ? defenderVsNpc(def.calc, opts.rules) : def.calc;
+  return moveDamage(ds, atk.calc, target, moveId, doublesField(f, atk.side, def.side, opts), { singleTarget: !spread || targetsOnField <= 1 });
 }
 
 /** Pokémon a move hits: single target → [target]; allAdjacentFoes → both foes; allAdjacent → foes + ally. */
@@ -211,7 +217,7 @@ export function adviseDoubles(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], 
       for (const id of f.moves) {
         if (ds.moves[id]?.category === 'Status') continue;
         const n = SPREAD_TARGETS.has(ds.moves[id]?.target ?? '') ? spreadTargets(ds, id, f, theirs, mine).length : 1;
-        const d = hitOn(ds, field, f, m, id, n);
+        const d = hitOn(ds, field, f, m, id, n, { rules });
         if (d && (!best || d.expectedPct > best.expectedPct)) best = d;
       }
       row.set(m, best);
@@ -271,7 +277,7 @@ export function adviseDoubles(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], 
   }
 
   // ----- the NPC's likely moves, per Pokémon -----
-  for (const f of theirs) out.foes.push({ mon: f.mon, known: f.known, likely: npcLikely(ds, snap, field, f, mine, theirs, moveId, rules) });
+  for (const f of theirs) out.foes.push({ mon: f.mon, known: f.known, likely: npcLikely(ds, snap, field, f, mine, moveId, rules) });
 
   out.plan = bestPlan(out.mine);
   if (rules.npcIgnoresWonderGuard) notes.push('Challenge rules: the NPC’s attacks ignore Wonder Guard.');
@@ -454,15 +460,14 @@ function supportAction(
   return { ...base, score: null, reason: 'Not scored in doubles yet.' };
 }
 
-function npcLikely(ds: Dataset, snap: BattleSnapshot, field: FieldState, f: Unit, mine: Unit[], theirs: Unit[], moveId: (n: string) => string | undefined, rules: BattleRules): DoublesFoeAdvice['likely'] {
+function npcLikely(ds: Dataset, snap: BattleSnapshot, field: FieldState, f: Unit, mine: Unit[], moveId: (n: string) => string | undefined, rules: BattleRules): DoublesFoeAdvice['likely'] {
   const used = (snap.events ?? []).filter((e) => e.side === 'opponent' && lc(e.mon) === lc(f.mon.name)).map((e) => moveId(e.move)).filter((x): x is string => !!x);
   const lastFoe = [...(snap.events ?? [])].reverse().find((e) => e.side === 'opponent' && lc(e.mon) === lc(f.mon.name));
   const perMove = new Map<string, { prob: number; target?: string; ko?: 'sure' | 'chance' }>();
   for (const m of mine) {
-    const n = (id: string) => (SPREAD_TARGETS.has(ds.moves[id]?.target ?? '') ? spreadTargets(ds, id, f, theirs, mine).length : 1);
-    // One prediction per target; the model scores single hits, so spread moves get their doubles damage here.
+    // One prediction per target, on the doubles field (spread moves at ×0.75, screens ×2/3).
     const guesses = predictNpcMove(ds, f.calc, defenderVsNpc(m.calc, rules), f.moves, {
-      field: fieldFor(f.moves.some((id) => n(id) > 1), field, 'opponent'),
+      field: doublesField(field, 'opponent', 'player'),
       myStatus: m.mon.status, myBoosts: m.mon.stages, foeBoosts: f.mon.stages, usedThisBattle: used, firstMove: used.length === 0,
       lastMove: lastFoe ? moveId(lastFoe.move) : undefined,
     });

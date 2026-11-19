@@ -156,3 +156,14 @@ describe('singles regression', () => {
     expect(r.actions.some((x) => x.label === 'Surf')).toBe(true);
   });
 });
+
+describe('doubles screens', () => {
+  it('Light Screen from the log cuts special hits to 2/3 (doubles), not 1/2', () => {
+    const base = snapOf([[mon('Slowbro', 45, 1), ['Psychic']], [mon('Machamp', 45, 2), ['Close Combat']]], [mon('Xatu', 41, 1), mon('Solrock', 42, 2)]);
+    const screened = { ...base, turn: 2, events: [{ idx: 4, turn: 1, side: 'opponent' as const, mon: 'Xatu', move: 'Light Screen', stages: { attacker: {}, target: {} } }] };
+    const pctOn = (a: ReturnType<typeof advise>) => a.mine[0].actions.find((x) => x.label === 'Psychic' && x.target?.name === 'Solrock')!.hits![0].maxPct;
+    const ratio = pctOn(advise(screened)) / pctOn(advise(base));
+    expect(ratio).toBeGreaterThan(0.6);
+    expect(ratio).toBeLessThan(0.72);
+  });
+});

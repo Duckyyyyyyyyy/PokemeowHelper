@@ -91,11 +91,14 @@ export function boxToCalc(ds: Dataset, b: BoxMon, defaultLevel = 50): CalcPokemo
   });
 }
 
-function calcMove(ds: Dataset, id: string): CalcMove | null {
+function calcMove(ds: Dataset, id: string, singleTarget = false): CalcMove | null {
   const g = ds.moves[id];
   if (!g || g.category === 'Status') return null;
   const known = gen.moves.get(toID(id));
   const overrides: Record<string, unknown> = {};
+  // Doubles: a spread move with one target left gets no spread reduction (the calc keys it on the
+  // move's target, and clones the move from its overrides, so it must be set here).
+  if (singleTarget && known && (known.target === 'allAdjacent' || known.target === 'allAdjacentFoes')) overrides.target = 'normal';
   if (!known || known.type !== g.type) overrides.type = g.type;
   if (!known || known.category !== g.category) overrides.category = g.category;
   // Fixed/variable-power moves have power 0 in the game data – keep the calc's logic for those.
@@ -130,8 +133,8 @@ const accOf = (ds: Dataset, id: string) => {
   return a === true || a === undefined ? 1 : a / 100;
 };
 
-export function moveDamage(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, moveId: string, field?: Field): MoveDamage | null {
-  const mv = calcMove(ds, moveId);
+export function moveDamage(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, moveId: string, field?: Field, opts?: { singleTarget?: boolean }): MoveDamage | null {
+  const mv = calcMove(ds, moveId, !!opts?.singleTarget);
   if (!mv) return null;
   let r;
   try {
