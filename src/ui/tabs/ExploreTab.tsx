@@ -272,7 +272,7 @@ function Encounter({ ds }: { ds: Dataset }) {
   return (
     <>
       {wild.value && !speciesByCardName(ds, wild.value.name) && <Tip kind="warn">The game shows a wild {wild.value.name}, but it is not in the synced wiki data. Sync the data again in ⚙ Settings.</Tip>}
-      {!isLive && (
+      {(!isLive && !t) && (
         <>
           {live && (
             <Tip kind="info">
@@ -434,9 +434,9 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
         </div>
       </section>
 
-      {(adjust || !isLive) && (
+      {adjust && (
         <div class="card small">
-          {!isLive && <div class="muted" style={{ marginBottom: '4px' }}>No live encounter: set what you see.</div>}
+          <div class="muted" style={{ marginBottom: '4px' }}>Manual encounter settings.</div>
           <div class="row wrap">
             <label>Lv <input class="input" type="number" min={1} max={100} style={{ width: '58px' }} value={t.level} onInput={(e) => set({ level: Math.max(1, Number((e.target as HTMLInputElement).value) || 1) })} /></label>
             <select class="input" value={t.mapId} onChange={(e) => set({ mapId: (e.target as HTMLSelectElement).value })} aria-label="Map">
