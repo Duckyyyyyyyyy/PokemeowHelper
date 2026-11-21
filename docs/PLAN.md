@@ -1,6 +1,6 @@
 # MeowRPGAdvisor: Plan
 
-Current version: **0.13.0** · Details and history: `docs/archive/PLAN-v1.md` (Vietnamese; grep, don't read whole)
+Current version: **0.13.1** · Details and history: `docs/archive/PLAN-v1.md` (Vietnamese; grep, don't read whole)
 Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing · ⬜ planned
 
 ## ⏳ Ongoing
@@ -56,3 +56,4 @@ Claude reads the page through Claude in Chrome and the user plays. Tick an item 
 | 0.12.1 | Fix for the "random" nature showing "No effect"; twin NPC Pokémon keep their own seen moves |
 | 0.12.2 | Wild encounter: the adjust card no longer pops up; battle plate alignment |
 | 0.13.0 | World Boss (move picker, lobby reader, counter team) + World Boss 2 rules (2026-11 wiki), Hunt for NPC (catch suggestions, hunt list), evolutions in the data (schema 6: Sync again), League source-edition stats in the calc, copy for the wiki Battle Simulator |
+| 0.13.1 | Battle reader for the game's new screen: "2× Atk" stat tags, fainted image badge (forced switch, Doubles), numbers with commas, greyed-out moves, "maximized" log lines, weather/terrain read from the field buttons (unverified) |
