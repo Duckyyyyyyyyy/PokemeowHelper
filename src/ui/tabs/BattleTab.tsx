@@ -4,7 +4,7 @@ import { doublesReason, type BattleSnapshot } from '../../shared/battle';
 import type { Dataset } from '../../shared/types';
 import { Empty, Tip } from '../components/common';
 import { DangerStrip, Fold, Hp, Icon, Plate, RatePill, TypeAvatar, hpPct, speciesTypes } from '../components/hud';
-import { adviseTurn, matchNpc, type ActionAdvice, type ThreatInfo, type TurnAdvice } from '../../engine/turnAdvisor';
+import { adviseTurn, foeSet, indexes, matchNpc, mySet, type ActionAdvice, type ThreatInfo, type TurnAdvice } from '../../engine/turnAdvisor';
 import { factsLine, plainLine, rate } from '../../engine/plain';
 import { npcKey, seenByOthers, seenByYou } from '../../engine/observed';
 import { battle, damageChecks, doublesMoves, forceGen3, guessScore, loadSampleBattle, observed, setForceGen3, towerRun } from '../battleStore';
@@ -14,6 +14,23 @@ import { activeTab, box, dataset, isExtension } from '../store';
 import { NoData } from './shared';
 import { bossMovesById } from '../bossStore';
 import { timeAgo } from '../boxStore';
+import { SimExport } from '../components/SimExport';
+import { boxToShowdown, npcToShowdown, toShowdownSet } from '../../engine/showdownExport';
+
+/** Showdown text of the two active Pokémon (the opponent only when its set is known from NPC data). */
+function BattleSimExport({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
+  const { mine, foe } = useMemo(() => {
+    const idx = indexes(ds);
+    const me = snap.player ? mySet(idx, box.value, snap.player, snap.moves.map((m) => m.name)) : undefined;
+    const variant = matchNpc(ds, snap)?.variant;
+    const theirs = snap.opponent && variant ? foeSet(ds, idx, variant, snap.opponent, { roster: snap.opponentTeam }) : undefined;
+    return {
+      mine: me ? toShowdownSet(boxToShowdown(ds, me.mon)) : '',
+      foe: theirs?.known ? toShowdownSet(npcToShowdown(ds, theirs.mon)) : '',
+    };
+  }, [ds, snap, box.value]);
+  return <SimExport mine={mine} foe={foe} mineLabel="Copy my Pokémon" foeLabel="Copy opponent" />;
+}
 
 export function BattleTab() {
   const ds = dataset.value;
@@ -88,6 +105,7 @@ function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
       ) : advice && (advice.forcedSwitch ? <ForcedSwitch ds={ds} snap={snap} advice={advice} /> : <Turn ds={ds} snap={snap} advice={advice} />)}
 
       <Fold title="Details">
+        <BattleSimExport ds={ds} snap={snap} />
         {advice && <DetailBody ds={ds} snap={snap} advice={advice} />}
         <TowerRun advice={advice} />
         <CalcCheck gen3={gen3 || advice?.npc?.category === 'frontier'} />
