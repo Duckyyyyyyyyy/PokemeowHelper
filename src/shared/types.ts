@@ -35,6 +35,8 @@ export interface Species {
   availability?: string;
   /** Extra condition for its spawn (seasonal forms etc.), from the wiki. */
   spawnRequirement?: string | null;
+  /** Supported evolutions out of this species (schema 6+). `level` = minimum level when the method is "Level N or higher". */
+  evolvesTo?: { to: number; methods: string[]; level?: number }[];
 }
 
 /** One wild encounter row of an explore map (rows with the same species + method are merged). */
@@ -166,7 +168,7 @@ export interface Npc {
 }
 
 /** Bump when normalize() output changes, so cached data is rebuilt on next sync. */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export interface Dataset {
   /** `${SCHEMA_VERSION}:${hashed wiki data file name}` – changes on every game deploy or schema change. */

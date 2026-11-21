@@ -79,7 +79,7 @@ export function GrindCard({ ds, v, ready, rules, locked, excluded, size }: {
           <span class={`score ${scoreClass(r.potential)}`}>{r.potential}</span>
         </span>
         <div class="full small muted">
-          Lv {r.mon.level} → {r.targetLevel} (+{r.levelsNeeded}) · {r.ivs.text}
+          Lv {r.mon.level} → {r.targetLevel} (+{r.levelsNeeded}){r.evolvedTo && ds.species[r.evolvedTo] ? ` · scored as ${ds.species[r.evolvedTo].name} (evolves)` : ''} · {r.ivs.text}
         </div>
         <div class={`full small${r.filler ? ' muted' : ''}`}>{r.why}</div>
         <div class="full small muted" title="Share of NPC Pokémon it beats 1v1 when trained to each NPC's level, over the whole NPC list">
@@ -124,7 +124,7 @@ export function GrindCard({ ds, v, ready, rules, locked, excluded, size }: {
       )}
       <div class="small muted" style={{ marginTop: '4px' }}>
         Picked like the team above: best potential first, then whoever covers NPC Pokémon the others don't. Score now → at Lv {lv}, with its real IVs and nature and the moves it learns on the way
-        {tms ? ' plus TMs in your bag' : ' (open your Bag page once to include your TMs)'}. Current EVs only and no evolution, so it may do even better.
+        {tms ? ' plus TMs in your bag' : ' (open your Bag page once to include your TMs)'}. Current EVs only, and level-based evolutions by then are counted (stone, trade and Mega evolutions are not), so it may do even better.
       </div>
     </div>
   );

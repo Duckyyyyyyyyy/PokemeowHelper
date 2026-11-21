@@ -3,6 +3,7 @@ import fixture from './fixtures/wiki-mini.json';
 import type { BoxMon, Dataset } from '../src/shared/types';
 import { boxToCalc, duel, makeField, moveDamage, npcToCalc } from '../src/engine/damage';
 import { scoreAgainstTeam, scorePair, suggestTeam } from '../src/engine/teamSuggest';
+import { gen3View } from '../src/engine/gen3';
 import { suggestMoveset } from '../src/engine/moveset';
 
 const ds = structuredClone(fixture) as unknown as Dataset;
@@ -11,6 +12,28 @@ const sp = (name: string) => Object.values(ds.species).find((s) => s.name === na
 const mon = (name: string, level: number, moves: string[] = [], extra: Partial<BoxMon> = {}): BoxMon => ({
   uid: name, species: sp(name), level, moves, source: 'game',
   ivs: { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 }, evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }, nature: 'Hardy', ...extra,
+});
+
+describe('NPC base stats', () => {
+  it('npcToCalc uses each NPC mon own wiki baseStats, not the species table', () => {
+    const copy = structuredClone(ds);
+    const base = copy.npcs[0].variants[0].team[0];
+    const custom = { ...base, level: 50, baseStats: { hp: 200, atk: 5, def: 5, spa: 5, spd: 5, spe: 5 } };
+    const p = npcToCalc(copy, custom);
+    // HP at Lv 50 with base 200, IV 31, EV 0: floor((2*200+31)*50/100)+60 = 275
+    expect(p.stats.hp).toBe(275);
+  });
+});
+
+describe('NPC base stats in the Gen III ruleset', () => {
+  it('keeps the Gen III species stats, ignoring the wiki per-NPC stats', () => {
+    const g3 = gen3View(ds);
+    const base = ds.npcs[0].variants[0].team[0];
+    const mon = { ...base, species: sp('Alakazam'), name: 'Alakazam', level: 50 };
+    const wiki = { ...mon, baseStats: { hp: 200, atk: 5, def: 5, spa: 5, spd: 5, spe: 5 } };
+    expect(npcToCalc(g3, wiki).stats.hp).toBe(npcToCalc(g3, { ...mon, baseStats: g3.species[mon.species].baseStats }).stats.hp);
+    expect(npcToCalc(g3, wiki).stats.hp).not.toBe(275);
+  });
 });
 
 describe('stats match the game', () => {

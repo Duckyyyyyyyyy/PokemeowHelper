@@ -23,6 +23,8 @@ import { activeBossMoves, bossLobby, bossPicks } from '../bossStore';
 import { bossVariant, isWorldBoss } from '../../engine/worldBoss';
 import { BossCounter } from '../components/WorldBoss';
 import { leadPairs } from '../../engine/leadPairs';
+import { boxToShowdown, npcToShowdown, toShowdownTeam } from '../../engine/showdownExport';
+import { SimExport } from '../components/SimExport';
 
 /** Battle Frontier entry problems: who can't enter, what changes under Gen III rules, item clause. */
 function FrontierNotes({ ds, team, entries, blocked, ownTeam }: { ds: Dataset; team: BoxMon[]; entries: Map<string, { blocking: string[]; notes: string[] }>; blocked: string[]; ownTeam: boolean }) {
@@ -228,6 +230,13 @@ function Suggestion({ ds: base, part }: { ds: Dataset; part: 'team' | 'hunt' }) 
           </div>
           {lockedOut.length > 0 && (
             <Tip kind="warn">Locked but not on the team: {lockedOut.map((c) => `${name(c)} (${c.reason ?? 'team is full'})`).join(', ')}</Tip>
+          )}
+          {res.team.length > 0 && (
+            <SimExport
+              mine={toShowdownTeam(res.team.map((c) => boxToShowdown(ds, c.mon, v.levelCap ?? 50)))}
+              foe={toShowdownTeam(v.team.map((m) => npcToShowdown(ds, m)))}
+              mineLabel="Copy my team" foeLabel="Copy NPC team"
+            />
           )}
 
 
