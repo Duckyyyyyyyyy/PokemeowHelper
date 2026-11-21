@@ -35,11 +35,17 @@ const NO_BAG_CATEGORIES: NpcCategory[] = ['tower'];
 
 export const NORMAL_RULES: BattleRules = { bannedMoves: new Set(), npcIgnoresWonderGuard: false, bagItems: true };
 export const CHALLENGE_RULES: BattleRules = { bannedMoves: CHALLENGE_BANNED_MOVES, npcIgnoresWonderGuard: true, bagItems: true };
+/**
+ * World Boss only (wiki World Boss Battles, read 2026-11-22): Encore, Leech Seed and Salt Cure also fail.
+ * Curse fails too (Ghost-type Curse; the self-boost Curse is not scored as setup anyway, see supportMoves).
+ */
+export const BOSS_RULES: BattleRules = { ...CHALLENGE_RULES, bannedMoves: new Set([...CHALLENGE_BANNED_MOVES, 'encore', 'leechseed', 'saltcure']) };
 export const TOWER_RULES: BattleRules = { ...NORMAL_RULES, bagItems: false, carryOver: true };
 export const FRONTIER_RULES: BattleRules = { ...NORMAL_RULES, bagItems: false, gen: 3 };
 
 export function rulesFor(category?: NpcCategory): BattleRules {
   if (category === 'frontier') return FRONTIER_RULES;
+  if (category === 'boss') return BOSS_RULES;
   if (category && CHALLENGE_CATEGORIES.includes(category)) return CHALLENGE_RULES;
   if (category && NO_BAG_CATEGORIES.includes(category)) return TOWER_RULES;
   return NORMAL_RULES;

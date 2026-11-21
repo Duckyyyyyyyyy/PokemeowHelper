@@ -6,13 +6,14 @@ import fixture from './fixtures/wiki-mini.json';
 import type { BattleSnapshot } from '../src/shared/battle';
 import type { BoxMon, Dataset, Npc } from '../src/shared/types';
 import { bestAttackTypes, bestDefensiveTypes } from '../src/engine/analysis';
-import { CHALLENGE_RULES, rulesFor } from '../src/engine/rules';
+import { BOSS_RULES, rulesFor } from '../src/engine/rules';
 import { adviseTurn, matchWithBossMoves } from '../src/engine/turnAdvisor';
 import { recordObserved } from '../src/engine/observed';
 import {
-  BOSS_DAMAGE_MULT, byRace, bossDs, bossHits, bossPool, bossVariant, maxMoveName, maxMovePower, rateBossMember, suggestBossTeam,
+  BOSS_DAMAGE_MULT, RAID_MULT, asHeavyBoss, barrierMult, bossActionDamage, bossDrainHeal, bossForm, bossPhase, byRace, bossDs, bossHits, bossPool, bossVariant,
+  capBossBoosts, lootTier, maxMoveName, maxMovePower, overdriveMult, rateBossMember, suggestBossTeam,
 } from '../src/engine/worldBoss';
-import { boxToCalc } from '../src/engine/damage';
+import { boxToCalc, defenderVsNpc, moveDamage, npcToCalc } from '../src/engine/damage';
 import { lobbySig, mergeBossLobby, readBossLobby } from '../src/content/bossLobbyReader';
 import { activeBossMoves, BOSS_PICK_MAX_AGE, lobbyMovesFor, lobbyNameMatches } from '../src/ui/bossStore';
 
@@ -89,12 +90,13 @@ describe('World Boss move filter', () => {
 
   it('reads the shared HP pool and reports damage per turn against it', () => {
     expect(bossPool(venu)).toBe(3_000_000);
-    expect(bossPool({ ...venu, requirements: [] } as Npc)).toBe(3_000_000);
+    expect(bossPool({ ...venu, requirements: [] } as Npc)).toBe(10_000_000); // wiki default (Eternamax 100M)
     const m = rateBossMember(ds, mon('Charizard', 60, ['flamethrower']), boss, { pool: 3_000_000 });
     expect(m.moveName).toBe('Flamethrower');
     expect(m.perTurn).toBeGreaterThan(50);
     expect(m.perTurnPct).toBeCloseTo((100 * m.perTurn) / 3_000_000, 8);
-    expect(m.total).toBeCloseTo(m.perTurn * m.actions, 6);
+    expect(m.totalDown).toBeCloseTo(m.perTurn * m.actions, 6); // barrier down: every action at full damage
+    expect(m.total).toBeLessThan(m.totalDown); // barrier up: only this race's own damage wears it down
   });
 });
 
@@ -124,7 +126,7 @@ describe('World Boss attacks are Max Moves', () => {
 
 describe('World Boss rules', () => {
   it('your OHKO / Destiny Bond / Perish Song / Endeavor / Pain Split fail', () => {
-    expect(rulesFor('boss')).toBe(CHALLENGE_RULES);
+    expect(rulesFor('boss')).toBe(BOSS_RULES);
     const lapras = mon('Lapras', 60, ['sheercold', 'icebeam']);
     expect(rateBossMember(ds, lapras, boss).moveId).toBe('icebeam');
     const onlyBanned = rateBossMember(ds, mon('Lapras', 60, ['sheercold', 'perishsong']), boss);
@@ -294,5 +296,149 @@ describe('World Boss moves handed to the Battle tab', () => {
     const a = adviseTurn(ds, seen, box, { lookahead: 0, bossMoves: sel });
     expect(a.prediction!.map((g) => g.moveId)).toContain('outrage');
     expect(a.notes.join(' ')).toMatch(/Outrage, which is not in the moves picked for this appearance/);
+  });
+});
+
+/* ---------------- 2026-11 rules (wiki World Boss Battles, read 2026-11-22) ---------------- */
+
+describe('World Boss rules 2026-11', () => {
+  // The fixture's only boss is Gigantamax Venusaur: a plain and an Eternamax boss from the same mon.
+  const plain = { ...boss, name: 'Venusaur', species: sp('Venusaur') };
+  const eterna = { ...boss, name: 'Eternamax Venusaur', species: sp('Venusaur') };
+  const ds2 = structuredClone(ds);
+  ds2.npcs.push({ ...venu, id: 'boss:venusaur', name: 'Venusaur', requirements: [], variants: [{ ...v, team: [plain] }] });
+  const snapFor = (name: string, extra: Partial<BattleSnapshot> = {}): BattleSnapshot => ({
+    v: 2, at: 1, status: 'active', kind: 'world-boss', turn: 1, opponentName: name,
+    player: { name: 'Charizard', level: 60, hp: 180, maxHp: 180 }, opponent: { name, level: 100 },
+    moves: [{ name: 'Flamethrower', pp: 15, maxPp: 15, disabled: false }],
+    bench: [], opponentTeam: [], boosts: { player: {}, opponent: {} }, log: [], events: [], ...extra,
+  });
+  const knock = (id: string) => ({ [id]: ['knockoff'] });
+  const zard = [mon('Charizard', 60, ['flamethrower'])];
+
+  it('only GMAX and Eternamax bosses use Max Moves (name test, a guess)', () => {
+    expect(bossForm('Gigantamax Venusaur')).toBe('gmax');
+    expect(bossForm('G-Max Venusaur')).toBe('gmax');
+    expect(bossForm('Eternamax Eternatus')).toBe('eternamax');
+    expect(bossForm('Venusaur', 'Venusaur')).toBe('normal');
+    const me = boxToCalc(ds, mon('Lapras', 60));
+    const hit = (b: typeof boss) => bossHits(ds, { ...b, moves: ['furycutter'] }, me)[0];
+    expect(hit(boss).maxName).toBe('Max Flutterby');
+    expect(hit(plain).maxName).toBeUndefined();
+    expect(hit(boss).pct).toBeGreaterThan(hit(plain).pct * 1.5); // 90 BP Max Move vs 40 BP Fury Cutter
+  });
+
+  it('the Battle tab uses the same rule: Max Move only for GMAX, 55% cut on its one-turn hits', () => {
+    const g = adviseTurn(ds2, snapFor('Gigantamax Venusaur'), zard, { lookahead: 0, bossMoves: knock(venu.id) });
+    const p = adviseTurn(ds2, snapFor('Venusaur'), zard, { lookahead: 0, bossMoves: knock('boss:venusaur') });
+    const me = defenderVsNpc(boxToCalc(ds, zard[0]), BOSS_RULES);
+    const maxFull = moveDamage(bossDs(ds, ['knockoff']), npcToCalc(ds, boss), me, 'knockoff')!;
+    const rawFull = moveDamage(ds, npcToCalc(ds, plain), me, 'knockoff')!;
+    expect(g.threat!.maxPct).toBeCloseTo(maxFull.maxPct * BOSS_DAMAGE_MULT, 4);
+    expect(p.threat!.maxPct).toBeCloseTo(rawFull.maxPct * BOSS_DAMAGE_MULT, 4);
+    expect(g.prediction![0].maxPct).toBeCloseTo(maxFull.maxPct * BOSS_DAMAGE_MULT, 4);
+    expect(g.notes.join(' ')).toMatch(/every attack it makes is a Max Move/);
+    expect(p.notes.join(' ')).toMatch(/normal moves/);
+    // Your side also uses Knock Off: one dataset, so it keeps its normal power (and says so).
+    const both = adviseTurn(ds2, snapFor('Gigantamax Venusaur'), [mon('Charizard', 60, ['flamethrower', 'knockoff'])], { lookahead: 0, bossMoves: knock(venu.id) });
+    expect(both.threat!.maxPct).toBeLessThan(g.threat!.maxPct);
+    expect(both.notes.join(' ')).toMatch(/Knock Off: your side uses it too/);
+  });
+
+  it('boss boosts stop at +2 Atk/SpA and +1 Def/SpD', () => {
+    expect(capBossBoosts({ atk: 6, spa: 3, def: 4, spd: 2, spe: 6 })).toEqual({ atk: 2, spa: 2, def: 1, spd: 1, spe: 6 });
+    const at = (atk: number) => adviseTurn(ds2, snapFor('Gigantamax Venusaur', { boosts: { player: {}, opponent: { atk } } }), zard, { lookahead: 0, bossMoves: knock(venu.id) }).threat!.maxPct;
+    expect(at(6)).toBeCloseTo(at(2), 6);
+    expect(at(2)).toBeGreaterThan(at(0));
+  });
+
+  it('Encore, Leech Seed and Salt Cure fail; the Battle tab says so', () => {
+    for (const id of ['encore', 'leechseed', 'saltcure']) expect(BOSS_RULES.bannedMoves.has(id)).toBe(true);
+    const a = adviseTurn(ds2, snapFor('Gigantamax Venusaur', { moves: [{ name: 'Flamethrower', pp: 15, maxPp: 15, disabled: false }, { name: 'Encore', pp: 5, maxPp: 5, disabled: false }] }),
+      [mon('Charizard', 60, ['flamethrower', 'encore'])], { lookahead: 0, bossMoves: knock(venu.id) });
+    expect(a.actions.find((x) => x.moveId === 'encore')).toMatchObject({ score: 0, reason: expect.stringMatching(/Fails/) });
+  });
+
+  it('shared HP from the data first, else 10M (Eternamax 100M)', () => {
+    expect(bossPool(venu)).toBe(3_000_000);
+    expect(bossPool({ ...venu, requirements: [] } as Npc)).toBe(10_000_000);
+    expect(bossPool({ ...venu, name: 'Eternamax Eternatus', requirements: [] } as Npc)).toBe(100_000_000);
+  });
+
+  it('its hits deal 55% less (Eternamax 70% less)', () => {
+    const me = boxToCalc(ds, mon('Lapras', 60));
+    const sel = { ...eterna, moves: ['furycutter'] };
+    expect(bossHits(ds, sel, me)[0].pct).toBeCloseTo(bossHits(ds, sel, me, { damageMult: 1 })[0].pct * 0.3, 6);
+    const g = { ...boss, moves: ['furycutter'] };
+    expect(bossHits(ds, g, me)[0].pct).toBeCloseTo(bossHits(ds, g, me, { damageMult: 1 })[0].pct * 0.45, 6);
+  });
+
+  it('your damage: 125x, Max Barrier 20% → 100% at 40% HP lost (Eternamax 1%), capped per action', () => {
+    expect(barrierMult(0)).toBeCloseTo(0.2, 9);
+    expect(barrierMult(0.2)).toBeCloseTo(0.6, 9); // straight-line ramp: a guess
+    expect(barrierMult(0.4)).toBe(1);
+    expect(barrierMult(0.01, 'eternamax')).toBe(1);
+    expect(bossActionDamage(100, 'normal', { barrierDown: true })).toBe(100 * RAID_MULT);
+    expect(bossActionDamage(100, 'normal')).toBeCloseTo(100 * RAID_MULT * 0.2, 6);
+    expect(bossActionDamage(1000, 'normal', { barrierDown: true })).toBe(50_000);
+    expect(bossActionDamage(10_000, 'eternamax', { barrierDown: true })).toBe(350_000);
+    const m = rateBossMember(ds, mon('Charizard', 60, ['flamethrower']), boss);
+    expect(m.perTurn).toBeLessThanOrEqual(50_000);
+    expect(m.total).toBeGreaterThan(0.19 * m.totalDown);
+  });
+
+  it('drain and Shell Bell heal from ordinary damage, cut 50/75/90% by phase', () => {
+    expect(bossDrainHeal(200, 0.5, 1)).toBe(50);
+    expect(bossDrainHeal(200, 0.5, 2)).toBe(25);
+    expect(bossDrainHeal(200, 0.5, 3)).toBeCloseTo(10, 9);
+    expect([bossPhase(0), bossPhase(0.3), bossPhase(0.7)]).toEqual([1, 2, 3]);
+    // A normal-type boss: Drain Punch vs Brick Break (same power and type) on the same Pokémon.
+    const snorlax = { ...boss, name: 'Snorlax', species: sp('Snorlax'), moves: ['hyperbeam'] };
+    const punch = rateBossMember(ds, mon('Machamp', 60, ['drainpunch']), snorlax);
+    const brick = rateBossMember(ds, mon('Machamp', 60, ['brickbreak']), snorlax);
+    expect(brick.turns).toBeLessThan(30);
+    expect(punch.perTurn).toBeCloseTo(brick.perTurn, 6);
+    expect(punch.turns).toBeGreaterThan(brick.turns);
+    expect(punch.notes.join(' ')).toMatch(/cut 50% \/ 75% \/ 90%/);
+    // Shell Bell adds 1/8 of the ordinary damage (cut the same way).
+    const bell = rateBossMember(ds, mon('Machamp', 60, ['brickbreak'], { item: 'Shell Bell' }), snorlax);
+    expect(bell.turns).toBeGreaterThanOrEqual(brick.turns);
+    expect(bell.turns).toBeLessThanOrEqual(punch.turns);
+    expect(bell.notes.join(' ')).toMatch(/Shell Bell/);
+  });
+
+  it('the boss is very heavy: Low Kick at full power, Heavy Slam at its weakest', () => {
+    const me = boxToCalc(ds, mon('Machamp', 60));
+    const foe = npcToCalc(ds, boss);
+    const light = { lk: moveDamage(ds, me, foe, 'lowkick')!, hs: moveDamage(ds, me, foe, 'heavyslam')! };
+    asHeavyBoss(foe);
+    const heavy = { lk: moveDamage(ds, me, foe, 'lowkick')!, hs: moveDamage(ds, me, foe, 'heavyslam')! };
+    expect(heavy.lk.hi).toBeGreaterThan(light.lk.hi);
+    expect(heavy.hs.hi).toBeLessThan(light.hs.hi);
+    const r = rateBossMember(ds, mon('Machamp', 60, ['lowkick']), boss);
+    expect(r.perTurn).toBeCloseTo(((heavy.lk.lo + heavy.lk.hi) / 2) * RAID_MULT, 6);
+  });
+
+  it('Eternamax Overdrive: +75% per Atk/SpA stage makes setup worth more', () => {
+    expect([overdriveMult(2), overdriveMult(4), overdriveMult(6), overdriveMult(-1)]).toEqual([2.5, 4, 5.5, 1]);
+    expect(bossActionDamage(1000, 'eternamax', { stage: 2, barrierDown: true })).toBe(312_500);
+    const sd = mon('Machamp', 60, ['crosschop', 'swordsdance']);
+    const plainSd = mon('Machamp', 60, ['crosschop']);
+    const gain = (b: typeof boss) => rateBossMember(ds, sd, b).total / rateBossMember(ds, plainSd, b).total;
+    const e = rateBossMember(ds, sd, eterna);
+    expect(e.plan.kind).toBe('boost');
+    expect(e.plan.label).toMatch(/Overdrive/);
+    expect(gain(eterna)).toBeGreaterThan(gain(plain));
+  });
+
+  it('loot tiers 50k / 150k / 350k / 750k (Eternamax x10)', () => {
+    expect(lootTier(49_999)).toEqual({ tier: 0, next: 50_000 });
+    expect(lootTier(150_000)).toEqual({ tier: 2, next: 350_000 });
+    expect(lootTier(800_000)).toEqual({ tier: 4, next: undefined });
+    expect(lootTier(800_000, 'eternamax')).toEqual({ tier: 1, next: 1_500_000 });
+    const s = suggestBossTeam(ds, [mon('Charizard', 60, ['flamethrower'])], v, { size: 1 });
+    expect(s.form).toBe('gmax');
+    expect(s.totalDown).toBeGreaterThan(s.total);
+    expect(s.notes.join(' ')).toMatch(/Max Barrier/);
   });
 });

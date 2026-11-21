@@ -5,10 +5,10 @@ import { box } from '../store';
 import { excludedUids, lockedUids } from '../teamPrefs';
 import { typeColor, TypeBadge } from './common';
 import { rulesFor } from '../../engine/rules';
-import { bossPool, maxMoveName, maxMovePower, suggestBossTeam, BOSS_TURN_CAP, type BossMember } from '../../engine/worldBoss';
+import { bossForm, bossPool, bossRules, lootTier, maxMoveName, maxMovePower, suggestBossTeam, BOSS_TURN_CAP, type BossMember } from '../../engine/worldBoss';
 
 const n0 = (x: number) => Math.round(x).toLocaleString('en-US');
-/** Shares of a 3,000,000 HP pool are tiny: two significant digits below 1%. */
+/** Shares of a 10,000,000 HP pool are tiny: two significant digits below 1%. */
 const pct = (x: number) => (x <= 0 ? '0%' : x < 1 ? `${Number(x.toPrecision(2))}%` : `${x.toFixed(1)}%`);
 
 function when(iso?: string): string | undefined {
@@ -35,6 +35,7 @@ export function BossMovePicker({ ds, npc, pool, active }: { ds: Dataset; npc: Np
       ? (active.lobby?.isNext ? 'From lobby · next spawn' : `From lobby · ${active.lobby?.build.name} details`)
       : 'Your pick';
   const spawn = when(active?.lobby?.isNext ? active.lobby.startsAt : undefined);
+  const maxMoves = bossRules(bossForm(npc.name, npc.variants[0]?.team[0]?.name)).maxMoves;
   return (
     <div class="card">
       <p class="title">
@@ -49,7 +50,7 @@ export function BossMovePicker({ ds, npc, pool, active }: { ds: Dataset; npc: Np
           const state = !active ? '' : on ? ' on' : ' off';
           return (
             <button type="button" class={`mv${state}`} aria-pressed={on} onClick={() => toggle(id)}
-              title={m ? `${m.type} · ${m.category}${m.power ? ` · ${m.power} BP` : ''}${m.category !== 'Status' ? ` → ${maxMoveName(m)} ${maxMovePower(m)} BP (assumed)` : ''}\n${m.description}` : id}>
+              title={m ? `${m.type} · ${m.category}${m.power ? ` · ${m.power} BP` : ''}${maxMoves && m.category !== 'Status' ? ` → ${maxMoveName(m)} ${maxMovePower(m)} BP (assumed)` : ''}\n${m.description}` : id}>
               <i style={{ background: m ? typeColor(m.type) : undefined }} />
               {m?.name ?? id}
               {m && m.category !== 'Status' && m.power ? <span class="pw">{m.power}</span> : null}
@@ -81,17 +82,31 @@ function MemberRow({ ds, m }: { ds: Dataset; m: BossMember }) {
     <div class="wbm">
       <div class="row">
         <b class="grow">{name}{m.mon.level ? <span class="muted small"> Lv {m.mon.level}</span> : null}</b>
-        <span class="pill good" title="Expected damage per attacking turn (accuracy included, shield not)">{n0(m.perTurn)} HP/turn</span>
+        <span class="pill good" title="Boss HP per attacking turn once the Max Barrier is down (125x, per-action cap; accuracy included, shield not). About a fifth of this while the barrier is up.">{n0(m.perTurn)} HP/turn</span>
       </div>
       <div class="small">
         {m.moveName ? <>Best: <b>{m.moveName}</b> · {pct(m.perTurnPct)} of the shared HP per turn</> : <span class="bad-t">No damaging move that works here</span>}
       </div>
       <div class="small muted">
-        {walls ? `Outlasts ${BOSS_TURN_CAP} turns` : `Survives ${m.turns} turn${m.turns === 1 ? '' : 's'}`} (takes ~{Math.round(m.takenPct)}%/turn{m.worst ? `, worst ${m.worst.maxName} ${Math.round(m.worst.pct)}%` : ''})
-        {' · '}total {n0(m.total)} ({pct(m.totalPct)})
+        {walls ? `Outlasts ${BOSS_TURN_CAP} turns` : `Survives ${m.turns} turn${m.turns === 1 ? '' : 's'}`} (takes ~{Math.round(m.takenPct)}%/turn{m.worst ? `, worst ${m.worst.maxName ?? m.worst.name} ${Math.round(m.worst.pct)}%` : ''})
+        {' · '}total {n0(m.total)}–{n0(m.totalDown)} ({pct(m.totalPct)}+)
       </div>
       {m.plan.kind !== 'attack' && <div class="small">Plan: {m.plan.label}</div>}
       {m.notes.map((t) => <div class="small muted">{t}</div>)}
+    </div>
+  );
+}
+
+/** Your team's expected damage → loot tier (50k / 150k / 350k / 750k; Eternamax x10). Tiers also need a win. */
+function LootLine({ low, high, form }: { low: number; high: number; form: ReturnType<typeof bossForm> }) {
+  const a = lootTier(low, form);
+  const b = lootTier(high, form);
+  const tiers = bossRules(form).tiers.map((t) => `${t / 1000}k`).join(' / ');
+  return (
+    <div class="small">
+      Expected damage ≈ <b>{n0(low)}–{n0(high)}</b> → loot tier <b>{a.tier === b.tier ? a.tier : `${a.tier}–${b.tier}`}</b> of {bossRules(form).tiers.length}
+      {b.next ? <span class="muted"> · next at {n0(b.next)}</span> : null}
+      <span class="muted"> ({tiers}, needs a win; not checked in a real raid)</span>
     </div>
   );
 }
@@ -114,7 +129,8 @@ export function BossCounter({ ds, npc, v }: { ds: Dataset; npc: Npc; v: NpcTeamV
           <div class="small muted">No eligible Pokémon in your box.</div>
         ) : (
           <>
-            <div class="small muted">Ranked by damage dealt before fainting against the moves above. Total for the six: {n0(res.total)} HP.</div>
+            <div class="small muted">Ranked by damage dealt before fainting against the moves above. Totals run from barrier up (only your own damage wears it down) to barrier down (busy raid, or after {res.form === 'eternamax' ? '30 s' : '2 min'}).</div>
+            <LootLine low={res.total} high={res.totalDown} form={res.form} />
             {res.team.map((m) => <MemberRow ds={ds} m={m} />)}
           </>
         )}
@@ -124,7 +140,7 @@ export function BossCounter({ ds, npc, v }: { ds: Dataset; npc: Npc; v: NpcTeamV
           <p class="title">Danger</p>
           {res.dangers.slice(0, 6).map((d) => (
             <div class="small">
-              <TypeBadge type={d.hit.type} /> <b>{d.hit.maxName}</b> <span class="muted">from {d.hit.name}</span>
+              <TypeBadge type={d.hit.type} /> <b>{d.hit.maxName ?? d.hit.name}</b>{d.hit.maxName && <span class="muted"> from {d.hit.name}</span>}
               {' · '}{d.heavy ? <span class="bad-t">50%+ to {d.heavy} of your team</span> : <span class="muted">under 50% to your team</span>}
               {d.topName && <span class="muted"> · up to {Math.round(d.top)}% ({d.topName})</span>}
             </div>

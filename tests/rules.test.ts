@@ -4,7 +4,7 @@ import type { BoxMon, Dataset } from '../src/shared/types';
 import { boxToCalc, duel, npcToCalc } from '../src/engine/damage';
 import { scorePair, suggestTeam } from '../src/engine/teamSuggest';
 import { suggestMoveset } from '../src/engine/moveset';
-import { CHALLENGE_RULES, NORMAL_RULES, TOWER_RULES, rulesFor } from '../src/engine/rules';
+import { BOSS_RULES, CHALLENGE_RULES, NORMAL_RULES, TOWER_RULES, rulesFor } from '../src/engine/rules';
 import { teamToText } from '../src/ui/teamPrefs';
 
 const ds = structuredClone(fixture) as unknown as Dataset;
@@ -23,7 +23,9 @@ const dragonair = v.team[1]; // Hyper Beam (Normal) + Outrage (Dragon): neither 
 
 describe('challenge rules', () => {
   it('follows the wiki: special rules in World Boss and Mega Chamber battles, no Bag medicine in towers', () => {
-    expect(rulesFor('boss')).toBe(CHALLENGE_RULES);
+    expect(rulesFor('boss')).toBe(BOSS_RULES);
+    expect([...CHALLENGE_RULES.bannedMoves].every((id) => BOSS_RULES.bannedMoves.has(id))).toBe(true);
+    expect(BOSS_RULES.bannedMoves.has('encore') && !CHALLENGE_RULES.bannedMoves.has('encore')).toBe(true); // World Boss only
     expect(rulesFor('mega')).toBe(CHALLENGE_RULES);
     expect(rulesFor('gym')).toBe(NORMAL_RULES); // not League battles (the old assumption)
     expect(rulesFor('elite-four')).toBe(NORMAL_RULES);
