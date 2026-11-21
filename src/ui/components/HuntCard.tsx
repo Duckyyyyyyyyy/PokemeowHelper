@@ -35,7 +35,7 @@ export function HuntCard({ ds, npc, v, ready, grind, rules, size }: {
   const items = ownedItems.value;
   const res = useMemo(() => {
     const doneSet = new Set(done);
-    const gear = knownGear(doneSet, new Set(items.keys()), box.value);
+    const gear = knownGear(doneSet, new Set(items.keys()));
     return huntFor(ds, v, box.value, ready, grind, {
       levelCap: v.levelCap, rules, size, showLocked,
       progress: { tips: allTips(ds), done: doneSet, seenMaps: seen, passed: passedStage(npc) }, gear,
@@ -67,7 +67,7 @@ export function HuntCard({ ds, npc, v, ready, grind, rules, size }: {
         </div>
       )}
       <div class="small muted" style={{ marginTop: '4px' }}>
-        Reachable maps are a guess: maps seen on the game's Explore page, Tips you ticked, and {npcName}'s place on the Tips progress path. A Surf/rod tag means MeowRPGAdvisor doesn't know if you have it.
+        Reachable maps are a guess: maps seen on the game's Explore page, Tips you ticked, and {npcName}'s place on the Tips progress path. A "needs …?" tag (Surf, a rod, the Safari Ticket) means MeowRPGAdvisor doesn't know if you have it.
         Scored like Worth grinding, with average IVs (15), no EVs and the level-up moves it has by then.
       </div>
     </div>

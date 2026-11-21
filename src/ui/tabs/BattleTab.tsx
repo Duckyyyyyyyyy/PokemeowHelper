@@ -60,10 +60,10 @@ const topScore = (as: { score: number | null }[]) => {
 };
 const pct = (x: number) => (x > 0 && x < 0.01 ? '<1%' : `${Math.round(x * 100)}%`);
 
-/** Nothing you have rates OK (45+) vs this NPC: link to Prep → Hunt & grind for it. */
+/** Options were rated and none is OK (45+) vs this NPC: link to Prep → Hunt & grind for it. */
 function HuntLink({ advice, top }: { advice: TurnAdvice; top: number | null }) {
   const npc = advice.npc;
-  if (!npc || (top !== null && top >= 45)) return null;
+  if (!npc || top === null || top >= 45) return null; // nothing rated is not "no good answer"
   const open = () => {
     selectedNpcId.value = npc.id;
     selectedVariant.value = Math.max(0, advice.variant ? npc.variants.indexOf(advice.variant) : 0);

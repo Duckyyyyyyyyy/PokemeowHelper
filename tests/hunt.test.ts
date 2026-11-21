@@ -26,7 +26,7 @@ const npc = (id: string) => ds.npcs.find((n) => n.id === id)!;
 const mon = (name: string, level: number, moves: string[] = []): BoxMon => ({ uid: `${name}-${level}`, species: sp(name), level, moves, source: 'manual' });
 const tips = CURATED_TIPS as GameTip[];
 const progress = (p: Partial<Progress> = {}): Progress => ({ tips, done: new Set(), seenMaps: new Set(), ...p });
-const noGear = knownGear(new Set(), new Set(), []);
+const noGear = knownGear(new Set(), new Set());
 
 function hunt(boxMons: BoxMon[], npcId = 'challenge:brock', extra: Partial<Parameters<typeof huntFor>[5]> = {}, variant = 0) {
   const n = npc(npcId);
@@ -59,20 +59,24 @@ describe('hunt: reachable maps (guess)', () => {
     expect(mapIdForTitle(ds, 'The Blue Sea 2')).toBe('azure-shore');
     expect(mapIdForTitle(ds, 'Nowhere')).toBeUndefined();
   });
-  it('Surf and rods: only known when ticked, in the bag or (Surf) known by a box Pokémon', () => {
-    expect(gearNeeded('surf', noGear)).toBe('Surf');
-    expect(gearNeeded('goodrod', noGear)).toBe('Good Rod');
-    expect(gearNeeded('walking', noGear)).toBeUndefined();
-    const g = knownGear(new Set(['item:goodrod']), new Set(), [mon('Psyduck', 30, ['surf'])]);
-    expect(gearNeeded('surf', g)).toBeUndefined();
-    expect(gearNeeded('goodrod', g)).toBeUndefined();
-    expect(gearNeeded('oldrod', g)).toBe('Old Rod');
+  it('Surf, rods and the Safari Ticket: only known when ticked in Tips or in the bag', () => {
+    expect(gearNeeded('surf', 'verdant-trail', noGear)).toBe('Surf');
+    expect(gearNeeded('goodrod', 'verdant-trail', noGear)).toBe('Good Rod');
+    expect(gearNeeded('walking', 'verdant-trail', noGear)).toBeUndefined();
+    expect(gearNeeded('walking', 'safari-zone', noGear)).toBe('Safari Ticket');
+    const g = knownGear(new Set(['item:goodrod', 'hm:hmsurf']), new Set(['safariticket']));
+    expect(gearNeeded('surf', 'verdant-trail', g)).toBeUndefined();
+    expect(gearNeeded('goodrod', 'verdant-trail', g)).toBeUndefined();
+    expect(gearNeeded('oldrod', 'verdant-trail', g)).toBe('Old Rod');
+    expect(gearNeeded('walking', 'safari-zone', g)).toBeUndefined();
   });
 });
 
 describe('hunt: candidates vs Brock (cap 19)', () => {
   const weakBox = [mon('Pikachu', 12, ['thundershock'])]; // Electric does nothing to Geodude/Onix
   const res = hunt(weakBox);
+  // Every candidate through the full calc (cap 19 keeps it cheap); shared by the tests below.
+  const all = hunt(weakBox, 'challenge:brock', { limit: 50, shortlist: 400 });
 
   it('suggests reachable Water/Grass answers for the NPC Pokémon nobody in the box handles', () => {
     expect(res.gaps).toEqual(['Geodude', 'Onix']);
@@ -92,7 +96,7 @@ describe('hunt: candidates vs Brock (cap 19)', () => {
     expect(re.picks.length).toBeGreaterThan(0);
     expect(re.picks.every((p) => p.where.access.access !== 'locked')).toBe(true);
     expect(re.lockedForms).toBeGreaterThan(0);
-    const all = hunt(weakBox, 'challenge:brock', { showLocked: true, limit: 50, shortlist: 400 }, 1);
+    const all = hunt(weakBox, 'challenge:brock', { showLocked: true, limit: 50 }, 1);
     expect(all.picks.some((p) => p.where.access.access === 'locked')).toBe(true);
     expect(all.lockedForms).toBe(0);
     // Default cap of 5: locked ones come after the 5 reachable ones, not crowded out.
@@ -106,7 +110,6 @@ describe('hunt: candidates vs Brock (cap 19)', () => {
       expect(p.catchLevel).toBeLessThanOrEqual(19);
       expect(p.where.enc.levels[0]).toBeLessThanOrEqual(19);
     }
-    const all = hunt(weakBox, 'challenge:brock', { limit: 50, shortlist: 400 });
     // Caterpie → Metapod (7) → Butterfree (10), both by Lv 19; Psyduck evolves at 33 (not yet).
     expect(all.picks.find((p) => p.mon.species === sp('Caterpie'))?.evolvedTo).toBe(sp('Butterfree'));
     const psy = all.picks.find((p) => p.mon.species === sp('Psyduck'));
@@ -117,13 +120,12 @@ describe('hunt: candidates vs Brock (cap 19)', () => {
     expect(new Set(forms).size).toBe(forms.length);
   });
   it('Surf/rod spots you are not known to have are tagged, not dropped, and rank a bit lower', () => {
-    const all = hunt(weakBox, 'challenge:brock', { limit: 50, shortlist: 400 });
     const tagged = all.picks.filter((p) => p.where.needs);
     expect(tagged.length).toBeGreaterThan(0);
-    for (const p of tagged) expect(['Surf', 'Old Rod', 'Good Rod', 'Super Rod']).toContain(p.where.needs);
+    for (const p of tagged) expect(['Surf', 'Old Rod', 'Good Rod', 'Super Rod', 'Safari Ticket']).toContain(p.where.needs);
     // Goldeen (Good Rod, 100) vs Oddish (walking, 95): the walking one comes first.
     expect(res.picks[0].where.needs).toBeUndefined();
-    const geared = hunt(weakBox, 'challenge:brock', { limit: 50, shortlist: 400, gear: knownGear(new Set(['hm:hmsurf', 'item:oldrod', 'item:goodrod', 'item:superrod']), new Set(), []) });
+    const geared = hunt(weakBox, 'challenge:brock', { limit: 50, shortlist: 400, gear: knownGear(new Set(['hm:hmsurf', 'item:oldrod', 'item:goodrod', 'item:superrod']), new Set(['safariticket'])) });
     expect(geared.picks.some((p) => p.where.needs)).toBe(false);
   });
   it('skips species you already own (as caught or as what they become)', () => {

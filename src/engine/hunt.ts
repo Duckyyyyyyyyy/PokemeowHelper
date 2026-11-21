@@ -98,20 +98,24 @@ export function mapIdForTitle(ds: Dataset, title: string | undefined): string | 
   return (ds.wild?.maps ?? []).filter((m) => t.startsWith(norm(m.name))).sort((a, b) => b.name.length - a.name.length)[0]?.id;
 }
 
-/** Field gear you are KNOWN to have (ticked Tips, Bag page, a box Pokémon knowing Surf). Unknown ≠ missing. */
+/**
+ * Field gear you are KNOWN to have (ticked Tips, Bag page). Unknown ≠ missing. A box Pokémon
+ * knowing Surf doesn't count: many learn it by level-up, while the map needs HM03.
+ */
 export interface Gear {
   surf: boolean;
   rods: ReadonlySet<string>;
+  safariTicket: boolean;
 }
 
-export function knownGear(done: ReadonlySet<string>, bagIds: ReadonlySet<string>, box: readonly BoxMon[]): Gear {
+export function knownGear(done: ReadonlySet<string>, bagIds: ReadonlySet<string>): Gear {
   const rods = new Set(['oldrod', 'goodrod', 'superrod'].filter((r) => done.has(`item:${r}`) || bagIds.has(r)));
-  const surf = done.has('hm:hmsurf') || bagIds.has('hmsurf') || box.some((m) => m.moves.includes('surf'));
-  return { surf, rods };
+  return { surf: done.has('hm:hmsurf') || bagIds.has('hmsurf'), rods, safariTicket: done.has('map:safari') || bagIds.has('safariticket') };
 }
 
-/** What an encounter needs that you are not known to have ("Surf", "Old Rod"), else undefined. */
-export function gearNeeded(method: string, gear: Gear): string | undefined {
+/** What a spot needs that you are not known to have ("Surf", "Old Rod", "Safari Ticket"), else undefined. */
+export function gearNeeded(method: string, mapId: string, gear: Gear): string | undefined {
+  if (mapId === 'safari-zone' && !gear.safariTicket) return 'Safari Ticket';
   if (method === 'surf') return gear.surf ? undefined : 'Surf';
   if (isFishing(method)) return gear.rods.has(method) ? undefined : METHOD_LABEL[method] ?? method;
   return undefined;
@@ -123,7 +127,7 @@ export interface HuntWhere {
   map: ExploreMap;
   enc: WildEncounter;
   access: MapAccess;
-  /** Gear you are not known to have ("Surf", "Good Rod"). */
+  /** Gear you are not known to have ("Surf", "Good Rod", "Safari Ticket"). */
   needs?: string;
 }
 
@@ -225,7 +229,7 @@ export function huntFor(ds: Dataset, v: NpcTeamVariant, box: readonly BoxMon[], 
         lockedForms.add(form);
         continue;
       }
-      const where: HuntWhere = { map, enc, access, needs: gearNeeded(enc.method, opts.gear) };
+      const where: HuntWhere = { map, enc, access, needs: gearNeeded(enc.method, map.id, opts.gear) };
       const prev = byForm.get(form);
       if (!prev) byForm.set(form, { where, spots: 1 });
       else {
