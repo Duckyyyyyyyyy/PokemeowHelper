@@ -343,6 +343,8 @@ describe('World Boss rules 2026-11', () => {
     const both = adviseTurn(ds2, snapFor('Gigantamax Venusaur'), [mon('Charizard', 60, ['flamethrower', 'knockoff'])], { lookahead: 0, bossMoves: knock(venu.id) });
     expect(both.threat!.maxPct).toBeLessThan(g.threat!.maxPct);
     expect(both.notes.join(' ')).toMatch(/Knock Off: your side uses it too/);
+    // The lookahead still counts full hits: its KO odds are not shown next to the cut row.
+    expect(adviseTurn(ds2, snapFor('Gigantamax Venusaur'), zard, { bossMoves: knock(venu.id) }).threat!.koChance).toBeUndefined();
   });
 
   it('boss boosts stop at +2 Atk/SpA and +1 Def/SpD', () => {

@@ -407,7 +407,7 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
   const look = (opts.lookahead ?? 2) > 0 && !isDoubles
     ? lookFor(ds, idx, snap, field, rules, { name: snap.player.name, calc: myCalc, moves: myLegal }, support.bench as BenchRow[], foe.mon.name, foeCalc, foeMoves, support.foesLeft ?? [], out.prediction, opts.lookahead)
     : undefined;
-  if (look && out.threat) {
+  if (look && out.threat && !bossF) { // World Boss: the lookahead counts its full hits, so its KO odds would contradict the cut row
     const t = look.engine.threatOdds();
     out.threat.koChance = t.ko;
     out.threat.critKo = t.critKo;

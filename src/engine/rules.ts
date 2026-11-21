@@ -63,7 +63,7 @@ export function abilityVsNpc(ability: string | undefined, rules?: BattleRules): 
   return rules?.npcIgnoresWonderGuard && ability === 'Wonder Guard' ? undefined : ability;
 }
 
-export const RULES_TEXT = "Your OHKO moves, Destiny Bond, Perish Song, Endeavor and Pain Split fail, and their attacks hit through Wonder Guard (World Boss and Mega Chamber rules). Team tab damage scores and move advice account for this.";
+export const RULES_TEXT = "Your OHKO moves, Destiny Bond, Perish Song, Endeavor and Pain Split fail, and their attacks hit through Wonder Guard (World Boss and Mega Chamber rules). In World Boss battles Encore, Leech Seed, Curse and Salt Cure fail too. Team tab damage scores and move advice account for this.";
 
 /**
  * Arena kinds that look like a Battle Frontier facility. The real `data-kind` of a Frontier battle
