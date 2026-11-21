@@ -13,7 +13,7 @@ Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing 
 
 ## ⬜ Planned (in order)
 
-0. **Game update catch-up (Nov 14–21 changes, Battle Simulator)**: Plan with workstreams and models: `docs/design/game-update-2026-11-plan.md`. Done in 0.13.0: Phase A (rules digest, data refresh, simulator export) and World Boss 2. Next: battle reader fixes (needs Ctrl+S saves), simulator golden tests (needs OK), then Friendship → field effects → NPC AI.
+0. **Game update catch-up (Nov 14–21 changes, Battle Simulator)**: Plan with workstreams and models: `docs/design/game-update-2026-11-plan.md`. Done in 0.13.0: Phase A (rules digest, data refresh, simulator export) and World Boss 2. Battle reader re-check (WS0) done on the League and Doubles saves; wild and World Boss saves still needed. Next: simulator golden tests (needs OK), then Friendship → field effects → NPC AI.
 1. Later: Chrome Web Store listing ($5 and a privacy policy), and Triples.
 
 ## 🔍 Needs real-game check
@@ -24,14 +24,16 @@ Claude reads the page through Claude in Chrome and the user plays. Tick an item 
 - [ ] World Boss in a real raid: Max Moves only for GMAX/Eternamax (name test), barrier ramp (straight line 20%→100% is a guess), order 125x → Overdrive → barrier → cap, Overdrive stacked on top of the normal stage boost, drain cut phases (75%/40% HP), loot tiers
 - [ ] Battle Frontier battle: `data-kind`, Brain name, Gen III damage vs Calc check
 - [ ] Battle Tower: opponent name, fainted roster, reserve PP
-- [ ] Doubles build in a live battle: own Pokémon fainting, switching mid-battle, status badges
+- [ ] Doubles build in a live battle: status badges and the Switch/Bag command tabs (the real save `tate-liza-doubles-turn4.html`, 2026-11-22, confirms actives, stat tags, moves, own Pokémon fainting and switching in the log)
 - [ ] Support-move scoring (4a) and lookahead (4d) guesses: sleep turns, crit 1/24, flinch, confusion
-- [ ] Wild battle screen after clicking Battle (HP %, status); Catchlist marker
+- [ ] Wild battle screen after clicking Battle (HP %, status); Catchlist marker. The 2026-11-22 "wild" save was the Battle list page: save again from Explore after pressing Battle
 - [ ] In-battle Items panel markup (`battle-items-panel.reconstructed.html`)
 - [ ] Hunt & Grind reachable maps (guess): map ids from the encounter card title, the Tips gate table (`GATE_TIP` in hunt.ts) and the region-order guess; Surf, rods and the Safari Ticket known only from ticked Tips or the Bag page (the Bag reader skips the key pocket, so they usually show "needs …?")
 - [ ] Hunt list on a live wild encounter: CATCH with "On your hunt list for <NPC>" and the Explore "hunt:" marker
 - [ ] Battle tab "Hunt for a counter →" link (shows when nothing rates 45+ vs a known NPC; not seen in a live battle)
-- [ ] Replace the Brock fixture (`brock-turn3.reconstructed.html`) with a real Ctrl+S save
+- [ ] Replace the Brock fixture (`brock-turn3.reconstructed.html`) with a real Ctrl+S save (real Gym save `shauntal-forced-switch.html` added 2026-11-22, but it is a forced switch: no move buttons)
+- [ ] 2026-11 reader changes (WS0) not seen live yet: weather/terrain buttons beside the turn counter (`readField`, markup from the stylesheet only, `field-effects.unverified.html`); stat tags read from the multiplier text when no label (accuracy/evasion table); greyed-out moves (`data-unavailable`); Belly Drum / Anger Point "maximized" wording; numbers with commas in the log; ±N% chips and crit-stage tags (ignored)
+- [ ] World Boss battle save (Ctrl+S) still missing: the World Boss battle reader is unchanged
 
 ## Known data gaps (not bugs)
 

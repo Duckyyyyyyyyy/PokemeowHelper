@@ -136,6 +136,18 @@ export interface BattleSnapshot {
    * ("Choose for Slowbro · Position 1"), and none while a target is being picked.
    */
   movesFor?: string;
+  /** Weather and terrain shown on screen (effect buttons beside the turn counter). Unverified markup: see readField. */
+  field?: BattleField;
+}
+
+/** On-screen field (2026-11 game update). Names use @smogon/calc spelling: "Rain", "Sun", "Electric"… */
+export interface BattleField {
+  weather?: string;
+  weatherTurns?: number;
+  terrain?: string;
+  terrainTurns?: number;
+  /** Every effect button's label as shown (Trick Room, Tailwind… are not sorted out yet). */
+  labels?: string[];
 }
 
 /** One entry of the battle screen's Items panel. */

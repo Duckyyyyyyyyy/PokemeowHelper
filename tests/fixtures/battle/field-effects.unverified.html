@@ -1,0 +1,26 @@
+<!--
+  UNVERIFIED: no save has shown weather or terrain yet. Class names come from the game's stylesheet
+  (BattlePage css, 2026-11-22): .battle-field-row > .battle-field-status > button.battle-field-effect,
+  and the scene art .battle-weather-visual[data-weather=raindance]. The button labels are a guess.
+  Replace with a real Ctrl+S save of a battle with weather and terrain (docs/PLAN.md "Needs real-game check").
+-->
+<section class="battle-arena" data-kind="gym" data-log-layout="side" data-status="active" aria-label="Battle against Misty">
+  <div class="battle-main-panel">
+    <div class="battle-panel-heading">
+      <h2><span class="battle-title-trainer" title="Misty"><span class="battle-title-name">Misty</span></span></h2>
+      <div class="battle-heading-actions">
+        <span class="battle-turn">Turn 2 · 2/2 left</span>
+      </div>
+    </div>
+    <div class="battle-scene">
+      <div class="battle-weather-visual" data-weather="raindance" aria-hidden="true"></div>
+    </div>
+    <div class="battle-field-row">
+      <p class="battle-field-status">
+        <button type="button" class="battle-field-effect" aria-haspopup="dialog">Rain · 4 turns left</button>
+        <button type="button" class="battle-field-effect" aria-haspopup="dialog">Electric Terrain · 3 turns left</button>
+        <button type="button" class="battle-field-effect" aria-haspopup="dialog">Trick Room</button>
+      </p>
+    </div>
+  </div>
+</section>
