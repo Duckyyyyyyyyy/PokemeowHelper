@@ -411,7 +411,8 @@ describe('World Boss rules 2026-11', () => {
     expect(bossDrainHeal(200, 0.5, 3)).toBeCloseTo(10, 9);
     expect([bossPhase(0), bossPhase(0.3), bossPhase(0.7)]).toEqual([1, 2, 3]);
     // A normal-type boss: Drain Punch vs Brick Break (same power and type) on the same Pokémon.
-    const snorlax = { ...boss, name: 'Snorlax', species: sp('Snorlax'), moves: ['hyperbeam'] };
+    // Its own base stats: NPC baseStats reach the calc, so spreading `boss` would keep the boss's.
+    const snorlax = { ...boss, name: 'Snorlax', species: sp('Snorlax'), baseStats: ds.species[sp('Snorlax')].baseStats, moves: ['hyperbeam'] };
     const punch = rateBossMember(ds, mon('Machamp', 60, ['drainpunch']), snorlax);
     const brick = rateBossMember(ds, mon('Machamp', 60, ['brickbreak']), snorlax);
     expect(brick.turns).toBeLessThan(30);
