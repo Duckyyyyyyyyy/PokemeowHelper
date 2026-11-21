@@ -297,7 +297,9 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
     notes.push(`${foe.mon.name}'s set is a guess (moves seen in battle + latest level-up moves, perfect IVs).`);
   } else {
     // Known wiki set: never overwritten, but a move it really used counts as a possible threat.
-    extra = seen.filter((id) => !foe.mon.moves.includes(id));
+    // A World Boss narrowed to this appearance's moves: moves recorded at EARLIER spawns belong to other
+    // sets, so only moves it used in this battle are added back.
+    extra = (match?.bossFiltered ? usedThisBattle : seen).filter((id) => !foe.mon.moves.includes(id));
     if (extra.length) notes.push(`${foe.mon.name} was seen using ${extra.map((id) => ds.moves[id]?.name ?? id).join(', ')}, which is not in the ${match?.bossFiltered ? 'moves picked for this appearance' : 'wiki set'}. Counted as a possible threat.`);
   }
   const foeCalc = applyState(npcToCalc(ds, foe.mon), snap.opponent, snap.boosts.opponent);

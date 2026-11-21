@@ -103,7 +103,10 @@ export function readBossLobby(doc: Document, now = Date.now()): { next?: BossNex
 export function mergeBossLobby(prev: BossLobbySnapshot | null | undefined, read: NonNullable<ReturnType<typeof readBossLobby>>, now = Date.now()): BossLobbySnapshot {
   const builds = { ...(prev?.v === 1 ? prev.builds : {}) };
   if (read.build) {
-    builds[bossKey(read.build.name, read.build.form)] = read.build;
+    const key = bossKey(read.build.name, read.build.form);
+    const next = read.next ?? prev?.next;
+    const isNext = !!next && bossKey(next.name, next.form) === key;
+    builds[key] = isNext && next.startsAt ? { ...read.build, startsAt: next.startsAt } : read.build;
   }
   return { v: 1, at: now, next: read.next ?? prev?.next, builds };
 }

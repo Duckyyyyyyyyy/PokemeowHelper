@@ -8,8 +8,9 @@ import type { BoxMon, Dataset, Npc } from '../src/shared/types';
 import { bestAttackTypes, bestDefensiveTypes } from '../src/engine/analysis';
 import { CHALLENGE_RULES, rulesFor } from '../src/engine/rules';
 import { adviseTurn, matchWithBossMoves } from '../src/engine/turnAdvisor';
+import { recordObserved } from '../src/engine/observed';
 import {
-  BOSS_DAMAGE_MULT, bossDs, bossHits, bossPool, bossVariant, maxMoveName, maxMovePower, rateBossMember, suggestBossTeam,
+  BOSS_DAMAGE_MULT, byRace, bossDs, bossHits, bossPool, bossVariant, maxMoveName, maxMovePower, rateBossMember, suggestBossTeam,
 } from '../src/engine/worldBoss';
 import { boxToCalc } from '../src/engine/damage';
 import { lobbySig, mergeBossLobby, readBossLobby } from '../src/content/bossLobbyReader';
@@ -66,6 +67,24 @@ describe('World Boss move filter', () => {
     expect(pika(noGround).total).toBeGreaterThan(pika(onlyGround).total);
     expect(onlyGround.dangers.map((d) => d.hit.moveId)).toEqual(['earthpower']);
     expect(noGround.dangers.map((d) => d.hit.moveId)).toEqual(['furycutter']);
+  });
+
+  it('changes who makes the team', () => {
+    // Charizard (Flying) is immune to Max Quake; Gengar (Ghost) is immune to Max Strike and Max Knuckle.
+    const box = [mon('Charizard', 60, ['flamethrower']), mon('Gengar', 60, ['shadowball']), mon('Lapras', 60, ['icebeam']), mon('Snorlax', 60, ['bodyslam'])];
+    const uids = (sel: string[]) => suggestBossTeam(ds, box, bossVariant(v, sel), { size: 2, pool: bossPool(venu) }).team.map((m) => m.mon.uid);
+    const ground = uids(['earthpower']);
+    const normal = uids(['hyperbeam', 'rocksmash']);
+    expect(ground).toContain('Charizard');
+    expect(ground).not.toContain('Gengar'); // weak to Ground
+    expect(normal).toContain('Gengar');
+    expect(normal).not.toEqual(ground);
+  });
+
+  it('breaks equal totals by turns survived, then damage per turn, then id', () => {
+    const row = (uid: string, total: number, turns: number, perTurn: number) => ({ mon: { uid }, total, turns, perTurn }) as unknown as Parameters<typeof byRace>[0];
+    const sorted = [row('b', 0, 1, 50), row('a', 0, 1, 50), row('c', 0, 2, 10), row('d', 0, 1, 90), row('e', 5, 1, 5)].sort(byRace).map((r) => r.mon.uid);
+    expect(sorted).toEqual(['e', 'c', 'd', 'a', 'b']);
   });
 
   it('reads the shared HP pool and reports damage per turn against it', () => {
@@ -212,6 +231,18 @@ describe('World Boss lobby → selected moves', () => {
     expect(activeBossMoves(ds2, eterna, lobby, {}, 2000)).toMatchObject({ source: 'lobby', ids: m.ids });
   });
 
+  it('"next spawn" only while the read build belongs to the current next spawn time', () => {
+    expect(Object.values(lobby.builds)[0].startsAt).toBe('2026-11-20T20:00:00.000Z');
+    const later = { ...lobby, next: { ...lobby.next!, startsAt: '2026-11-21T04:00:00.000Z' } };
+    const m = lobbyMovesFor(ds2, eterna, later)!;
+    expect(m.isNext).toBe(false); // still shown (by boss name), no longer claimed as the next spawn
+    expect(m.startsAt).toBeUndefined();
+    expect(m.ids).toHaveLength(4);
+    // A dialog read for a boss that is NOT the next one never gets the next card's time.
+    const other = mergeBossLobby(null, { next: { name: 'Zacian', types: ['Fairy'], startsAt: 'x' }, build: readBossLobby(load(html), 7)!.build }, 7);
+    expect(Object.values(other.builds)[0].startsAt).toBeUndefined();
+  });
+
   it('the newer of your pick and the lobby wins; old ones expire', () => {
     expect(activeBossMoves(ds2, eterna, lobby, { [eterna.id]: { moves: ['fly'], at: 1500 } }, 2000)).toMatchObject({ source: 'manual', ids: ['fly'] });
     expect(activeBossMoves(ds2, eterna, lobby, { [eterna.id]: { moves: ['fly'], at: 500 } }, 2000)!.source).toBe('lobby');
@@ -244,6 +275,18 @@ describe('World Boss moves handed to the Battle tab', () => {
     expect(a.notes.join(' ')).toMatch(/World Boss: its likely moves come only from the 2 moves/);
     const all = adviseTurn(ds, snap, box, { lookahead: 0 });
     expect(all.prediction!.length).toBeGreaterThan(2);
+  });
+
+  it('moves recorded at EARLIER spawns are not added back (only this battle counts)', () => {
+    // An earlier spawn used Outrage; this one is narrowed to Earth Power + Sludge Bomb.
+    const earlier: BattleSnapshot = { ...snap, events: [{ idx: 1, turn: 1, side: 'opponent', mon: 'Gigantamax Venusaur', move: 'Outrage', stages: { attacker: {}, target: {} } }] };
+    const observed = recordObserved(ds, {}, earlier, 1);
+    expect(Object.keys(observed).length).toBeGreaterThan(0);
+    const a = adviseTurn(ds, snap, box, { lookahead: 0, bossMoves: sel, observed });
+    expect(a.prediction!.map((g) => g.moveId).sort()).toEqual(['earthpower', 'sludgebomb']);
+    expect(a.notes.join(' ')).not.toMatch(/Outrage/);
+    // Without a narrowed set the old behaviour stays: a seen move is a possible threat.
+    expect(adviseTurn(ds, snap, box, { lookahead: 0, observed }).prediction!.map((g) => g.moveId)).toContain('outrage');
   });
 
   it('a move it is seen using outside the set is added back, with a note', () => {

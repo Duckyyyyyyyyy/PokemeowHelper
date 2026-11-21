@@ -289,6 +289,14 @@ export function rateBossMember(ds: Dataset, mon: BoxMon, boss: NpcMon, opts: Bos
   };
 }
 
+/**
+ * Race order: total damage before fainting, then (equal totals, e.g. several that faint before acting)
+ * turns survived, then damage per turn, then a stable id.
+ */
+export function byRace(a: BossMember, b: BossMember): number {
+  return b.total - a.total || b.turns - a.turns || b.perTurn - a.perTurn || (a.mon.uid < b.mon.uid ? -1 : a.mon.uid > b.mon.uid ? 1 : 0);
+}
+
 export interface BossDanger {
   hit: Omit<BossHit, 'pct' | 'prob'>;
   /** How many of your Pokémon (scored) it hits for 50%+ (after the 55% cut). */
@@ -319,9 +327,9 @@ export function suggestBossTeam(ds: Dataset, box: BoxMon[], v: NpcTeamVariant, o
   const ranked = box
     .filter((m) => !out.has(m.uid) && !(opts.levelCap !== undefined && m.level !== undefined && m.level > opts.levelCap))
     .map((m) => rateBossMember(ds, m, boss, { ...opts, pool }))
-    .sort((a, b) => b.total - a.total);
+    .sort(byRace);
   const team = [...ranked.filter((m) => lock.has(m.mon.uid)), ...ranked.filter((m) => !lock.has(m.mon.uid))].slice(0, size);
-  team.sort((a, b) => b.total - a.total);
+  team.sort(byRace);
 
   const dangers = new Map<string, BossDanger>();
   for (const m of team) {

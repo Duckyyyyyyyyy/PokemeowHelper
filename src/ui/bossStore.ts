@@ -1,5 +1,5 @@
 import { computed, signal } from '@preact/signals';
-import { bossKey, type BossBuild, type BossLobbySnapshot } from '../shared/bossLobby';
+import type { BossBuild, BossLobbySnapshot } from '../shared/bossLobby';
 import type { Dataset, Npc } from '../shared/types';
 import { dataset, isExtension } from './store';
 
@@ -74,7 +74,12 @@ export interface LobbyMoves {
 export function lobbyMovesFor(ds: Dataset, npc: Npc, lobby: BossLobbySnapshot | null): LobbyMoves | null {
   if (!lobby || npc.category !== 'boss') return null;
   const pool = npc.variants[0]?.team[0]?.moves ?? [];
-  const build = Object.values(lobby.builds ?? {}).filter((b) => b.moves?.length && lobbyNameMatches(npc, b.name, b.form)).sort((a, b) => b.at - a.at)[0];
+  const next = lobby.next && lobbyNameMatches(npc, lobby.next.name, lobby.next.form) ? lobby.next : undefined;
+  // A build read while this boss was the next one, for that same spawn time, beats any other.
+  const forNext = (b: BossBuild) => !!next?.startsAt && b.startsAt === next.startsAt;
+  const build = Object.values(lobby.builds ?? {})
+    .filter((b) => b.moves?.length && lobbyNameMatches(npc, b.name, b.form))
+    .sort((a, b) => Number(forNext(b)) - Number(forNext(a)) || b.at - a.at)[0];
   if (!build) return null;
   const ids: string[] = [];
   const unknown: string[] = [];
@@ -83,8 +88,8 @@ export function lobbyMovesFor(ds: Dataset, npc: Npc, lobby: BossLobbySnapshot | 
     if (id) ids.push(id);
     else unknown.push(m.name);
   }
-  const isNext = !!lobby.next && lobbyNameMatches(npc, lobby.next.name, lobby.next.form) && bossKey(lobby.next.name, lobby.next.form) === bossKey(build.name, build.form);
-  return { build, ids, unknown, isNext, startsAt: isNext ? lobby.next?.startsAt : undefined };
+  const isNext = forNext(build);
+  return { build, ids, unknown, isNext, startsAt: isNext ? next?.startsAt : undefined };
 }
 
 export interface ActiveBossMoves {

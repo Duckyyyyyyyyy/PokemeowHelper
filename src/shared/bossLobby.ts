@@ -34,6 +34,11 @@ export interface BossBuild {
   staff?: boolean;
   /** When the dialog was read. */
   at: number;
+  /**
+   * The "Next scheduled boss" spawn time when this boss was the next one at read time. The dialog is
+   * shared with every schedule row, so a build only counts as the next spawn while this still matches.
+   */
+  startsAt?: string;
 }
 
 export interface BossNext {

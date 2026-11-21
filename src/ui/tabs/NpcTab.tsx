@@ -189,7 +189,7 @@ function NpcDetail({ ds: base, npc }: { ds: Dataset; npc: Npc }) {
           {v.trainerName ? `${v.trainerName}'s team` : 'Team'}
           <span class="r">{v.team.length} Pokémon · {v.format === 'doubles' ? 'Doubles' : 'Singles'}{v.levelCap ? ` · Cap Lv ${v.levelCap}` : npc.variants.length > 1 && v.label === 'Rematch' ? ' · No cap' : ''}</span>
         </p>
-        {v.team.map((m) => <MonRow ds={ds} m={m} hideMoves={boss} seen={seenFor(seen.get(lc(m.name)) ?? [], m, v.team, true)} others={seenOthers.get(lc(m.name))} />)}
+        {(boss ? vFull : v).team.map((m) => <MonRow ds={ds} m={m} hideMoves={boss} seen={seenFor(seen.get(lc(m.name)) ?? [], m, v.team, true)} others={seenOthers.get(lc(m.name))} />)}
       </div>
 
       {boss && vFull.team[0] && <BossMovePicker ds={ds} npc={npc} pool={vFull.team[0].moves} active={bossSel} />}
