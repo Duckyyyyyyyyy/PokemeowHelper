@@ -136,7 +136,8 @@ export function npcToCalc(ds: Dataset, m: NpcMon): CalcPokemon {
     ivs: m.ivs,
     evs: m.evs,
     gender: m.gender,
-    baseStats: hasStats(m.baseStats) ? m.baseStats : undefined,
+    // Not in Gen III (Frontier): gen3View only rewrites species stats, and the wiki's NPC stats may be modern.
+    baseStats: ds.ruleset !== 'gen3' && hasStats(m.baseStats) ? m.baseStats : undefined,
   });
 }
 
