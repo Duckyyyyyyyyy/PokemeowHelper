@@ -369,3 +369,14 @@ details.card[open] > summary.title::after { content: "▾"; }
 .plate .hit { white-space: nowrap; margin-left: auto; }
 @media (max-width: 350px) { .plate.foe { margin-left: 10px; } .plate.me { margin-right: 10px; } }
 .rate.calc, .pill.calc { background: var(--warn-soft); color: var(--warn); }
+
+/* World Boss: move picker chips (Prep) and counter-team rows */
+.mvpick { display: flex; flex-wrap: wrap; margin: 4px 0 2px; }
+button.mv { font: inherit; font-size: 13px; color: var(--text); cursor: pointer; }
+button.mv.on { background: var(--accent-soft); border-color: var(--accent); font-weight: 700; }
+button.mv.off { color: var(--muted); background: var(--surface); border-style: dashed; text-decoration: line-through; }
+button.mv.off i { filter: grayscale(1); opacity: .5; }
+button.mv:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
+.wbm { padding: 6px 0; border-top: 1px solid var(--border); }
+.wbm:first-of-type { border-top: 0; }
+.wbm .row { gap: 6px; align-items: center; }

@@ -19,6 +19,9 @@ import { excludedUids, lockedUids, resetTeamPrefs, teamToText, toggleExclude, to
 import { assignHeldItems, suggestHeldItems } from '../../engine/heldItems';
 import { bag, ownedItems } from '../bagStore';
 import { GrindCard } from '../components/GrindCard';
+import { activeBossMoves, bossLobby, bossPicks } from '../bossStore';
+import { bossVariant, isWorldBoss } from '../../engine/worldBoss';
+import { BossCounter } from '../components/WorldBoss';
 import { leadPairs } from '../../engine/leadPairs';
 
 /** Battle Frontier entry problems: who can't enter, what changes under Gen III rules, item clause. */
@@ -60,7 +63,11 @@ function Suggestion({ ds: base, part }: { ds: Dataset; part: 'team' | 'hunt' }) 
   const facility = facilityOf(npc);
   const mode = levelMode.value;
   const fr = useMemo(() => (npc && v0 && facility ? frontierVariant(base, box.value, npc, v0, mode) : null), [base, box.value, npc, v0, mode]);
-  const v = fr?.v ?? v0;
+  // World Boss: only this spawn's moves (World Boss page or your pick in Prep).
+  const bossSel = npc && isWorldBoss(npc) ? activeBossMoves(base, npc, bossLobby.value, bossPicks.value) : null;
+  const vRaw = fr?.v ?? v0;
+  const bossIds = bossSel?.ids.join(',');
+  const v = useMemo(() => (vRaw && bossSel ? bossVariant(vRaw, bossSel.ids) : vRaw), [vRaw, bossIds]);
   const entries = useMemo(
     () => (facility ? new Map(box.value.map((m) => [m.uid, frontierEntry(base, m, facility, mode)])) : null),
     [base, box.value, facility, mode],
@@ -141,6 +148,12 @@ function Suggestion({ ds: base, part }: { ds: Dataset; part: 'team' | 'hunt' }) 
           {!(facility && mode === 'open') ? (
             <GrindCard ds={ds} v={v} ready={res} rules={rules} locked={locked} size={facility?.register} excluded={grindExcluded} />
           ) : <Tip>Open Level Brains scale to your highest level, so grinding gains nothing here.</Tip>}
+        </>
+      ) : res && isWorldBoss(npc) ? (
+        // World Boss: a damage race vs one shared HP pool, not 1v1 wins (the 1v1 grid would say "loses" to everything).
+        <>
+          {!bossSel && <Tip kind="warn">Counting the boss's whole move pool. Pick this spawn's moves in step 1 (Opponent), or open its details on the game's World Boss page.</Tip>}
+          <BossCounter ds={ds} npc={npc} v={v} />
         </>
       ) : res && (
         <>

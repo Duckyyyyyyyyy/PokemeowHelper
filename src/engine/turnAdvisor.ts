@@ -11,6 +11,7 @@ import { itemAdvice, itemsAllowed, resolveItems } from './itemAdvisor';
 import { fieldFromLog, rateSupport, supportBlocked, supportEffect, type BenchMon, type SupportContext } from './supportMoves';
 import { runLookahead, searchable, setupScore, type LookMon, type Lookahead, type RootValue } from './lookahead';
 import { fxNotes } from './moveEffects';
+import { bossVariant, isWorldBoss } from './worldBoss';
 
 export { accuracyStageMul, battleSpeed };
 
@@ -118,6 +119,18 @@ export interface AdviseOptions {
   lookahead?: number;
   /** Force Battle Frontier (Gen III) rules: the Battle tab switch, for battles the reader can't place. */
   gen3?: boolean;
+  /**
+   * World Boss moves known for this appearance (from the lobby or picked in Prep), by NPC id.
+   * The boss's likely moves then come only from this set (moves it is seen using are still added).
+   */
+  bossMoves?: Readonly<Record<string, readonly string[]>>;
+}
+
+/** matchNpc, with a World Boss narrowed to the moves known for this appearance. */
+export function matchWithBossMoves(ds: Dataset, snap: BattleSnapshot, bossMoves?: AdviseOptions['bossMoves']): { npc: Npc; variant: NpcTeamVariant; bossFiltered?: boolean } | undefined {
+  const m = matchNpc(ds, snap);
+  const sel = m && isWorldBoss(m.npc) ? bossMoves?.[m.npc.id] : undefined;
+  return m && sel?.length ? { ...m, variant: bossVariant(m.variant, sel), bossFiltered: true } : m;
 }
 
 export const lc = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -237,7 +250,7 @@ export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opt
 
 function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts: AdviseOptions): TurnAdvice {
   const notes: string[] = [];
-  const match = matchNpc(ds, snap);
+  const match = matchWithBossMoves(ds, snap, opts.bossMoves);
   const rules: BattleRules = battleRulesFor(match?.npc.category, snap.kind, opts.gen3);
   ds = dsFor(ds, rules); // Battle Frontier: Gen III data and calc
   const idx = indexes(ds);
@@ -249,6 +262,7 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
 
   const format = snap.format ?? match?.variant.format;
   if (format && format !== 'singles') notes.push('Only singles are supported for now: advice treats this as a 1v1.');
+  if (match?.bossFiltered) notes.push(`World Boss: its likely moves come only from the ${match.variant.team[0]?.moves.length ?? 0} moves known for this appearance (World Boss page or your pick in Prep). Its attacks are Max Moves.`);
   if (!match) notes.push(`“${snap.opponentName ?? 'This opponent'}” is not in the wiki data (wild or player battle?). Using guessed sets.`);
   if (!snap.player || !snap.opponent) {
     notes.push('Waiting for both Pokémon to be on the field.');
@@ -283,8 +297,10 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
     notes.push(`${foe.mon.name}'s set is a guess (moves seen in battle + latest level-up moves, perfect IVs).`);
   } else {
     // Known wiki set: never overwritten, but a move it really used counts as a possible threat.
-    extra = seen.filter((id) => !foe.mon.moves.includes(id));
-    if (extra.length) notes.push(`${foe.mon.name} was seen using ${extra.map((id) => ds.moves[id]?.name ?? id).join(', ')}, which is not in the wiki set. Counted as a possible threat.`);
+    // A World Boss narrowed to this appearance's moves: moves recorded at EARLIER spawns belong to other
+    // sets, so only moves it used in this battle are added back.
+    extra = (match?.bossFiltered ? usedThisBattle : seen).filter((id) => !foe.mon.moves.includes(id));
+    if (extra.length) notes.push(`${foe.mon.name} was seen using ${extra.map((id) => ds.moves[id]?.name ?? id).join(', ')}, which is not in the ${match?.bossFiltered ? 'moves picked for this appearance' : 'wiki set'}. Counted as a possible threat.`);
   }
   const foeCalc = applyState(npcToCalc(ds, foe.mon), snap.opponent, snap.boosts.opponent);
   const foeMoves = [...foe.mon.moves, ...extra]; // the rules only ban YOUR moves

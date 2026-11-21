@@ -12,6 +12,7 @@ import { initBoxSync, maybeAutoSyncBox } from './boxStore';
 import { initBattle } from './battleStore';
 import { initBag } from './bagStore';
 import { initWild } from './wildStore';
+import { initBossLobby } from './bossStore';
 import { initAutoTab } from './autoTab';
 
 applyTheme(savedTheme());
@@ -20,4 +21,5 @@ Promise.all([init(), initBoxSync()]).then(maybeAutoSyncBox);
 initBattle();
 initBag();
 initWild();
+initBossLobby();
 initAutoTab();

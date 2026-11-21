@@ -13,6 +13,9 @@ import { lc } from '../../engine/turnAdvisor';
 import { observed } from '../battleStore';
 import { allTips, tipsForNpc } from '../../engine/tips';
 import { openTip } from '../tipsStore';
+import { activeBossMoves, bossLobby, bossPicks } from '../bossStore';
+import { bossVariant, isWorldBoss } from '../../engine/worldBoss';
+import { BossCounter, BossMovePicker } from '../components/WorldBoss';
 
 const FILTERS: { id: string; label: string; cats: string[] }[] = [
   { id: 'all', label: 'All', cats: [] },
@@ -106,7 +109,7 @@ function NpcList({ ds }: { ds: Dataset }) {
   );
 }
 
-function MonRow({ ds, m, seen, others }: { ds: Dataset; m: NpcMon; seen?: string[]; others?: Record<string, number> }) {
+function MonRow({ ds, m, seen, others, hideMoves }: { ds: Dataset; m: NpcMon; seen?: string[]; others?: Record<string, number>; hideMoves?: boolean }) {
   const types = monTypes(ds, m);
   const item = m.item ? ds.items[m.item]?.name ?? m.item : null;
   const ability = m.ability ?? (m.possibleAbilities ? m.possibleAbilities.join(' / ') : null);
@@ -123,7 +126,7 @@ function MonRow({ ds, m, seen, others }: { ds: Dataset; m: NpcMon; seen?: string
       <div class="av">{m.name.slice(0, 2).toUpperCase()}</div>
       <span class="nm">{m.name}<Types types={types} /></span>
       <span class="lv" title={m.level ? undefined : `Level not listed – stats assume Lv ${ASSUMED_NPC_LEVEL}`}>{m.level ? `Lv ${m.level}` : `Lv ${ASSUMED_NPC_LEVEL}?`}</span>
-      <div class="full">{m.moves.map((id) => <MoveChip ds={ds} id={id} />)}</div>
+      {!hideMoves && <div class="full">{m.moves.map((id) => <MoveChip ds={ds} id={id} />)}</div>}
       {seen && seen.length > 0 && (
         <div class="full small muted" title="Moves this Pokémon actually used in your battles">
           Seen in battle: {seen.map((id, i) => <>{i > 0 && ', '}{m.moves.includes(id) ? (ds.moves[id]?.name ?? id) : <b class="bad-t">{ds.moves[id]?.name ?? id} (not in wiki)</b>}{others?.[id] ? ` (seen by others ${others[id]})` : ''}</>)}
@@ -146,7 +149,11 @@ function NpcDetail({ ds: base, npc }: { ds: Dataset; npc: Npc }) {
   // Battle Frontier: Gen III types/stats and the Brain's real level (Level 50 / Open Level).
   const ds = dsFor(base, rulesFor(npc.category));
   const frontier = npc.category === 'frontier' ? frontierVariant(base, box.value, npc, npc.variants[vi], levelMode.value) : null;
-  const v = frontier?.v ?? npc.variants[vi];
+  const vFull = frontier?.v ?? npc.variants[vi];
+  // World Boss: only the moves this spawn carries (World Boss page or your pick) drive everything below.
+  const boss = isWorldBoss(npc);
+  const bossSel = boss ? activeBossMoves(base, npc, bossLobby.value, bossPicks.value) : null;
+  const v = boss ? bossVariant(vFull, bossSel?.ids) : vFull;
   const attack = bestAttackTypes(ds, v);
   const defense = bestDefensiveTypes(ds, v).slice(0, 5);
   const notes = teamNotes(ds, v);
@@ -182,8 +189,10 @@ function NpcDetail({ ds: base, npc }: { ds: Dataset; npc: Npc }) {
           {v.trainerName ? `${v.trainerName}'s team` : 'Team'}
           <span class="r">{v.team.length} Pokémon · {v.format === 'doubles' ? 'Doubles' : 'Singles'}{v.levelCap ? ` · Cap Lv ${v.levelCap}` : npc.variants.length > 1 && v.label === 'Rematch' ? ' · No cap' : ''}</span>
         </p>
-        {v.team.map((m) => <MonRow ds={ds} m={m} seen={seenFor(seen.get(lc(m.name)) ?? [], m, v.team, true)} others={seenOthers.get(lc(m.name))} />)}
+        {(boss ? vFull : v).team.map((m) => <MonRow ds={ds} m={m} hideMoves={boss} seen={seenFor(seen.get(lc(m.name)) ?? [], m, v.team, true)} others={seenOthers.get(lc(m.name))} />)}
       </div>
+
+      {boss && vFull.team[0] && <BossMovePicker ds={ds} npc={npc} pool={vFull.team[0].moves} active={bossSel} />}
 
       <div class="card">
         <p class="title">Best attacking types</p>
@@ -202,8 +211,10 @@ function NpcDetail({ ds: base, npc }: { ds: Dataset; npc: Npc }) {
         {defense.map((d) => (
           <span class="typescore"><TypeBadge type={d.type} /> resists {d.resisted}{d.weak ? ` · weak ${d.weak}` : ''}</span>
         ))}
-        <div class="small muted">Based on the NPC's damaging moves (counted per Pokémon using them).</div>
+        <div class="small muted">{boss ? (bossSel ? `Based on the ${bossSel.ids.length} moves picked for this spawn (as Max Moves, same types).` : 'Based on its whole move pool: pick this spawn’s moves above.') : "Based on the NPC's damaging moves (counted per Pokémon using them)."}</div>
       </div>
+
+      {boss && <BossCounter ds={ds} npc={npc} v={v} />}
 
       {notes.length > 0 && (
         <Tip kind="warn">
