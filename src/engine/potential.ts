@@ -11,7 +11,9 @@ import { scoreAgainstTeam, scorePair, type Candidate, type PairResult, type Sugg
  * allows. The ready-now suggestion scores everything at its current level, so a Lv 12 Snorlax
  * never shows up even when it would carry the fight at the Lv 45 cap.
  *
- * Model: same species (evolution is not in the dataset), its real IVs, nature and CURRENT EVs
+ * Model: its species, or the form it evolves into by the target level (only supported, level-based
+ * evolutions from the dataset, chains followed; stones, trade, friendship and Mega are NOT applied),
+ * its real IVs, nature and CURRENT EVs
  * (EVs only grow with training, so this is a lower bound), the level cap (or the NPC's top
  * level when there is no cap), and the best 4 moves it can have by then:
  *  - moves it knows;
@@ -22,6 +24,17 @@ import { scoreAgainstTeam, scorePair, type Candidate, type PairResult, type Sugg
 
 // The game allows levels above 100 (NPC sets go to 120, the box editor too).
 const LEVEL_MAX = 120;
+
+/** Species it would be at `level`: follows supported level-based evolutions (first reachable branch), else itself. */
+export function evolvedAt(ds: Dataset, species: number, level: number): number {
+  let cur = species;
+  for (let i = 0; i < 4; i++) {
+    const next = ds.species[cur]?.evolvesTo?.find((e) => e.level !== undefined && e.level <= level && ds.species[e.to]);
+    if (!next) break;
+    cur = next.to;
+  }
+  return cur;
+}
 
 /** Level your Pokémon can be trained to for this fight. */
 export function targetLevel(v: NpcTeamVariant): number {
@@ -71,6 +84,8 @@ export function ivSummary(mon: BoxMon): IvSummary {
 
 export interface PotentialResult {
   mon: BoxMon;
+  /** Species id it was scored as, when it evolves by the target level (absent = scored as itself). */
+  evolvedTo?: number;
   targetLevel: number;
   levelsNeeded: number;
   /** Average 0–100 vs the NPC team at its current level (same scorer as the team suggestion). */
@@ -92,7 +107,9 @@ export interface PotentialOptions extends SuggestOptions {
 }
 
 /** One Pokémon trained to `level` (default: the fight's target level). */
-export function potentialFor(ds: Dataset, mon: BoxMon, v: NpcTeamVariant, opts: PotentialOptions = {}, npcCalc?: CalcPokemon[], level = targetLevel(v)): Omit<PotentialResult, 'current' | 'currentWins' | 'fillsGap' | 'why'> {
+export function potentialFor(ds: Dataset, orig: BoxMon, v: NpcTeamVariant, opts: PotentialOptions = {}, npcCalc?: CalcPokemon[], level = targetLevel(v)): Omit<PotentialResult, 'current' | 'currentWins' | 'fillsGap' | 'why'> {
+  const evoId = evolvedAt(ds, orig.species, level);
+  const mon: BoxMon = evoId === orig.species ? orig : { ...orig, species: evoId };
   const set = suggestMoveset(ds, mon, v, {
     levelCap: v.levelCap,
     untilLevel: level,
@@ -106,7 +123,8 @@ export function potentialFor(ds: Dataset, mon: BoxMon, v: NpcTeamVariant, opts: 
   const trained: BoxMon = { ...mon, level, moves: set.moves.length ? set.moves.map((m) => m.moveId) : mon.moves };
   const pairs = scoreAgainstTeam(ds, trained, v, { ...opts, levelCap: level }, npcCalc);
   return {
-    mon,
+    mon: orig,
+    ...(evoId !== orig.species ? { evolvedTo: evoId } : {}),
     targetLevel: level,
     levelsNeeded: Math.max(0, level - (mon.level ?? level)),
     potential: avg(pairs),
@@ -120,8 +138,8 @@ export function potentialFor(ds: Dataset, mon: BoxMon, v: NpcTeamVariant, opts: 
 const avg = (pairs: PairResult[]) => (pairs.length ? Math.round(pairs.reduce((s, p) => s + p.score, 0) / pairs.length) : 0);
 const wins = (pairs: PairResult[]) => pairs.filter((p) => p.duel?.win ?? p.score >= 55).length;
 const ivTotal = (m: BoxMon) => KEYS.reduce((s, k) => s + (m.ivs?.[k] ?? 15), 0);
-const bst = (ds: Dataset, m: BoxMon) => {
-  const b = ds.species[m.species]?.baseStats;
+const bst = (ds: Dataset, m: BoxMon, level = 0) => {
+  const b = ds.species[evolvedAt(ds, m.species, level)]?.baseStats;
   return b ? KEYS.reduce((s, k) => s + b[k], 0) : 0;
 };
 
@@ -171,9 +189,9 @@ export function worthGrinding(ds: Dataset, v: NpcTeamVariant, ready: Suggestion,
   // UNION top by type matchup (a low-stat 4× answer still makes it).
   const all = [...bySpecies.values()];
   const n = Math.ceil(Math.max(opts.shortlist ?? 24, size + (opts.more ?? 5)) / 2);
-  const typeAvg = (m: BoxMon) => v.team.reduce((s, foe) => s + scorePair(ds, { ...m, moves: [] }, foe, opts.rules).score, 0);
-  const byStats = [...all].sort((a, b) => bst(ds, b) - bst(ds, a) || ivTotal(b) - ivTotal(a)).slice(0, n);
-  const byType = all.map((m) => [m, typeAvg(m)] as const).sort((a, b) => b[1] - a[1] || bst(ds, b[0]) - bst(ds, a[0])).slice(0, n).map(([m]) => m);
+  const typeAvg = (m: BoxMon) => v.team.reduce((s, foe) => s + scorePair(ds, { ...m, species: evolvedAt(ds, m.species, level), moves: [] }, foe, opts.rules).score, 0);
+  const byStats = [...all].sort((a, b) => bst(ds, b, level) - bst(ds, a, level) || ivTotal(b) - ivTotal(a)).slice(0, n);
+  const byType = all.map((m) => [m, typeAvg(m)] as const).sort((a, b) => b[1] - a[1] || bst(ds, b[0], level) - bst(ds, a[0], level)).slice(0, n).map(([m]) => m);
   const pool = [...new Set([...byStats, ...byType])];
 
   const npcCalc = opts.mode === 'type' ? undefined : v.team.map((n) => npcToCalc(ds, n));
@@ -235,7 +253,7 @@ function whyText(ds: Dataset, p: Omit<PotentialResult, 'current' | 'currentWins'
   if (fillsGap.length) parts.push(`best answer to ${fillsGap.slice(0, 2).join(', ')}${fillsGap.length > 2 ? '…' : ''}`);
   const newMoves = p.moves.filter((m) => m.source === 'level' && m.later);
   if (newMoves.length) parts.push(`learns ${newMoves.slice(0, 2).map((m) => `${m.name} (Lv ${m.level})`).join(', ')}`);
-  const b = ds.species[p.mon.species]?.baseStats;
+  const b = ds.species[p.evolvedTo ?? p.mon.species]?.baseStats;
   if (b) {
     const top = KEYS.reduce((a, k) => (b[k] > b[a] ? k : a), 'hp' as StatKey);
     if (b[top] >= 100) parts.push(`base ${STAT_LABEL[top]} ${b[top]}`);

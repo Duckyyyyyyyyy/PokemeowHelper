@@ -231,6 +231,14 @@ export function wildSpeciesFields(s: Raw): Partial<Species> {
   if (s.rarity !== undefined) out.rarity = s.rarity;
   if (typeof s.availability === 'string') out.availability = s.availability;
   if (s.spawnRequirement) out.spawnRequirement = String(s.spawnRequirement);
+  const evo = (Array.isArray(s.evolutions) ? s.evolutions : [])
+    .filter((e: Raw) => e && e.from === s.id && e.supported === true && typeof e.to === 'number')
+    .map((e: Raw) => {
+      const methods = (e.methods ?? []).filter((x: unknown): x is string => typeof x === 'string');
+      const lv = methods.map((x: string) => /Level (\d+) or higher/i.exec(x)).find(Boolean);
+      return { to: e.to as number, methods, ...(lv ? { level: Number(lv[1]) } : {}) };
+    });
+  if (evo.length) out.evolvesTo = evo;
   return out;
 }
 

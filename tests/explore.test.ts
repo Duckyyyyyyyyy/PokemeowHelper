@@ -280,3 +280,22 @@ describe('after the plan', () => {
     expect(afterPlan({ weaken: [], status: [], risky: [], notes: [] }, { hpPct: 60 })).toEqual({ hpFrac: 0.6, status: undefined, label: '' });
   });
 });
+
+describe('wildSpeciesFields: evolutions', () => {
+  it('keeps only supported evolutions out of this species, with the minimum level', () => {
+    const f = wildSpeciesFields({
+      id: 2,
+      evolutions: [
+        { from: 1, to: 2, methods: ['Level 16 or higher'], supported: true },
+        { from: 2, to: 3, methods: ['Level 32 or higher'], supported: true },
+        { from: 2, to: 1000003, methods: ['Use Venusaurite · Mega Bracelet required'], supported: true },
+        { from: 2, to: 99, methods: ['Level 40 or higher'], supported: false },
+      ],
+    });
+    expect(f.evolvesTo).toEqual([
+      { to: 3, methods: ['Level 32 or higher'], level: 32 },
+      { to: 1000003, methods: ['Use Venusaurite · Mega Bracelet required'] },
+    ]);
+    expect(wildSpeciesFields({ id: 5 }).evolvesTo).toBeUndefined();
+  });
+});

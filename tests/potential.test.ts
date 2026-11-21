@@ -147,3 +147,28 @@ describe('potential: ranking', () => {
     expect(a.good).toBeGreaterThanOrEqual(b.good);
   });
 });
+
+describe('potential: evolution', () => {
+  const evo = structuredClone(ds);
+  const [c1, c2, c3] = [sp('Charmander'), sp('Charmeleon'), sp('Charizard')];
+  evo.species[c1].evolvesTo = [{ to: c2, methods: ['Level 16 or higher'], level: 16 }];
+  evo.species[c2].evolvesTo = [{ to: c3, methods: ['Level 36 or higher'], level: 36 }];
+  const eevee = sp('Eevee');
+  evo.species[eevee].evolvesTo = [{ to: sp('Vaporeon'), methods: ['Use Water Stone'] }];
+  const v = npc('challenge:koga').variants[0]; // cap 48
+
+  it('scores the evolved form when its level is reached by the target level', () => {
+    const p = potentialFor(evo, mon('Charmander', 10, ['scratch']), v);
+    expect(p.evolvedTo).toBe(c3);
+    const same = potentialFor(ds, mon('Charmander', 10, ['scratch']), v);
+    expect(same.evolvedTo).toBeUndefined();
+    expect(p.potential).not.toBe(same.potential);
+  });
+  it('stops at the form it can reach (cap below the second evolution)', () => {
+    const low = { ...v, levelCap: 30 };
+    expect(potentialFor(evo, mon('Charmander', 10, ['scratch']), low).evolvedTo).toBe(c2);
+  });
+  it('does not auto-apply stone evolutions', () => {
+    expect(potentialFor(evo, mon('Eevee', 10, ['tackle']), v).evolvedTo).toBeUndefined();
+  });
+});
