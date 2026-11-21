@@ -83,6 +83,17 @@ describe('real save: Tate & Liza Doubles, turn 4', () => {
     ]);
   });
 
+  it('reads "2× Def" from the tag text alone (no title, no label)', () => {
+    load(fixture('tate-liza-doubles-turn4.html'));
+    document.querySelectorAll('[title="Defense +2"], [aria-label="Defense +2"]').forEach((e) => {
+      e.removeAttribute('title');
+      e.removeAttribute('aria-label');
+    });
+    // Without the log too, or its Iron Defense line would supply the stage.
+    document.querySelector('.battle-log')!.remove();
+    expect(readBattle(document, 1)!.actives!.player[0].stages).toEqual({ def: 2 });
+  });
+
   it('reads the moves of position 1 and the roster with the fainted Xatu', () => {
     expect(snap.moves.map((m) => [m.name, m.pp, m.maxPp, m.disabled])).toEqual([
       ['Flash Cannon', 8, 10, false], ['Iron Head', 15, 15, false], ['Self-Destruct', 5, 5, false], ['Iron Defense', 14, 15, false],
@@ -101,6 +112,23 @@ describe('real save: Tate & Liza Doubles, turn 4', () => {
     expect(slash).toMatchObject({ side: 'player', mon: 'Doublade', target: 'Xatu', targetSide: 'opponent', damage: 50, targetFainted: true });
     // Calm Mind +1/+1, then Flash Cannon's Sp. Def drop.
     expect(slash.stages.target).toEqual({ spa: 1, spd: 0 });
+  });
+});
+
+describe('fainted badge in Doubles (markup from the real singles save; not seen in a Doubles save yet)', () => {
+  const card = (pos: number, name: string, hp: string, fnt = false) => `<div class="double-active-card"><span class="double-position-label">Position ${pos}</span>
+    <div class="battle-combatant"><div class="battle-combatant-name"><strong title="${name}">${name}</strong>
+    <span class="battle-pokemon-level">Lv. 45${fnt ? '<span class="battle-status battle-status-fnt"><img alt="Fainted"></span>' : ''}</span></div>
+    <span class="battle-hp-numbers">${hp} HP</span></div></div>`;
+  const arena = (fnt: boolean) => `<section class="battle-arena" data-format="doubles" data-status="active">
+    <div class="battle-player-stats">${card(1, 'Ferrothorn', '79/129')}${card(2, 'Doublade', fnt ? '0/114' : '48/114', fnt)}</div>
+    <div class="battle-opponent-stats">${card(1, 'Solrock', '140/140')}${card(2, 'Claydol', '73/112')}</div></section>`;
+
+  it('asks for a switch when position 2 shows the badge', () => {
+    const snap = readBattle(load(arena(true)), 1)!;
+    expect(snap.actives!.player[1]).toMatchObject({ name: 'Doublade', hp: 0, status: 'fnt' });
+    expect(snap.forcedSwitch).toBe(true);
+    expect(readBattle(load(arena(false)), 1)!.forcedSwitch).toBeUndefined();
   });
 });
 

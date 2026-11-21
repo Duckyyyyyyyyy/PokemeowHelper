@@ -36,9 +36,10 @@ export const SEL = {
   faintedBadge: '.battle-status-fnt',
   /**
    * Weather / terrain buttons beside the turn counter. GUESS from the game's stylesheet only
-   * (`.battle-field-row`, `.battle-field-status`, `.battle-field-effect`); no save had a field effect yet.
+   * (`.battle-field-row`, `.battle-field-status`, `.battle-field-effect`); no save had a field effect yet,
+   * so any `.battle-field-effect` in the arena counts, wherever it sits.
    */
-  fieldEffect: '.battle-field-status .battle-field-effect, .battle-field-row .battle-field-effect',
+  fieldEffect: '.battle-field-effect',
   /** Weather art over the scene (stylesheet: `.battle-weather-visual[data-weather=raindance]`). Not seen live. */
   weatherVisual: '.battle-weather-visual[data-weather]',
   log: '.battle-log',
@@ -56,8 +57,12 @@ export const SEL = {
 
 /** Seen live (Drake, 2026-11-18) after your Pokémon fainted. Matched as text: its markup is not known yet. */
 const NEXT_PROMPT = /choose your next pok[eé]mon/i;
-/** Badge next to a fainted Pokémon's level ("FNT"), matched as text for the same reason (an element reading just "FNT"). */
-const hasFntBadge = (root: Element | null) => !!root && [...root.querySelectorAll('*')].some((e) => clean(e.textContent) === 'FNT');
+/**
+ * Badge next to a fainted Pokémon's level: `.battle-status-fnt` (an image, real save 2026-11-22),
+ * else an element reading just "FNT" (older screen).
+ */
+const hasFntBadge = (root: Element | null) =>
+  !!root && (!!root.querySelector(SEL.faintedBadge) || [...root.querySelectorAll('*')].some((e) => clean(e.textContent) === 'FNT'));
 
 /** The "Choose your next Pokémon" prompt anywhere in the arena except the battle log. Read-only: works on a detached copy. */
 export function hasNextPrompt(arena: Element): boolean {
