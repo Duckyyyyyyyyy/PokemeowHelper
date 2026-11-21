@@ -241,12 +241,16 @@ export function huntFor(ds: Dataset, v: NpcTeamVariant, box: readonly BoxMon[], 
   });
 
   // Shortlist for the full calc, as in worthGrinding: top by base stats UNION top by type matchup.
-  const all = [...byForm.entries()];
+  // Locked-map forms (only with showLocked) get their own shortlist, so they aren't crowded out.
   const n = Math.ceil((opts.shortlist ?? 24) / 2);
   const typeAvg = (form: number) => v.team.reduce((s, foe) => s + scorePair(ds, { uid: '', species: form, moves: [] }, foe, opts.rules).score, 0);
-  const byStats = [...all].sort((a, b) => bstOf(ds, b[0]) - bstOf(ds, a[0]) || a[0] - b[0]).slice(0, n);
-  const byType = all.map((e) => [e, typeAvg(e[0])] as const).sort((a, b) => b[1] - a[1] || a[0][0] - b[0][0]).slice(0, n).map(([e]) => e);
-  const pool = [...new Set([...byStats, ...byType])];
+  const shortlist = (all: [number, { where: HuntWhere; spots: number }][]) => {
+    const byStats = [...all].sort((a, b) => bstOf(ds, b[0]) - bstOf(ds, a[0]) || a[0] - b[0]).slice(0, n);
+    const byType = all.map((e) => [e, typeAvg(e[0])] as const).sort((a, b) => b[1] - a[1] || a[0][0] - b[0][0]).slice(0, n).map(([e]) => e);
+    return [...new Set([...byStats, ...byType])];
+  };
+  const isLocked = (e: [number, { where: HuntWhere }]) => e[1].where.access.access === 'locked';
+  const pool = [...shortlist([...byForm.entries()].filter((e) => !isLocked(e))), ...shortlist([...byForm.entries()].filter(isLocked))];
 
   const npcCalc = opts.mode === 'type' ? undefined : v.team.map((m) => npcToCalc(ds, m));
   const full = grind.team.length >= size;
@@ -277,7 +281,10 @@ export function huntFor(ds: Dataset, v: NpcTeamVariant, box: readonly BoxMon[], 
   // A spot that needs gear you may lack, or a map that is only guessed reachable, counts 10 points less.
   const rankOf = (p: HuntPick) => p.potential - (p.where.needs || ACCESS_RANK[p.where.access.access] > ACCESS_RANK.open ? 10 : 0);
   picks.sort((a, b) => b.fillsGap.length - a.fillsGap.length || rankOf(b) - rankOf(a) || betterSpot(a.where, b.where));
-  return { picks: picks.slice(0, opts.limit ?? 5), gaps, covered: !gaps.length, lockedForms: lockedForms.size, hasMaps };
+  // With showLocked: up to `limit` more from locked maps, after the reachable ones.
+  const limit = opts.limit ?? 5;
+  const out = [...picks.filter((p) => p.where.access.access !== 'locked').slice(0, limit), ...picks.filter((p) => p.where.access.access === 'locked').slice(0, limit)];
+  return { picks: out, gaps, covered: !gaps.length, lockedForms: lockedForms.size, hasMaps };
 }
 
 /** "Answers Salamence and Altaria with Ice Beam (Lv 40)", grouped by move. */
@@ -286,7 +293,8 @@ export function huntWhy(p: Pick<HuntPick, 'answers' | 'beats' | 'potential' | 'p
   for (const a of p.answers) {
     const k = a.move ?? '';
     if (!byMove.has(k)) byMove.set(k, { foes: [], level: a.level });
-    byMove.get(k)!.foes.push(a.foe);
+    const g = byMove.get(k)!;
+    if (!g.foes.includes(a.foe)) g.foes.push(a.foe); // twin NPC Pokémon (two Dragonair) named once
   }
   const list = (xs: string[]) => (xs.length > 2 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : xs.join(' and '));
   const parts = [...byMove.entries()].slice(0, 2).map(([move, g]) => `${list(g.foes)}${move ? ` with ${move}${g.level ? ` (Lv ${g.level})` : ''}` : ''}`);

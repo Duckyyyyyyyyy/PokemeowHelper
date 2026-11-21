@@ -95,6 +95,11 @@ describe('hunt: candidates vs Brock (cap 19)', () => {
     const all = hunt(weakBox, 'challenge:brock', { showLocked: true, limit: 50, shortlist: 400 }, 1);
     expect(all.picks.some((p) => p.where.access.access === 'locked')).toBe(true);
     expect(all.lockedForms).toBe(0);
+    // Default cap of 5: locked ones come after the 5 reachable ones, not crowded out.
+    const shown = hunt(weakBox, 'challenge:brock', { showLocked: true }, 1);
+    expect(shown.picks.slice(0, 5).every((p) => p.where.access.access !== 'locked')).toBe(true);
+    expect(shown.picks.slice(5).length).toBeGreaterThan(0);
+    expect(shown.picks.slice(5).every((p) => p.where.access.access === 'locked')).toBe(true);
   });
   it('catch levels stay under the cap, and evolutions by then are scored as the evolved form', () => {
     for (const p of res.picks) {
@@ -143,7 +148,7 @@ describe('hunt: candidates vs Brock (cap 19)', () => {
 describe('hunt: why text', () => {
   it('groups NPC Pokémon by the move that answers them, with its learn level', () => {
     const why = huntWhy({
-      answers: [{ foe: 'Salamence', move: 'Ice Beam', level: 40 }, { foe: 'Altaria', move: 'Ice Beam', level: 40 }, { foe: 'Garchomp', move: 'Surf' }],
+      answers: [{ foe: 'Salamence', move: 'Ice Beam', level: 40 }, { foe: 'Altaria', move: 'Ice Beam', level: 40 }, { foe: 'Altaria', move: 'Ice Beam', level: 40 }, { foe: 'Garchomp', move: 'Surf' }],
       potential: 70, potentialWins: 3, targetLevel: 50, beats: { name: 'Rattata', potential: 30 },
     }, 6);
     expect(why).toBe('Answers Salamence and Altaria with Ice Beam (Lv 40); Garchomp with Surf · wins 3/6 1v1 at Lv 50 · beats your grind pick Rattata (70 vs 30)');

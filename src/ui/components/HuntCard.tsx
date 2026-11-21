@@ -50,7 +50,7 @@ export function HuntCard({ ds, npc, v, ready, grind, rules, size }: {
       {res.covered ? (
         <Tip kind="ok">Your box already covers {npcName}: every Pokémon of theirs has an answer, now or after grinding.{res.picks.length ? ' These could still replace a weaker grind pick:' : ''}</Tip>
       ) : (
-        <div class="small">Nobody in your box answers <b>{res.gaps.join(', ')}</b>.</div>
+        <div class="small">Nobody in your box answers <b>{[...new Set(res.gaps)].join(', ')}</b>.</div>
       )}
       {res.picks.map((p) => <HuntRow ds={ds} p={p} npc={npc} npcName={npcName} />)}
       {!res.covered && !res.picks.length && <div class="small muted">No wild Pokémon on the maps you can reach answers them{res.lockedForms ? '; try the locked maps' : ''}.</div>}
@@ -91,7 +91,7 @@ function HuntRow({ ds, p, npc, npcName }: { ds: Dataset; p: HuntPick; npc: Npc; 
           title={on ? 'On your hunt list: Explore marks it and a wild one shows CATCH. Tap to remove.' : 'Add to your hunt list'}>{on ? '✓ Hunt list' : 'Hunt list'}</button>
       </span>
       <div class="full small">
-        <b>Where:</b> {map.name} · {METHOD_LABEL[enc.method] ?? enc.method} · {RARITY_LABEL[enc.rarity] ?? enc.rarity} · Lv {enc.levels[0]}–{enc.levels[1]} · {pct(enc.day)} / {pct(enc.night)}{time}
+        <b>Where:</b> {map.name} · {METHOD_LABEL[enc.method] ?? enc.method} · {RARITY_LABEL[enc.rarity] ?? enc.rarity} · Lv {enc.levels[0]}–{enc.levels[1]} · {pct(enc.day)} day / {pct(enc.night)} night{time}
         {p.otherSpots > 0 ? <span class="muted"> · +{p.otherSpots} other spot{p.otherSpots > 1 ? 's' : ''}</span> : null}
         {needs && <> <span class="chip sm warn" title="MeowRPGAdvisor doesn't know if you have it (tick it in Tips)">needs {needs}?</span></>}
         {ACCESS_LABEL[access.access] && <> <span class={`chip sm${access.access === 'seen' || access.access === 'ticked' ? '' : ' warn'}`} title={access.requires.join(' · ') || undefined}>{ACCESS_LABEL[access.access]}</span></>}
@@ -107,7 +107,7 @@ function HuntRow({ ds, p, npc, npcName }: { ds: Dataset; p: HuntPick; npc: Npc; 
       </div>
       <div class="full">{p.moves.map((m) => <MoveChip ds={ds} id={m.moveId} />)}</div>
       <div class="full small muted">
-        <b>Catch:</b> {p.difficulty} (catch rate {p.catchRate}){ball ? <> · best ball{bag.value ? ' in your bag' : ''}: <b>{ball.name}</b> {pct(ball.chance)} per throw at full HP{ball.count !== undefined ? ` (×${ball.count})` : ''}</> : ''}
+        <b>Catch:</b> {p.difficulty} (catch rate {p.catchRate}){ball ? <> · {ball.count === 0 ? 'no ball in your bag; best' : bag.value ? 'best ball in your bag' : 'best ball'}: <b>{ball.name}</b> {pct(ball.chance)} per throw at full HP{ball.count ? ` (×${ball.count})` : ''}</> : ''}
       </div>
     </div>
   );
