@@ -11,6 +11,7 @@ Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing 
 
 ## ⬜ Planned (in order)
 
+0. **Game update catch-up (Nov 14–21 changes, Battle Simulator)**: reader fixes, World Boss 2, field effects, Friendship, NPC AI, data refresh. Plan with workstreams and models: `docs/design/game-update-2026-11-plan.md`. Waiting on user decisions (§5 there).
 1. **Hunt & Grind for an NPC**: which reachable Pokémon to catch and how far to grind them. Spec: `docs/design/hunt-and-grind-spec.md`.
 2. Release the next version with World Boss once it has been checked once on the real lobby page.
 3. Later: Chrome Web Store listing ($5 and a privacy policy), and Triples.
