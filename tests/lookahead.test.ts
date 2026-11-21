@@ -23,6 +23,20 @@ const score = (vs: RootValue[], id: string) => vs.find((v) => (v.action.kind ===
 const top = (vs: RootValue[]) => [...vs].sort((a, b) => b.score - a.score)[0];
 const idOf = (v: RootValue) => (v.action.kind === 'move' ? v.action.moveId : `switch:${v.action.to}`);
 
+describe('lookahead: World Boss hit cut', () => {
+  it('foeHitMult cuts their hits everywhere: lower KO odds, setup no worse', () => {
+    const quag = wiki('Quagsire', 56);
+    const me = () => L(mine('Machamp', 56, ['swordsdance', 'brickbreak']), 15);
+    const full = new Lookahead({ ds, mine: [me()], foes: [F(quag)] }).threatOdds();
+    const cut = new Lookahead({ ds, mine: [me()], foes: [F(quag)], foeHitMult: 0.45 }).threatOdds();
+    expect(full.ko).toBeGreaterThan(0);
+    expect(cut.ko).toBeLessThan(full.ko);
+    const sdFull = score(run({ mine: [me()], foes: [F(quag)] }).values, 'swordsdance');
+    const sdCut = score(run({ mine: [me()], foes: [F(quag)], foeHitMult: 0.45 }).values, 'swordsdance');
+    expect(sdCut).toBeGreaterThanOrEqual(sdFull);
+  });
+});
+
 describe('lookahead: setup', () => {
   const quag = wiki('Quagsire', 56);
 

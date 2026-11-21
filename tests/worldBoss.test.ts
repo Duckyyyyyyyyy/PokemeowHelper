@@ -350,8 +350,16 @@ describe('World Boss rules 2026-11', () => {
     expect(boxed.notes.join(' ')).not.toMatch(/your side uses it too/);
     // The form is read the same way everywhere, also from the species name alone.
     expect(bossFormOf(ds, { name: 'Venusaur', species: boss.species }, 'Venusaur')).toBe(ds.species[boss.species].name.startsWith('Gigantamax') ? 'gmax' : 'normal');
-    // The lookahead still counts full hits: its KO odds are not shown next to the cut row.
-    expect(adviseTurn(ds2, snapFor('Gigantamax Venusaur'), zard, { bossMoves: knock(venu.id) }).threat!.koChance).toBeUndefined();
+    // The lookahead cuts its hits too: at an HP only the uncut hit would KO, its KO odds agree with the cut row.
+    const cutMax = adviseTurn(ds2, snapFor('Gigantamax Venusaur'), zard, { bossMoves: knock(venu.id) }).threat!.maxPct;
+    const hp = Math.round(180 * Math.min(0.95, (cutMax * 1.5) / 100));
+    expect(hp / 1.8).toBeGreaterThan(cutMax);
+    expect(hp / 1.8).toBeLessThan(cutMax / 0.45);
+    const low = adviseTurn(ds2, snapFor('Gigantamax Venusaur', { player: { name: 'Charizard', level: 60, hp, maxHp: 180 } }), zard, { bossMoves: knock(venu.id) }).threat!;
+    expect(low.ko).toBeUndefined();
+    // Only a critical hit (×1.5 on the cut hit) can still KO here; the uncut hit would KO almost always.
+    expect(low.koChance).toBeLessThan(0.05);
+    expect(low.koChance).toBeCloseTo(low.critKo ?? 0, 9);
   });
 
   it('boss boosts stop at +2 Atk/SpA and +1 Def/SpD', () => {

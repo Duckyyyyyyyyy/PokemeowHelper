@@ -7,7 +7,7 @@ Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing 
 
 - 🔶 **World Boss**: per-spawn move picker, lobby reader, counter team (Prep). Merged after 0.12.2 and **not released yet**.
   - World Boss 2 (2026-11 wiki rules, WS1): 10M HP fallback (Eternamax 100M), 125x with a 50k cap per action (350k), Max Barrier, drain cut by phase, Encore/Leech Seed/Salt Cure fail, very heavy, boss boost cap, Eternamax Overdrive, loot tiers in Prep.
-  - Gap mostly resolved: Battle and Prep share one rule (`bossRules`/`bossAttackDs` in worldBoss.ts: Max Moves only for GMAX/Eternamax, 55%/70% cut). The Battle tab cuts the one-turn rows (threat, likely moves); the 2–3-turn plan and switch-in rows still count full boss hits (lookahead.ts untouched).
+  - Gap resolved: Battle and Prep share one rule (`bossRules`/`bossAttackDs` in worldBoss.ts: Max Moves only for GMAX/Eternamax, 55%/70% cut). The Battle tab cuts every row: threat, likely moves, the 2–3-turn plan and switch-ins (`foeHitMult` in lookahead.ts).
   - Lobby fixture is unverified. Archive: "World Boss".
 
 ## ⬜ Planned (in order)

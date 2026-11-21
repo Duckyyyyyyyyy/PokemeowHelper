@@ -314,7 +314,7 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
       ...snap.bench.flatMap((r) => { const s = mySet(idx, box, r, (r.moves ?? []).map((m) => m.name)); return s ? movesForBox(ds, s.mon) : []; })].filter((x): x is string => !!x));
     const shared = foeMoves.filter((id) => mine.has(id) && ds.moves[id] && ds.moves[id].category !== 'Status');
     ds = bossAttackDs(ds, bossF, foeMoves, mine);
-    notes.push(`World Boss: ${bossRules(bossF).maxMoves ? 'every attack it makes is a Max Move' : 'it uses its normal moves (only the phase-3 extra attack is a Max Move)'}, at ${bossF === 'eternamax' ? '70' : '55'}% less damage. The plan below (2–3 turns ahead) and switch-ins still count its full hits.`);
+    notes.push(`World Boss: ${bossRules(bossF).maxMoves ? 'every attack it makes is a Max Move' : 'it uses its normal moves (only the phase-3 extra attack is a Max Move)'}, at ${bossF === 'eternamax' ? '70' : '55'}% less damage.`);
     if (bossRules(bossF).maxMoves && shared.length) notes.push(`${shared.map((id) => ds.moves[id].name).join(', ')}: your side uses it too, so its hit is counted at normal power, not as a Max Move.`);
   }
 
@@ -324,7 +324,7 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
     out.forcedSwitch = true;
     const bench = benchFor(ds, idx, box, snap, rules);
     const look = (opts.lookahead ?? 2) > 0 && !isDoubles && bench.length
-      ? lookFor(ds, idx, snap, field, rules, null, bench, foe.mon.name, foeCalc, foeMoves, foesLeft(ds, idx, match?.variant, snap, npcBenchOf(ds, idx, match?.variant, snap)), undefined, opts.lookahead)
+      ? lookFor(ds, idx, snap, field, rules, null, bench, foe.mon.name, foeCalc, foeMoves, foesLeft(ds, idx, match?.variant, snap, npcBenchOf(ds, idx, match?.variant, snap)), undefined, opts.lookahead, bossF && bossRules(bossF).hitMult)
       : undefined;
     for (const r of snap.bench) {
       if (r.active || r.fainted || (r.hp ?? 1) <= 0) continue; // a same-species teammate (two Aggrons) still counts
@@ -406,9 +406,9 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
   // Lookahead (default): a few turns of expectimax; the cheap path keeps the one-turn projection.
   const myLegal = myMoveIds.filter((id) => ds.moves[id]?.category !== 'Status' || (searchable(ds, id) && !supportBlocked(support, id)));
   const look = (opts.lookahead ?? 2) > 0 && !isDoubles
-    ? lookFor(ds, idx, snap, field, rules, { name: snap.player.name, calc: myCalc, moves: myLegal }, support.bench as BenchRow[], foe.mon.name, foeCalc, foeMoves, support.foesLeft ?? [], out.prediction, opts.lookahead)
+    ? lookFor(ds, idx, snap, field, rules, { name: snap.player.name, calc: myCalc, moves: myLegal }, support.bench as BenchRow[], foe.mon.name, foeCalc, foeMoves, support.foesLeft ?? [], out.prediction, opts.lookahead, bossF && bossRules(bossF).hitMult)
     : undefined;
-  if (look && out.threat && !bossF) { // World Boss: the lookahead counts its full hits, so its KO odds would contradict the cut row
+  if (look && out.threat) {
     const t = look.engine.threatOdds();
     out.threat.koChance = t.ko;
     out.threat.critKo = t.critKo;
@@ -634,7 +634,7 @@ type Look = { engine: Lookahead; values: RootValue[]; depth: number };
 function lookFor(
   ds: Dataset, idx: Idx, snap: BattleSnapshot, field: ReturnType<typeof makeField>, rules: BattleRules, me: LookMon | null, bench: BenchRow[],
   foeName: string, foeCalc: CalcPokemon, foeMoves: string[], left: { name: string; calc: CalcPokemon; moves: string[] }[],
-  prediction: NpcGuess[] | undefined, depth: number | undefined,
+  prediction: NpcGuess[] | undefined, depth: number | undefined, foeHitMult?: number,
 ): Look | undefined {
   let active = me;
   if (!active) {
@@ -662,6 +662,7 @@ function lookFor(
     },
     prediction: me ? prediction?.map((g) => ({ moveId: g.moveId, prob: g.prob })) : undefined,
     depth,
+    foeHitMult,
   });
 }
 

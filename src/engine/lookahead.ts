@@ -53,6 +53,8 @@ export interface LookInput {
   depth?: number;
   /** Search size cap (decision + chance nodes). */
   maxNodes?: number;
+  /** Multiplier on their hits (World Boss: 0.45, Eternamax 0.30). */
+  foeHitMult?: number;
 }
 
 export type RootAction = { kind: 'move'; moveId: string } | { kind: 'switch'; to: number };
@@ -160,6 +162,7 @@ export class Lookahead {
   private readonly memo = new Map<string, { v: number; best?: RootAction }>();
   /** Search size cap (nodes counted over the engine's life; raised for the depth-3 pass). */
   maxNodes: number;
+  foeHitMult: number;
   nodes = 0;
   calcs = 0;
 
@@ -168,6 +171,7 @@ export class Lookahead {
     this.field = input.field;
     this.prediction = input.prediction;
     this.maxNodes = input.maxNodes ?? 6000;
+    this.foeHitMult = input.foeHitMult ?? 1;
     const mk = (m: LookMon, side: 0 | 1, first: boolean): Mon => {
       const work = m.calc.clone();
       const def = m.asDefender ?? m.calc;
@@ -212,7 +216,8 @@ export class Lookahead {
     let out: Dist | null = null;
     if (rolls && rolls[rolls.length - 1] > 0) {
       const hp = def.maxHP();
-      const n = rolls.map((x) => (100 * x) / hp);
+      const k = A.side === 1 ? this.foeHitMult : 1; // World Boss: its hits are cut
+      const n = rolls.map((x) => (100 * x * k) / hp);
       const ci = critInfo(this.ds, atk, def, moveId, aFE);
       let c = n;
       let crit = ci.always ? 0 : ci.chance;
@@ -222,7 +227,7 @@ export class Lookahead {
         else {
           this.calcs++;
           const cr = damageRolls(this.ds, atk, def, moveId, this.field, true);
-          c = cr ? cr.map((x) => (100 * x) / hp) : n.map((x) => x * ci.mul);
+          c = cr ? cr.map((x) => (100 * x * k) / hp) : n.map((x) => x * ci.mul);
         }
       } else crit = 0;
       const mv = this.ds.moves[moveId];
