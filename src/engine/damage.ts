@@ -102,6 +102,8 @@ interface MonInput {
   ivs?: Partial<StatTable>;
   evs?: Partial<StatTable>;
   gender?: string;
+  /** The game's own base stats for this exact Pokémon (NPCs: source-edition stats from the wiki). */
+  baseStats?: StatTable;
 }
 
 function build(ds: Dataset, m: MonInput): CalcPokemon {
@@ -119,7 +121,7 @@ function build(ds: Dataset, m: MonInput): CalcPokemon {
     evs: m.evs ?? {},
     gender: m.gender === 'F' ? 'F' : m.gender === 'M' ? 'M' : undefined,
     // The game's own numbers win over the calc's dex.
-    overrides: s ? ({ baseStats: s.baseStats, types: s.types } as any) : undefined,
+    overrides: s ? ({ baseStats: m.baseStats ?? s.baseStats, types: s.types } as any) : undefined,
   });
 }
 
@@ -134,8 +136,11 @@ export function npcToCalc(ds: Dataset, m: NpcMon): CalcPokemon {
     ivs: m.ivs,
     evs: m.evs,
     gender: m.gender,
+    baseStats: hasStats(m.baseStats) ? m.baseStats : undefined,
   });
 }
+
+const hasStats = (b?: StatTable): b is StatTable => !!b && Object.values(b).every((n) => typeof n === 'number' && n > 0);
 
 /** Manual entries without IVs are assumed average (IV 15); synced ones use their real IVs/EVs. */
 export function boxToCalc(ds: Dataset, b: BoxMon, defaultLevel = 50): CalcPokemon {

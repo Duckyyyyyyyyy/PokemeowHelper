@@ -30,7 +30,7 @@ Claude reads the page through Claude in Chrome and the user plays. Tick an item 
 
 ## Known data gaps (not bugs)
 
-- No evolutions in the dataset, so Worth grinding scores Charmander as Charmander. No tutor moves, no weight (Heavy Ball).
+- No tutor moves, no weight (Heavy Ball). Worth grinding applies level-based evolutions only (stone, trade, friendship, Mega are not).
 - Restricted list for the Frontier is guessed (Emerald list). There is no pool of regular Frontier trainers.
 
 ## ✅ Done

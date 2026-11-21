@@ -13,6 +13,17 @@ const mon = (name: string, level: number, moves: string[] = [], extra: Partial<B
   ivs: { hp: 31, atk: 31, def: 31, spa: 31, spd: 31, spe: 31 }, evs: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }, nature: 'Hardy', ...extra,
 });
 
+describe('NPC base stats', () => {
+  it('npcToCalc uses each NPC mon own wiki baseStats, not the species table', () => {
+    const copy = structuredClone(ds);
+    const base = copy.npcs[0].variants[0].team[0];
+    const custom = { ...base, level: 50, baseStats: { hp: 200, atk: 5, def: 5, spa: 5, spd: 5, spe: 5 } };
+    const p = npcToCalc(copy, custom);
+    // HP at Lv 50 with base 200, IV 31, EV 0: floor((2*200+31)*50/100)+60 = 275
+    expect(p.stats.hp).toBe(275);
+  });
+});
+
 describe('stats match the game', () => {
   it('reproduces the in-game stats of a real synced Pokémon (Timburr Lv16 Modest)', () => {
     // Values read from the game on 2026-11-18: box API (IVs/EVs/nature) and the Pokémon's stat panel.
