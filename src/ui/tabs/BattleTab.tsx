@@ -10,7 +10,7 @@ import { npcKey, seenByOthers, seenByYou } from '../../engine/observed';
 import { battle, damageChecks, doublesMoves, forceGen3, guessScore, loadSampleBattle, observed, setForceGen3, towerRun } from '../battleStore';
 import { runSummary } from '../../engine/towerPlan';
 import { adviseDoubles, type DoublesAction, type DoublesAdvice, type DoublesMonAdvice } from '../../engine/doublesAdvisor';
-import { activeTab, box, dataset, isExtension } from '../store';
+import { activeTab, box, dataset, goPrep, isExtension, selectedNpcId, selectedVariant } from '../store';
 import { NoData } from './shared';
 import { bossMovesById } from '../bossStore';
 import { timeAgo } from '../boxStore';
@@ -59,6 +59,18 @@ const topScore = (as: { score: number | null }[]) => {
   return s.length ? Math.max(...s) : null;
 };
 const pct = (x: number) => (x > 0 && x < 0.01 ? '<1%' : `${Math.round(x * 100)}%`);
+
+/** Options were rated and none is OK (45+) vs this NPC: link to Prep → Hunt & grind for it. */
+function HuntLink({ advice, top }: { advice: TurnAdvice; top: number | null }) {
+  const npc = advice.npc;
+  if (!npc || top === null || top >= 45) return null; // nothing rated is not "no good answer"
+  const open = () => {
+    selectedNpcId.value = npc.id;
+    selectedVariant.value = Math.max(0, advice.variant ? npc.variants.indexOf(advice.variant) : 0);
+    goPrep('hunt');
+  };
+  return <p class="note"><button class="link small" onClick={open}>Hunt for a counter →</button></p>;
+}
 
 function VsHead({ snap, extra }: { snap: BattleSnapshot; extra?: string }) {
   return (
@@ -152,6 +164,7 @@ function Turn({ ds, snap, advice }: { ds: Dataset; snap: BattleSnapshot; advice:
         </p>
       )}
       <p class="note">Tiles sit where the game's move buttons are. Advice only: you pick the move.</p>
+      <HuntLink advice={advice} top={top} />
 
       {switches.length > 0 && (
         <div class="bench" role="group" aria-label="Switch options">
@@ -225,6 +238,7 @@ function ForcedSwitch({ ds, snap, advice }: { ds: Dataset; snap: BattleSnapshot;
         })}
       </div>
       {!opts.length && <Tip kind="warn">No healthy Pokémon left to send in.</Tip>}
+      {!allUnknown && <HuntLink advice={advice} top={top} />}
       {allUnknown && (
         <p class="say">Their moves are unknown: <button class="link" onClick={() => (activeTab.value = 'settings')}>sync your box</button> to rate them. Until then, <b>{safest.label.replace(/^Send in /, '')}</b> takes the least damage.</p>
       )}

@@ -175,12 +175,12 @@ export interface CatchDecision {
 const CHEAP_ITEMS: ReadonlySet<string> = new Set(['potion', 'oranberry', 'berryjuice']);
 
 /**
- * CATCH only when it is on this week's Catchlist or not registered in your Pokédex (the card's
- * icon); anything else is FIGHT for EXP. Shiny, a held item, good IVs or countering the NPC you
+ * CATCH only when it is on this week's Catchlist, on your hunt list (Prep → Hunt & grind) or not
+ * registered in your Pokédex (the card's icon); anything else is FIGHT for EXP. Shiny, a held item, good IVs or countering the NPC you
  * selected are listed as hints but never flip the verdict. Without the card (manual mode) the
  * Pokédex is unknown, so your box stands in for it.
  */
-export function fightOrCatch(ds: Dataset, t: WildTarget, box: BoxMon[], wanted: ReadonlySet<number> = new Set(), opts: { npcName?: string } = {}): CatchDecision {
+export function fightOrCatch(ds: Dataset, t: WildTarget, box: BoxMon[], wanted: ReadonlySet<number> = new Set(), opts: { npcName?: string; hunt?: ReadonlyMap<number, string> } = {}): CatchDecision {
   const s = ds.species[t.species];
   const name = s?.name ?? 'It';
   const hints: string[] = [];
@@ -196,6 +196,8 @@ export function fightOrCatch(ds: Dataset, t: WildTarget, box: BoxMon[], wanted: 
 
   const catchIt = (why: string): CatchDecision => ({ verdict: 'catch', reasons: [why], summary: 'CATCH', hints });
   if (t.catchlist) return catchIt("On this week's Catchlist.");
+  const huntNpc = opts.hunt?.get(t.species);
+  if (huntNpc) return catchIt(`On your hunt list for ${huntNpc}.`);
   if (t.registered === false) return catchIt(`Not in your Pokédex yet: ${name} is a new entry.`);
   if (t.registered === undefined && !ownedSpecies(box).has(t.species)) {
     return catchIt(`${name} is not in your box (MeowRPGAdvisor can't see your Pokédex here): likely a new entry.`);

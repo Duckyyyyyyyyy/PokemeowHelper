@@ -22,6 +22,7 @@ import type { BoxMon } from '../../shared/types';
 import { matchNpc, lc } from '../../engine/turnAdvisor';
 import { ALL_TYPES } from '../../engine/typeChart';
 import { MapTips } from './TipsTab';
+import { huntBySpecies } from '../huntStore';
 
 type View = 'maps' | 'encounter' | 'balls';
 const view = signal<View>('maps');
@@ -160,13 +161,14 @@ function Maps({ ds }: { ds: Dataset }) {
   const [limit, setLimit] = useState(60);
   const wanted = useWanted(ds);
   const owned = useMemo(() => ownedSpecies(box.value), [box.value]);
+  const hunted = huntBySpecies.value;
   const maps = ds.wild!.maps.filter((m) => m.encounters.length);
 
   const rows = useMemo(() => {
     let r = filterEncounters(ds, { query: q, type: type || undefined, mapId: mapId || undefined, findableOnly: findable && !q.trim() });
-    if (onlyMarked) r = r.filter((x) => wanted.ids.has(x.enc.species) || !owned.has(x.enc.species));
+    if (onlyMarked) r = r.filter((x) => wanted.ids.has(x.enc.species) || !owned.has(x.enc.species) || hunted.has(x.enc.species));
     return r;
-  }, [ds, q, type, mapId, findable, onlyMarked, wanted, owned]);
+  }, [ds, q, type, mapId, findable, onlyMarked, wanted, owned, hunted]);
 
   return (
     <>
@@ -187,7 +189,7 @@ function Maps({ ds }: { ds: Dataset }) {
       {mapId && <MapTips ds={ds} mapId={mapId} />}
       <div class="row wrap small">
         <label><input type="checkbox" checked={findable} onChange={(e) => setFindable((e.target as HTMLInputElement).checked)} /> Common/rare only (when not searching)</label>
-        <label><input type="checkbox" checked={onlyMarked} onChange={(e) => setOnlyMarked((e.target as HTMLInputElement).checked)} /> Only wanted / new</label>
+        <label><input type="checkbox" checked={onlyMarked} onChange={(e) => setOnlyMarked((e.target as HTMLInputElement).checked)} /> Only wanted / new / hunt list</label>
       </div>
 
       {wanted.npc ? (
@@ -214,6 +216,7 @@ function Maps({ ds }: { ds: Dataset }) {
             <span>
               <span class="nm">{wanted.ids.has(r.enc.species) ? '🎯 ' : ''}{r.species?.name ?? `#${r.enc.species}`}</span>
               {!owned.has(r.enc.species) && <span class="chip on" style={{ marginLeft: '6px' }}>new</span>}
+              {hunted.has(r.enc.species) && <span class="chip on" style={{ marginLeft: '6px' }} title="On your hunt list (Prep → Hunt & grind)">hunt: {hunted.get(r.enc.species)}</span>}
               <Types types={r.species?.types ?? []} />
               <div class="small muted">
                 {r.map.name} · {METHOD_LABEL[r.enc.method] ?? r.enc.method} · Lv {r.enc.levels[0]}–{r.enc.levels[1]} · {RARITY_LABEL[r.enc.rarity] ?? r.enc.rarity}
@@ -359,7 +362,7 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
   const map = ds.wild!.maps.find((m) => m.id === t.mapId);
   const night = nightNow();
   const snap = isLive ? wild.value : null;
-  const decision = useMemo(() => fightOrCatch(ds, { species: t.species, level: t.level, item: t.item || null, shiny: t.shiny, goodIvs: t.goodIvs, inBox: t.inBox, registered: t.registered, catchlist: t.catchlist }, box.value, wanted.ids, { npcName: wanted.npc?.name }), [ds, t, box.value, wanted]);
+  const decision = useMemo(() => fightOrCatch(ds, { species: t.species, level: t.level, item: t.item || null, shiny: t.shiny, goodIvs: t.goodIvs, inBox: t.inBox, registered: t.registered, catchlist: t.catchlist }, box.value, wanted.ids, { npcName: wanted.npc?.name, hunt: huntBySpecies.value }), [ds, t, box.value, wanted, huntBySpecies.value]);
   const held = useMemo(() => wildHeldItems(ds, t.species, t.mapId || undefined), [ds, t.species, t.mapId]);
   // Weaken / Status from the team you carry (active first); the box only as a swap-in list.
   const tplan = useMemo(() => teamCatchPlan(ds, box.value, snap, { species: t.species, level: t.level }, { hpPct: t.hpPct }), [ds, box.value, snap, t.species, t.level, t.hpPct]);

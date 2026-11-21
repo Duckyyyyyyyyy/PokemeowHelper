@@ -4,7 +4,7 @@ import { box, dataset, goPrep, selectedNpc, selectedVariant, setBox } from '../s
 import { Empty, MoveChip, Tip, Types } from '../components/common';
 import { hardestFoes, outcomeOf, suggestTeam, supportLead, type Candidate } from '../../engine/teamSuggest';
 import { RatePill, TypeAvatar } from '../components/hud';
-import { HuntSlot } from '../components/HuntSlot';
+import { HuntCard } from '../components/HuntCard';
 import { formatMult } from '../../engine/typeChart';
 import { NoData } from './shared';
 import { BoxSyncCard } from '../components/BoxSync';
@@ -17,8 +17,9 @@ import { LevelModeSeg } from '../components/FacilityRules';
 import { frontierVariant, levelMode } from '../frontierPrefs';
 import { excludedUids, lockedUids, resetTeamPrefs, teamToText, toggleExclude, toggleLock } from '../teamPrefs';
 import { assignHeldItems, suggestHeldItems } from '../../engine/heldItems';
-import { bag, ownedItems } from '../bagStore';
+import { bag, ownedItems, ownedTms } from '../bagStore';
 import { GrindCard } from '../components/GrindCard';
+import { worthGrinding } from '../../engine/potential';
 import { activeBossMoves, bossLobby, bossPicks } from '../bossStore';
 import { bossVariant, isWorldBoss } from '../../engine/worldBoss';
 import { BossCounter } from '../components/WorldBoss';
@@ -89,6 +90,12 @@ function Suggestion({ ds: base, part }: { ds: Dataset; part: 'team' | 'hunt' }) 
     () => (entries ? [...excluded, ...[...entries].filter(([, e]) => e.blocking.length).map(([uid]) => uid)] : excluded),
     [entries, excluded],
   );
+  // Worth grinding, once for both cards (Hunt compares against it). Only on the Hunt & grind step.
+  const tms = ownedTms.value;
+  const grind = useMemo(
+    () => (res && v && part === 'hunt' ? worthGrinding(ds, v, res, { levelCap: v.levelCap, rules, locked, excluded: grindExcluded, ownedTms: tms, size: facility?.register }) : null),
+    [ds, v, res, part, tms, grindExcluded, facility],
+  );
   const endurance = useMemo(() => (tower && res && v ? towerEndurance(res.team, v) : null), [tower, res, v]);
   const allOwned = ownedItems.value;
   // Frontier: only Gen III held items (none at all in the Pyramid).
@@ -144,13 +151,13 @@ function Suggestion({ ds: base, part }: { ds: Dataset; part: 'team' | 'hunt' }) 
         <Tip>Pick an NPC in step 1 (Opponent), then tap “Suggest team”.</Tip>
       ) : !box.value.length ? (
         <Tip>Add the Pokémon you own to “Your box” below to get suggestions.</Tip>
-      ) : res && part === 'hunt' ? (
-        <>
-          <HuntSlot npcName={v.trainerName ?? npc.name} />
-          {!(facility && mode === 'open') ? (
-            <GrindCard ds={ds} v={v} ready={res} rules={rules} locked={locked} size={facility?.register} excluded={grindExcluded} />
-          ) : <Tip>Open Level Brains scale to your highest level, so grinding gains nothing here.</Tip>}
-        </>
+      ) : res && grind && part === 'hunt' ? (
+        !(facility && mode === 'open') ? (
+          <>
+            <HuntCard ds={ds} npc={npc} v={v} ready={res} grind={grind} rules={rules} size={facility?.register} />
+            <GrindCard ds={ds} v={v} grind={grind} />
+          </>
+        ) : <Tip>Open Level Brains scale to your highest level, so catching and grinding gain nothing here.</Tip>
       ) : res && isWorldBoss(npc) ? (
         // World Boss: a damage race vs one shared HP pool, not 1v1 wins (the 1v1 grid would say "loses" to everything).
         <>

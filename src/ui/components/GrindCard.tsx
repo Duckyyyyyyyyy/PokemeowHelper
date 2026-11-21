@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { Dataset, NpcTeamVariant } from '../../shared/types';
-import type { BattleRules } from '../../engine/rules';
-import type { Suggestion } from '../../engine/teamSuggest';
-import { targetLevel, versatility, worthGrinding, type GrindTeamPick, type Versatility } from '../../engine/potential';
+import { targetLevel, versatility, type GrindTeam, type GrindTeamPick, type Versatility } from '../../engine/potential';
 import { ownedTms } from '../bagStore';
 import { TypeBadge, Types, scoreClass } from './common';
 
@@ -13,21 +11,13 @@ const versCache = new Map<string, Versatility>();
  * "Worth grinding": a full team of low-level Pokémon from your box to train for this fight (scored
  * as if trained to its level), plus more candidates. Shown under the ready-now team; never changes it.
  */
-export function GrindCard({ ds, v, ready, rules, locked, excluded, size }: {
+export function GrindCard({ ds, v, grind }: {
   ds: Dataset;
   v: NpcTeamVariant;
-  ready: Suggestion;
-  rules: BattleRules;
-  locked: readonly string[];
-  excluded: readonly string[];
-  /** Team size (Battle Frontier: 3). */
-  size?: number;
+  /** worthGrinding() result, computed once in TeamTab (the Hunt card uses it too). */
+  grind: GrindTeam;
 }) {
   const tms = ownedTms.value;
-  const grind = useMemo(
-    () => worthGrinding(ds, v, ready, { levelCap: v.levelCap, rules, locked, excluded, ownedTms: tms, size }),
-    [ds, v, ready, tms, excluded, size],
-  );
   // Team first, so its versatility is rated first.
   const list = useMemo(() => [...grind.team, ...grind.more], [grind]);
   const [vers, setVers] = useState<Record<string, Versatility>>({});
