@@ -11,7 +11,7 @@ import { adviseTurn, matchWithBossMoves } from '../src/engine/turnAdvisor';
 import { recordObserved } from '../src/engine/observed';
 import {
   BOSS_DAMAGE_MULT, RAID_MULT, asHeavyBoss, barrierMult, bossActionDamage, bossDrainHeal, bossForm, bossPhase, byRace, bossDs, bossHits, bossPool, bossVariant,
-  capBossBoosts, lootTier, maxMoveName, maxMovePower, overdriveMult, rateBossMember, suggestBossTeam,
+  bossFormOf, capBossBoosts, lootTier, maxMoveName, maxMovePower, overdriveMult, rateBossMember, suggestBossTeam,
 } from '../src/engine/worldBoss';
 import { boxToCalc, defenderVsNpc, moveDamage, npcToCalc } from '../src/engine/damage';
 import { lobbySig, mergeBossLobby, readBossLobby } from '../src/content/bossLobbyReader';
@@ -340,9 +340,16 @@ describe('World Boss rules 2026-11', () => {
     expect(g.notes.join(' ')).toMatch(/every attack it makes is a Max Move/);
     expect(p.notes.join(' ')).toMatch(/normal moves/);
     // Your side also uses Knock Off: one dataset, so it keeps its normal power (and says so).
-    const both = adviseTurn(ds2, snapFor('Gigantamax Venusaur'), [mon('Charizard', 60, ['flamethrower', 'knockoff'])], { lookahead: 0, bossMoves: knock(venu.id) });
+    const withKnock = { moves: [{ name: 'Flamethrower', pp: 15, maxPp: 15, disabled: false }, { name: 'Knock Off', pp: 20, maxPp: 20, disabled: false }] };
+    const both = adviseTurn(ds2, snapFor('Gigantamax Venusaur', withKnock), [mon('Charizard', 60, ['flamethrower', 'knockoff'])], { lookahead: 0, bossMoves: knock(venu.id) });
     expect(both.threat!.maxPct).toBeLessThan(g.threat!.maxPct);
     expect(both.notes.join(' ')).toMatch(/Knock Off: your side uses it too/);
+    // A box Pokémon that is not in this battle does not count.
+    const boxed = adviseTurn(ds2, snapFor('Gigantamax Venusaur'), [...zard, mon('Gengar', 60, ['knockoff'])], { lookahead: 0, bossMoves: knock(venu.id) });
+    expect(boxed.threat!.maxPct).toBeCloseTo(g.threat!.maxPct, 6);
+    expect(boxed.notes.join(' ')).not.toMatch(/your side uses it too/);
+    // The form is read the same way everywhere, also from the species name alone.
+    expect(bossFormOf(ds, { name: 'Venusaur', species: boss.species }, 'Venusaur')).toBe(ds.species[boss.species].name.startsWith('Gigantamax') ? 'gmax' : 'normal');
     // The lookahead still counts full hits: its KO odds are not shown next to the cut row.
     expect(adviseTurn(ds2, snapFor('Gigantamax Venusaur'), zard, { bossMoves: knock(venu.id) }).threat!.koChance).toBeUndefined();
   });
@@ -359,6 +366,15 @@ describe('World Boss rules 2026-11', () => {
     const a = adviseTurn(ds2, snapFor('Gigantamax Venusaur', { moves: [{ name: 'Flamethrower', pp: 15, maxPp: 15, disabled: false }, { name: 'Encore', pp: 5, maxPp: 5, disabled: false }] }),
       [mon('Charizard', 60, ['flamethrower', 'encore'])], { lookahead: 0, bossMoves: knock(venu.id) });
     expect(a.actions.find((x) => x.moveId === 'encore')).toMatchObject({ score: 0, reason: expect.stringMatching(/Fails/) });
+    // Ghost-type Curse also fails: never the pick, in the Battle tab or in Prep.
+    const ghost = { player: { name: 'Gengar', level: 60, hp: 150, maxHp: 150 }, moves: [{ name: 'Shadow Ball', pp: 15, maxPp: 15, disabled: false }, { name: 'Curse', pp: 10, maxPp: 10, disabled: false }] };
+    for (const look of [0, 2]) {
+      const c = adviseTurn(ds2, snapFor('Gigantamax Venusaur', ghost), [mon('Gengar', 60, ['shadowball', 'curse'])], { lookahead: look, bossMoves: knock(venu.id) });
+      const curse = c.actions.find((x) => x.moveId === 'curse')!;
+      const ball = c.actions.find((x) => x.moveId === 'shadowball')!;
+      expect(curse.score ?? 0).toBeLessThanOrEqual(ball.score ?? 0);
+    }
+    expect(rateBossMember(ds, mon('Gengar', 60, ['shadowball', 'curse']), boss).plan.kind).toBe('attack');
   });
 
   it('shared HP from the data first, else 10M (Eternamax 100M)', () => {

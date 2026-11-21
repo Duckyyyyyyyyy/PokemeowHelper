@@ -21,7 +21,7 @@ Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing 
 Claude reads the page through Claude in Chrome and the user plays. Tick an item or remove it when confirmed.
 
 - [ ] World Boss lobby selectors (`tests/fixtures/worldboss/lobby.unverified.html`) and the battle `kind`/boss name
-- [ ] World Boss in a real raid: Max Moves only for GMAX/Eternamax (name test), barrier ramp (straight line 20%→100% is a guess), order 125x → Overdrive → barrier → cap, drain cut phases (75%/40% HP), loot tiers
+- [ ] World Boss in a real raid: Max Moves only for GMAX/Eternamax (name test), barrier ramp (straight line 20%→100% is a guess), order 125x → Overdrive → barrier → cap, Overdrive stacked on top of the normal stage boost, drain cut phases (75%/40% HP), loot tiers
 - [ ] Battle Frontier battle: `data-kind`, Brain name, Gen III damage vs Calc check
 - [ ] Battle Tower: opponent name, fainted roster, reserve PP
 - [ ] Doubles build in a live battle: own Pokémon fainting, switching mid-battle, status badges

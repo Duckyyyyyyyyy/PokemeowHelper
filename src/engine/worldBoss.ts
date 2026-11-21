@@ -43,7 +43,10 @@ export function bossForm(...names: (string | undefined)[]): BossForm {
   if (/gigantamax|(^|[^a-z])g-?max([^a-z]|$)/i.test(n)) return 'gmax';
   return 'normal';
 }
-export const bossFormOf = (ds: Dataset, mon: Pick<NpcMon, 'name' | 'species'>): BossForm => bossForm(mon.name, ds.species[mon.species]?.name);
+/** One test for every view: the NPC's name (when known), the boss Pokémon's name and its species name. */
+export const bossFormOf = (ds: Dataset | undefined, mon: Pick<NpcMon, 'name' | 'species'> | undefined, npcName?: string): BossForm =>
+  bossForm(npcName, mon?.name, mon ? ds?.species[mon.species]?.name : undefined);
+export const bossFormOfNpc = (ds: Dataset | undefined, npc: Npc): BossForm => bossFormOf(ds, npc.variants[0]?.team[0], npc.name);
 
 /** The rule numbers for one kind of boss: the one place Prep and the Battle tab read them from. */
 export interface BossRules {
@@ -138,7 +141,7 @@ export function lootTier(damage: number, form: BossForm = 'normal'): { tier: num
 export const isWorldBoss = (npc?: Npc | null) => npc?.category === 'boss';
 
 /** The shared HP pool, from the data's "Shared HP: 10,000,000" line; else 10M (Eternamax 100M). */
-export function bossPool(npc: Npc): number {
+export function bossPool(npc: Npc, ds?: Dataset): number {
   for (const r of npc.requirements) {
     const m = /shared hp:\s*([\d.,\s]+)/i.exec(r);
     if (m) {
@@ -146,7 +149,7 @@ export function bossPool(npc: Npc): number {
       if (n > 0) return n;
     }
   }
-  return bossRules(bossForm(npc.name, npc.variants[0]?.team[0]?.name)).hp;
+  return bossRules(bossFormOfNpc(ds, npc)).hp;
 }
 
 /** Keeps only the moves in `selected` (pool order). Empty or missing selection = the full pool. */

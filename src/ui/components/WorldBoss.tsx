@@ -5,7 +5,7 @@ import { box } from '../store';
 import { excludedUids, lockedUids } from '../teamPrefs';
 import { typeColor, TypeBadge } from './common';
 import { rulesFor } from '../../engine/rules';
-import { bossForm, bossPool, bossRules, lootTier, maxMoveName, maxMovePower, suggestBossTeam, BOSS_TURN_CAP, type BossMember } from '../../engine/worldBoss';
+import { bossForm, bossFormOfNpc, bossPool, bossRules, lootTier, maxMoveName, maxMovePower, suggestBossTeam, BOSS_TURN_CAP, type BossMember } from '../../engine/worldBoss';
 
 const n0 = (x: number) => Math.round(x).toLocaleString('en-US');
 /** Shares of a 10,000,000 HP pool are tiny: two significant digits below 1%. */
@@ -35,7 +35,7 @@ export function BossMovePicker({ ds, npc, pool, active }: { ds: Dataset; npc: Np
       ? (active.lobby?.isNext ? 'From lobby · next spawn' : `From lobby · ${active.lobby?.build.name} details`)
       : 'Your pick';
   const spawn = when(active?.lobby?.isNext ? active.lobby.startsAt : undefined);
-  const maxMoves = bossRules(bossForm(npc.name, npc.variants[0]?.team[0]?.name)).maxMoves;
+  const maxMoves = bossRules(bossFormOfNpc(ds, npc)).maxMoves;
   return (
     <div class="card">
       <p class="title">
@@ -114,10 +114,11 @@ function LootLine({ low, high, form }: { low: number; high: number; form: Return
 /** Counter-team for a World Boss: a damage race vs the selected moves. */
 export function BossCounter({ ds, npc, v }: { ds: Dataset; npc: Npc; v: NpcTeamVariant }) {
   const rules = rulesFor(npc.category);
-  const pool = bossPool(npc);
+  const pool = bossPool(npc, ds);
+  const form = bossFormOfNpc(ds, npc);
   const res = useMemo(
-    () => (box.value.length ? suggestBossTeam(ds, box.value, v, { levelCap: v.levelCap, rules, pool, excluded: excludedUids.value, locked: lockedUids.value }) : null),
-    [ds, box.value, v, pool, excludedUids.value, lockedUids.value],
+    () => (box.value.length ? suggestBossTeam(ds, box.value, v, { levelCap: v.levelCap, rules, pool, form, excluded: excludedUids.value, locked: lockedUids.value }) : null),
+    [ds, box.value, v, pool, form, excludedUids.value, lockedUids.value],
   );
   return (
     <>

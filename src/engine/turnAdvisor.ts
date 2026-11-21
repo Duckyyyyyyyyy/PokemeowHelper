@@ -11,7 +11,7 @@ import { itemAdvice, itemsAllowed, resolveItems } from './itemAdvisor';
 import { fieldFromLog, rateSupport, supportBlocked, supportEffect, type BenchMon, type SupportContext } from './supportMoves';
 import { runLookahead, searchable, setupScore, type LookMon, type Lookahead, type RootValue } from './lookahead';
 import { fxNotes } from './moveEffects';
-import { asHeavyBoss, bossAttackDs, bossForm, bossRules, bossVariant, capBossBoosts, cutBossHit, isWorldBoss } from './worldBoss';
+import { asHeavyBoss, bossAttackDs, bossFormOf, bossRules, bossVariant, capBossBoosts, cutBossHit, isWorldBoss } from './worldBoss';
 
 export { accuracyStageMul, battleSpeed };
 
@@ -304,13 +304,14 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
   }
   // World Boss: the same rule as Prep (worldBoss.ts): Max Moves only for GMAX/Eternamax, its hits cut
   // 55% / 70% (one-turn rows), its boosts capped, very heavy.
-  const bossF = match && isWorldBoss(match.npc) ? bossForm(match.npc.name, foe.mon.name) : undefined;
+  const bossF = match && isWorldBoss(match.npc) ? bossFormOf(ds, foe.mon, match.npc.name) : undefined;
   const foeCalc = applyState(npcToCalc(ds, foe.mon), snap.opponent, bossF ? capBossBoosts(snap.boosts.opponent) : snap.boosts.opponent);
   const foeMoves = [...foe.mon.moves, ...extra]; // the rules only ban YOUR moves
   if (bossF) {
     asHeavyBoss(foeCalc);
     // One dataset scores both sides: a move your side also uses keeps its normal power.
-    const mine = new Set([...snap.moves.map((m) => idx.moves.get(lc(m.name))?.id), ...box.flatMap((b) => movesForBox(ds, b))].filter((x): x is string => !!x));
+    const mine = new Set([...snap.moves.map((m) => idx.moves.get(lc(m.name))?.id),
+      ...snap.bench.flatMap((r) => { const s = mySet(idx, box, r, (r.moves ?? []).map((m) => m.name)); return s ? movesForBox(ds, s.mon) : []; })].filter((x): x is string => !!x));
     const shared = foeMoves.filter((id) => mine.has(id) && ds.moves[id] && ds.moves[id].category !== 'Status');
     ds = bossAttackDs(ds, bossF, foeMoves, mine);
     notes.push(`World Boss: ${bossRules(bossF).maxMoves ? 'every attack it makes is a Max Move' : 'it uses its normal moves (only the phase-3 extra attack is a Max Move)'}, at ${bossF === 'eternamax' ? '70' : '55'}% less damage. The plan below (2–3 turns ahead) and switch-ins still count its full hits.`);
