@@ -344,8 +344,6 @@ details.card[open] > summary.title::after { content: "▾"; }
 .mx .c.l { background: var(--bad-soft); color: var(--bad); }
 .mx .c.sel { box-shadow: inset 0 0 0 2px var(--text); }
 .lead { font: 800 11px/1.4 var(--cond); letter-spacing: .06em; background: var(--accent); color: var(--on-accent); padding: 0 5px; border-radius: 4px; vertical-align: 2px; }
-.slotph { border: 1.5px dashed var(--muted); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
-.soon { font: 700 12px var(--sans); border: 1.5px dashed var(--muted); color: var(--muted); border-radius: 5px; padding: 0 6px; }
 
 /* Tips / Guide */
 .tl { text-align: left; color: var(--text); font-size: 15px; line-height: 1.3; }
