@@ -11,7 +11,7 @@ import { itemAdvice, itemsAllowed, resolveItems } from './itemAdvisor';
 import { fieldFromLog, rateSupport, supportBlocked, supportEffect, type BenchMon, type SupportContext } from './supportMoves';
 import { runLookahead, searchable, setupScore, type LookMon, type Lookahead, type RootValue } from './lookahead';
 import { fxNotes } from './moveEffects';
-import { bossVariant, isWorldBoss } from './worldBoss';
+import { asHeavyBoss, bossAttackDs, bossFormOf, bossRules, bossVariant, capBossBoosts, cutBossHit, isWorldBoss } from './worldBoss';
 
 export { accuracyStageMul, battleSpeed };
 
@@ -262,7 +262,7 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
 
   const format = snap.format ?? match?.variant.format;
   if (format && format !== 'singles') notes.push('Only singles are supported for now: advice treats this as a 1v1.');
-  if (match?.bossFiltered) notes.push(`World Boss: its likely moves come only from the ${match.variant.team[0]?.moves.length ?? 0} moves known for this appearance (World Boss page or your pick in Prep). Its attacks are Max Moves.`);
+  if (match?.bossFiltered) notes.push(`World Boss: its likely moves come only from the ${match.variant.team[0]?.moves.length ?? 0} moves known for this appearance (World Boss page or your pick in Prep).`);
   if (!match) notes.push(`“${snap.opponentName ?? 'This opponent'}” is not in the wiki data (wild or player battle?). Using guessed sets.`);
   if (!snap.player || !snap.opponent) {
     notes.push('Waiting for both Pokémon to be on the field.');
@@ -302,8 +302,21 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
     extra = (match?.bossFiltered ? usedThisBattle : seen).filter((id) => !foe.mon.moves.includes(id));
     if (extra.length) notes.push(`${foe.mon.name} was seen using ${extra.map((id) => ds.moves[id]?.name ?? id).join(', ')}, which is not in the ${match?.bossFiltered ? 'moves picked for this appearance' : 'wiki set'}. Counted as a possible threat.`);
   }
-  const foeCalc = applyState(npcToCalc(ds, foe.mon), snap.opponent, snap.boosts.opponent);
+  // World Boss: the same rule as Prep (worldBoss.ts): Max Moves only for GMAX/Eternamax, its hits cut
+  // 55% / 70% (one-turn rows), its boosts capped, very heavy.
+  const bossF = match && isWorldBoss(match.npc) ? bossFormOf(ds, foe.mon, match.npc.name) : undefined;
+  const foeCalc = applyState(npcToCalc(ds, foe.mon), snap.opponent, bossF ? capBossBoosts(snap.boosts.opponent) : snap.boosts.opponent);
   const foeMoves = [...foe.mon.moves, ...extra]; // the rules only ban YOUR moves
+  if (bossF) {
+    asHeavyBoss(foeCalc);
+    // One dataset scores both sides: a move your side also uses keeps its normal power.
+    const mine = new Set([...snap.moves.map((m) => idx.moves.get(lc(m.name))?.id),
+      ...snap.bench.flatMap((r) => { const s = mySet(idx, box, r, (r.moves ?? []).map((m) => m.name)); return s ? movesForBox(ds, s.mon) : []; })].filter((x): x is string => !!x));
+    const shared = foeMoves.filter((id) => mine.has(id) && ds.moves[id] && ds.moves[id].category !== 'Status');
+    ds = bossAttackDs(ds, bossF, foeMoves, mine);
+    notes.push(`World Boss: ${bossRules(bossF).maxMoves ? 'every attack it makes is a Max Move' : 'it uses its normal moves (only the phase-3 extra attack is a Max Move)'}, at ${bossF === 'eternamax' ? '70' : '55'}% less damage. The plan below (2–3 turns ahead) and switch-ins still count its full hits.`);
+    if (bossRules(bossF).maxMoves && shared.length) notes.push(`${shared.map((id) => ds.moves[id].name).join(', ')}: your side uses it too, so its hit is counted at normal power, not as a Max Move.`);
+  }
 
   // Your active Pokémon fainted ("Choose your next Pokémon."): the only choice is who comes in.
   // No moves, no items (not even a Revive on it), no "KOs you" line for a Pokémon already down.
@@ -355,9 +368,15 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
     facingKo: !!myBestHit && myBestHit.maxPct >= foeHp,
     lastMove: lastFoe && lc(lastFoe.mon) === lc(foe.mon.name) ? idx.moves.get(lc(lastFoe.move))?.id : undefined,
   });
+  if (bossF) {
+    const k = bossRules(bossF).hitMult;
+    out.prediction = out.prediction.map((g) => (g.minPct === undefined || g.maxPct === undefined ? g
+      : { ...g, minPct: g.minPct * k, maxPct: g.maxPct * k, ko: g.minPct * k >= myHp ? 'sure' : g.maxPct * k >= myHp ? 'chance' : undefined }));
+  }
 
   const errBefore = calcErrorCount();
-  const threat = bestMove(ds, foeCalc, defenderVsNpc(myCalc, rules), foeMoves, field);
+  const threatFull = bestMove(ds, foeCalc, defenderVsNpc(myCalc, rules), foeMoves, field);
+  const threat = bossF ? cutBossHit(threatFull, bossF) : threatFull;
   const threatError = calcErrorCount() !== errBefore;
   const theirHit = avg(threat);
   if (threat) {
@@ -389,7 +408,7 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
   const look = (opts.lookahead ?? 2) > 0 && !isDoubles
     ? lookFor(ds, idx, snap, field, rules, { name: snap.player.name, calc: myCalc, moves: myLegal }, support.bench as BenchRow[], foe.mon.name, foeCalc, foeMoves, support.foesLeft ?? [], out.prediction, opts.lookahead)
     : undefined;
-  if (look && out.threat) {
+  if (look && out.threat && !bossF) { // World Boss: the lookahead counts its full hits, so its KO odds would contradict the cut row
     const t = look.engine.threatOdds();
     out.threat.koChance = t.ko;
     out.threat.critKo = t.critKo;
@@ -414,7 +433,7 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
       continue;
     }
     if (rules.bannedMoves.has(g.id)) {
-      out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: 0, reason: 'Fails in World Boss and Mega Chamber battles.' });
+      out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: 0, reason: 'Fails in this battle (World Boss / Mega Chamber rules).' });
       continue;
     }
     if (g.category === 'Status') {
