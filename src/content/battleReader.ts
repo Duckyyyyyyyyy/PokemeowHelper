@@ -1,4 +1,4 @@
-import { activeFainted, type BattleBagItem, type BattleEvent, type EventHit, type BattleMon, type BattleMove, type BattleSnapshot, type BoostKey, type Boosts, type RosterMon } from '../shared/battle';
+import { activeFainted, type BattleBagItem, type BattleField, type BattleEvent, type EventHit, type BattleMon, type BattleMove, type BattleSnapshot, type BoostKey, type Boosts, type RosterMon } from '../shared/battle';
 
 /**
  * Reads the PokeMeowRPG battle screen into a BattleSnapshot. Pure and read-only:
@@ -27,6 +27,21 @@ export const SEL = {
   logTurn: '.battle-log-turn',
   /** On-screen stat stages next to the name, e.g. <span class="battle-status battle-stat-changes" title="Evasion +1">. */
   statChanges: '.battle-stat-changes',
+  /**
+   * One Showdown-style tag per stat inside statChanges (real save 2026-11-22):
+   * <span class="battle-stat-change" data-direction="down" aria-label="Sp. Def -2">0.5× SpD</span>.
+   */
+  statChange: '.battle-stat-change',
+  /** Fainted badge next to the level (real save 2026-11-22): <span class="battle-status battle-status-fnt"><img alt="Fainted"></span>. */
+  faintedBadge: '.battle-status-fnt',
+  /**
+   * Weather / terrain buttons beside the turn counter. GUESS from the game's stylesheet only
+   * (`.battle-field-row`, `.battle-field-status`, `.battle-field-effect`); no save had a field effect yet,
+   * so any `.battle-field-effect` in the arena counts, wherever it sits.
+   */
+  fieldEffect: '.battle-field-effect',
+  /** Weather art over the scene (stylesheet: `.battle-weather-visual[data-weather=raindance]`). Not seen live. */
+  weatherVisual: '.battle-weather-visual[data-weather]',
   log: '.battle-log',
   /** Items tab. Panel and class `.battle-bag` seen live 2026-11-18; the entry markup is read tolerantly (see readBattleBag). */
   bag: '.battle-team-bag-panel .battle-bag, .battle-bag',
@@ -42,8 +57,12 @@ export const SEL = {
 
 /** Seen live (Drake, 2026-11-18) after your Pokémon fainted. Matched as text: its markup is not known yet. */
 const NEXT_PROMPT = /choose your next pok[eé]mon/i;
-/** Badge next to a fainted Pokémon's level ("FNT"), matched as text for the same reason (an element reading just "FNT"). */
-const hasFntBadge = (root: Element | null) => !!root && [...root.querySelectorAll('*')].some((e) => clean(e.textContent) === 'FNT');
+/**
+ * Badge next to a fainted Pokémon's level: `.battle-status-fnt` (an image, real save 2026-11-22),
+ * else an element reading just "FNT" (older screen).
+ */
+const hasFntBadge = (root: Element | null) =>
+  !!root && (!!root.querySelector(SEL.faintedBadge) || [...root.querySelectorAll('*')].some((e) => clean(e.textContent) === 'FNT'));
 
 /** The "Choose your next Pokémon" prompt anywhere in the arena except the battle log. Read-only: works on a detached copy. */
 export function hasNextPrompt(arena: Element): boolean {
@@ -53,15 +72,16 @@ export function hasNextPrompt(arena: Element): boolean {
   return NEXT_PROMPT.test(copy.textContent ?? '');
 }
 
+/** Integer from text; the game writes large numbers with commas ("1,234"). */
 const num = (s?: string | null) => {
-  const n = s ? parseInt(s, 10) : NaN;
+  const n = s ? parseInt(s.replace(/,/g, ''), 10) : NaN;
   return Number.isFinite(n) ? n : undefined;
 };
 const clean = (s?: string | null) => (s ?? '').replace(/\s+/g, ' ').trim();
 
-/** "43/43 HP", "43 / 43 HP", "45 of 45 HP" */
+/** "43/43 HP", "43 / 43 HP", "45 of 45 HP", "1,020/1,020 HP" */
 export function parseHp(text: string): { hp?: number; maxHp?: number } {
-  const m = text.match(/(\d+)\s*(?:\/|of)\s*(\d+)\s*HP/i);
+  const m = text.match(/(\d[\d,]*)\s*(?:\/|of)\s*(\d[\d,]*)\s*HP/i);
   return m ? { hp: num(m[1]), maxHp: num(m[2]) } : {};
 }
 
@@ -102,14 +122,18 @@ function readCombatant(root: Element | null, position?: number): BattleMon | und
   const statusEl = root.querySelector(SEL.status);
   const itemLabel = root.querySelector(SEL.item)?.getAttribute('aria-label') ?? '';
   const item = itemLabel.match(/Held item:\s*([^.]+)/i)?.[1]?.trim();
-  // One badge per stat or one list: read them all. Unparsed text gives undefined, so the log's stages are used instead.
-  const changes = [...root.querySelectorAll(SEL.statChanges)].map((c) => c.getAttribute('title') || c.textContent || '').join(', ');
+  // One tag per stat (new markup: signed aria-label, else the "0.5× SpD" text), else the older badge title.
+  // Unparsed text gives undefined, so the log's stages are used instead.
+  const tags = [...root.querySelectorAll(SEL.statChange)];
+  const changes = tags.length
+    ? tags.map((t) => t.getAttribute('aria-label') || t.getAttribute('title') || t.textContent || '').join(', ')
+    : [...root.querySelectorAll(SEL.statChanges)].map((c) => c.getAttribute('title') || c.textContent || '').join(', ');
   const stages = changes ? parseStatChanges(changes) : undefined;
   return {
     name,
     level: num(root.querySelector(SEL.level)?.textContent?.match(/(\d+)/)?.[1]),
     ...parseHp(root.querySelector(SEL.hp)?.textContent ?? ''),
-    status: statusEl?.getAttribute('data-status') || undefined,
+    status: statusEl?.getAttribute('data-status') || (root.querySelector(SEL.faintedBadge) ? 'fnt' : undefined),
     item,
     stages: stages && Object.keys(stages).length ? stages : undefined,
     ...(position ? { position } : {}),
@@ -124,14 +148,39 @@ function readActives(stats: Element | null): BattleMon[] {
     .filter((m): m is BattleMon => !!m);
 }
 
-/** "Evasion +1" (seen live), also "Attack +2, Speed -1" style lists. */
+/**
+ * "Evasion +1" (seen live), also "Attack +2, Speed -1" style lists, and the Showdown-style
+ * multiplier tags ("2× Def", "0.5× SpD", real save 2026-11-22) turned back into stages.
+ */
 export function parseStatChanges(text: string): Boosts {
   const out: Boosts = {};
   for (const m of text.matchAll(/([A-Za-z. ]+?)\s*([+\-−]\s*\d)/g)) {
     const key = STAT_WORDS.find(([re]) => re.test(m[1]))?.[1];
     if (key) out[key] = parseInt(m[2].replace('−', '-').replace(/\s/g, ''), 10);
   }
+  for (const m of text.matchAll(/(\d+(?:\.\d+)?)\s*[×x]\s*([A-Za-z. ]+)/g)) {
+    const key = STAT_WORDS.find(([re]) => re.test(m[2]))?.[1];
+    if (!key || key in out) continue; // a signed label for the same stat wins
+    const stage = stageFromMultiplier(parseFloat(m[1]), key);
+    if (stage !== undefined && stage !== 0) out[key] = stage;
+  }
   return out;
+}
+
+/**
+ * Stage for a shown multiplier: (2+s)/2 and 2/(2-s) for Atk/Def/SpA/SpD/Spe (1.5×=+1 … 4×=+6,
+ * 0.67×=-1 … 0.25×=-6), (3+s)/3 and 3/(3-s) for accuracy/evasion (1.33×=+1, 0.75×=-1 …).
+ * The tag rounds (0.67, 0.33, 0.29), so the nearest stage within 0.03 wins.
+ */
+export function stageFromMultiplier(mult: number, key: BoostKey): number | undefined {
+  const base = key === 'accuracy' || key === 'evasion' ? 3 : 2;
+  let best: number | undefined;
+  let gap = 0.03;
+  for (let s = -6; s <= 6; s++) {
+    const v = s >= 0 ? (base + s) / base : base / (base - s);
+    if (Math.abs(v - mult) <= gap) [best, gap] = [s, Math.abs(v - mult)];
+  }
+  return best;
 }
 
 /** "Fairy Wind · Fairy · Special · Power 40 · Accuracy 100% · 30/30 PP. No additional effect." */
@@ -159,7 +208,9 @@ export function parseMoveLabel(label: string): Omit<BattleMove, 'disabled'> {
 export function readMoves(doc: ParentNode): BattleMove[] {
   return [...doc.querySelectorAll(SEL.moveButton)].map((b) => {
     const parsed = parseMoveLabel(b.getAttribute('aria-label') ?? clean(b.textContent));
-    const disabled = b.hasAttribute('disabled') || b.getAttribute('aria-disabled') === 'true' || b.closest('[data-no-pp="true"]') !== null || parsed.pp === 0;
+    // Greyed-out, crossed-out moves carry data-unavailable="true" (game stylesheet 2026-11; not in a save yet).
+    const disabled = b.hasAttribute('disabled') || b.getAttribute('aria-disabled') === 'true' || b.getAttribute('data-unavailable') === 'true'
+      || b.closest('[data-no-pp="true"]') !== null || parsed.pp === 0;
     return { ...parsed, disabled };
   });
 }
@@ -247,6 +298,15 @@ const STAT_WORDS: [RegExp, BoostKey][] = [
 export function parseBoostLine(text: string, who: Who = {}): { side: 'player' | 'opponent'; mon: string; stats: BoostKey[]; delta: number } | null {
   const subj = splitSubject(text, who);
   if (!subj) return null;
+  // Belly Drum / Anger Point (new in the 2026-11 log; exact wording is a GUESS from mainline):
+  // "Snorlax cut its own HP and maximized its Attack!", "Primeape maximized its Attack!".
+  const max = subj.rest.match(/^(.+?)\s+(?:cut its own HP and\s+)?maximized its\s+(.+?)!/i);
+  if (max) {
+    const side = resolveSide(subj, max[1], who);
+    const stat = STAT_WORDS.find(([re]) => re.test(max[2]))?.[1];
+    // +12 clamps to +6 whatever the stage was.
+    return side && stat ? { side, mon: max[1].trim(), stats: [stat], delta: 12 } : null;
+  }
   const m = subj.rest.match(/^(.+?)[’']s\s+(.+?)\s+(rose|fell)(?:\s+(sharply|harshly|drastically|severely))?!/i);
   if (!m) return null;
   const side = resolveSide(subj, m[1], who);
@@ -328,7 +388,7 @@ export function parseUseLine(text: string, who: Who = {}): { side: Side; mon: st
   if (!m) return null;
   const side = resolveSide(subj, m[1], who);
   if (!side) return null;
-  const dmg = text.match(/dealt (\d+) damage/i);
+  const dmg = text.match(/dealt (\d[\d,]*) damage/i);
   let move = m[2].trim();
   let target: { side: Side; mon: string } | undefined;
   const on = move.match(/^(.+?)\s+on\s+(.+)$/i);
@@ -338,7 +398,7 @@ export function parseUseLine(text: string, who: Who = {}): { side: Side; mon: st
     const tSide = t && resolveSide(t, t.rest, who);
     if (t && tSide) target = { side: tSide, mon: t.rest.trim() };
   }
-  return { side, mon: m[1].trim(), move, damage: dmg ? parseInt(dmg[1], 10) : undefined, ...(target ? { target } : {}) };
+  return { side, mon: m[1].trim(), move, damage: num(dmg?.[1]), ...(target ? { target } : {}) };
 }
 
 /** "X fainted." / "X’s attack missed." / "X avoided the attack." in either wording. */
@@ -404,18 +464,18 @@ export function parseLog(lines: LogLine[], trainer?: string): { boosts: BattleSn
       const missed = subjectLine(text, /^(.+?)[’']s attack missed/i, who);
       const avoided = subjectLine(text, /^(.+?) avoided the attack/i, who);
       if ((missed && missed.side === last.side) || (avoided && avoided.side !== last.side)) last.missed = true;
-      const dmg = text.match(/^It dealt (\d+) damage/i);
-      if (dmg && last.damage === undefined) last.damage = parseInt(dmg[1], 10);
+      const dmg = text.match(/^It dealt (\d[\d,]*) damage/i);
+      if (dmg && last.damage === undefined) last.damage = num(dmg[1]);
       if (UNUSUAL.test(text) && idx === last.idx + 1) last.unusual = true;
       // The crit line may come after "It dealt N damage.": any line up to the next move use counts.
       if (CRIT.test(text)) last.crit = true;
       // Spread move, one line per Pokémon hit (seen live): "Slowbro took 24 damage." / "It doesn't affect Tate & Liza’s Xatu."
       // Only after a move with no named target, and only the exact wording (not recoil or weather lines).
       const spreadFollow = !last.targetSide;
-      const took = spreadFollow ? subjectLine(text, /^(.+?)\s+took\s+\d+\s+damage[.!]?$/i, who) : null;
+      const took = spreadFollow ? subjectLine(text, /^(.+?)\s+took\s+\d[\d,]*\s+damage[.!]?$/i, who) : null;
       const immune = spreadFollow ? text.match(/^It doesn[’']t affect\s+(.+?)[.!]?$/i) : null;
       let hit: EventHit | undefined;
-      if (took) hit = { side: took.side, mon: took.mon, damage: parseInt(text.match(/took\s+(\d+)\s+damage/i)![1], 10) };
+      if (took) hit = { side: took.side, mon: took.mon, damage: num(text.match(/took\s+(\d[\d,]*)\s+damage/i)![1]) };
       else if (immune) {
         const t = splitSubject(immune[1], who);
         const tSide = t && resolveSide(t, t.rest, who);
@@ -496,6 +556,58 @@ export function readBattleBag(doc: ParentNode): BattleBagItem[] | undefined {
   return out.size ? [...out.values()] : undefined;
 }
 
+/** Weather words on an effect button, in @smogon/calc spelling. Extreme weathers first ("Heavy Rain" before "Rain"). */
+const WEATHER: [RegExp, string][] = [
+  [/harsh sunshine|extremely harsh|desolate land/i, 'Harsh Sunshine'],
+  [/heavy rain|primordial sea/i, 'Heavy Rain'],
+  [/strong winds|delta stream/i, 'Strong Winds'],
+  [/\bsun(?:ny|light|shine)?\b|harsh sunlight/i, 'Sun'],
+  [/\brain\b/i, 'Rain'],
+  [/sand/i, 'Sand'],
+  [/\bsnow/i, 'Snow'],
+  [/\bhail\b/i, 'Hail'],
+];
+/** Showdown weather ids used by the scene art (`data-weather`). */
+const WEATHER_ID: Record<string, string> = {
+  sunnyday: 'Sun', raindance: 'Rain', sandstorm: 'Sand', hail: 'Hail', snow: 'Snow', snowscape: 'Snow',
+  desolateland: 'Harsh Sunshine', primordialsea: 'Heavy Rain', deltastream: 'Strong Winds',
+};
+const TERRAIN = /\b(Electric|Grassy|Misty|Psychic)\s+Terrain\b/i;
+const turnsLeft = (s: string) => num(s.match(/(\d+)\s*(?:more\s+)?turns?\b/i)?.[1] ?? s.match(/(\d+)\s*left\b/i)?.[1]);
+
+/**
+ * Weather and terrain on screen. GUESS: the markup is known only from the game's stylesheet
+ * (`.battle-field-status > .battle-field-effect` buttons, `.battle-weather-visual[data-weather]`);
+ * button labels are read tolerantly ("Rain · 3 turns left", "Electric Terrain (2 turns)").
+ * Returns undefined when nothing is shown.
+ */
+export function readField(arena: ParentNode): BattleField | undefined {
+  const labels = [...arena.querySelectorAll(SEL.fieldEffect)]
+    .map((b) => clean(b.getAttribute('aria-label') || b.textContent))
+    .filter(Boolean);
+  const out: BattleField = {};
+  for (const label of labels) {
+    const t = label.match(TERRAIN);
+    if (t && !out.terrain) {
+      out.terrain = t[1][0].toUpperCase() + t[1].slice(1).toLowerCase();
+      out.terrainTurns = turnsLeft(label);
+      continue;
+    }
+    const w = WEATHER.find(([re]) => re.test(label));
+    if (w && !out.weather) {
+      out.weather = w[1];
+      out.weatherTurns = turnsLeft(label);
+    }
+  }
+  if (!out.weather) {
+    const id = arena.querySelector(SEL.weatherVisual)?.getAttribute('data-weather')?.toLowerCase() ?? '';
+    if (WEATHER_ID[id]) out.weather = WEATHER_ID[id];
+  }
+  if (labels.length) out.labels = labels;
+  for (const k of Object.keys(out) as (keyof BattleField)[]) if (out[k] === undefined) delete out[k];
+  return Object.keys(out).length ? out : undefined;
+}
+
 export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | null {
   const arena = doc.querySelector(SEL.arena);
   if (!arena) return null;
@@ -520,6 +632,7 @@ export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | 
     || hasNextPrompt(arena)
     || activeFainted({ player, bench } as BattleSnapshot);
   const bag = readBattleBag(arena);
+  const field = readField(arena);
   return {
     v: 2,
     at: now,
@@ -543,5 +656,6 @@ export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | 
     sides: { player: countActives(arena, SEL.playerStats), opponent: countActives(arena, SEL.opponentStats) },
     ...(doubles ? { actives: { player: myActives.map(withStages('player')), opponent: theirActives.map(withStages('opponent')) } } : {}),
     ...(doubles && movesFor ? { movesFor } : {}),
+    ...(field ? { field } : {}),
   };
 }
