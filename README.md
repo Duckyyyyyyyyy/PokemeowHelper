@@ -127,7 +127,7 @@ src/
   ui/             Preact side panel: App (tab list), tabs/, components/, theme.css
 tests/            unit tests and fixtures (a small trimmed wiki sample, a rebuilt battle page)
 scripts/          data checks, fixture builder, packaging
-docs/             PLAN.md (roadmap and live-test notes, Vietnamese), design/ (UI mockup, icon)
+docs/             PLAN.md (tracker), WORKFLOW.md, archive/ (detailed notes, Vietnamese), design/
 ```
 
 To add a tab: create a component in `src/ui/tabs/` and add one line to `TABS` in `src/ui/App.tsx`.

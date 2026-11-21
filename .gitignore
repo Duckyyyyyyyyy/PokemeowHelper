@@ -13,7 +13,8 @@ coverage/
 *.local
 .env
 .env.*
-.claude/
+.claude/*
+!.claude/commands/
 .vscode/
 .idea/
 
