@@ -5,6 +5,7 @@ import { damageRolls } from './damage';
 import { canFlinch, canGetStatus, critInfo, fxChanceMul, moveFx, type SecStatus } from './moveEffects';
 import { npcAttackWeight } from './npcModel';
 import { accuracyStageMul, stageMul } from './projection';
+import { friendshipMax, friendshipSurvival } from './friendship';
 import { PAR_SKIP, SLEEP_TURNS, supportEffect, type SupportEffect } from './supportMoves';
 
 /**
@@ -33,6 +34,8 @@ export interface LookMon {
   asDefender?: CalcPokemon;
   /** Usable moves: attacks (and, for your active one, support moves). */
   moves: string[];
+  /** Your side only, and only in battles that have it (see friendship.ts); undefined = no effects. */
+  friendship?: number;
 }
 
 export interface LookInput {
@@ -105,6 +108,9 @@ interface Mon {
   maxHp: number;
   attacks: string[];
   support: string[];
+  /** Friendship: chance a KO hit leaves it at 1 HP; max = crit ×2 and their moves −10 accuracy. */
+  survive: number;
+  maxFriend: boolean;
 }
 
 interface S {
@@ -181,6 +187,8 @@ export class Lookahead {
         maxHp: m.calc.maxHP(),
         attacks: m.moves.filter((id) => this.ds.moves[id] && !isStatus(id)),
         support: first || side === 1 ? m.moves.filter((id) => isStatus(id) && searchable(this.ds, id)) : [],
+        survive: side === 0 ? friendshipSurvival(m.friendship) : 0,
+        maxFriend: side === 0 && friendshipMax(m.friendship),
       };
     };
     this.mons = [...input.mine.map((m, i) => mk(m, 0, i === 0)), ...input.foes.map((m) => mk(m, 1, false))];
@@ -220,7 +228,7 @@ export class Lookahead {
       const n = rolls.map((x) => (100 * x * k) / hp);
       const ci = critInfo(this.ds, atk, def, moveId, aFE);
       let c = n;
-      let crit = ci.always ? 0 : ci.chance;
+      let crit = ci.always ? 0 : A.maxFriend ? Math.min(1, ci.chance * 2) : ci.chance; // Friendship 255: crit chance ×2
       if (crit > 0) {
         // A crit ignores your negative stages and their positive ones: with none of those, it's just ×1.5.
         if (ab[0] >= 0 && ab[2] >= 0 && db[1] <= 0 && db[3] <= 0) c = n.map((x) => Math.floor(x * ci.mul * 100) / 100);
@@ -232,12 +240,25 @@ export class Lookahead {
       } else crit = 0;
       const mv = this.ds.moves[moveId];
       const accRaw = mv.accuracy;
-      const acc = accRaw === true || typeof accRaw !== 'number' || accRaw <= 0 ? 1 : accRaw / 100;
+      const acc = accRaw === true || typeof accRaw !== 'number' || accRaw <= 0 ? 1 : this.accVs(D, accRaw) / 100;
       const avg = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length;
       out = { n, c, crit, acc, prio: mv.priority ?? 0, mean: ((1 - crit) * avg(n) + crit * avg(c)) * acc };
     }
     this.dists.set(key, out);
     return out;
+  }
+
+  /**
+   * Base accuracy of a move aimed at `d`: your Pokémon at Friendship 255 takes 10 points off ("lose 10
+   * accuracy": subtractive points, not ×0.9, and before stages: guesses). Never-miss moves don't get here.
+   */
+  private accVs(d: Mon, acc: number): number {
+    return d.maxFriend ? Math.max(0, acc - 10) : acc;
+  }
+
+  /** 1 HP in % of max HP: Friendship survival leaves your Pokémon here (no roll when already at it, a guess). */
+  private survives(d: Mon, h: number): number {
+    return d.survive > 0 && h > 100 / d.maxHp + 1e-9 ? d.survive : 0;
   }
 
   private hitChance(dd: Dist, moveId: string, accStage: number): number {
@@ -403,7 +424,7 @@ export class Lookahead {
       if (side === 1) t.fUsed |= 1 << Math.max(0, this.mons[aId].support.indexOf(moveId));
       const self = e.kind === 'boost';
       const accRaw = mv.accuracy;
-      const acc = self || accRaw === true || typeof accRaw !== 'number' ? 1 : Math.min(1, (accRaw / 100) * accuracyStageMul(ab[5] - db[6]));
+      const acc = self || accRaw === true || typeof accRaw !== 'number' ? 1 : Math.min(1, (this.accVs(D, accRaw) / 100) * accuracyStageMul(ab[5] - db[6]));
       if (e.kind === 'status' && !canGetStatus(D.calc, e.status, mv.type, A.calc, t.st[dId])) return [{ p: 1, s: t }];
       const ok = cloneS(t);
       if (e.kind === 'boost') this.applyBoosts(ok, side, e.self);
@@ -440,10 +461,20 @@ export class Lookahead {
     };
     const out: (Child & { flinch?: boolean })[] = [];
     if (pKO > 0) {
+      // Friendship (your side): part of the KO leaves it at 1 HP. Guess: any KO hit, every time it happens.
+      const q = side === 1 ? this.survives(D, h) : 0;
+      const pLive = pKO * q >= MIN_P ? pKO * q : 0;
+      if (pLive > 0) {
+        const one = 100 / D.maxHp;
+        const l = cloneS(t);
+        l.hp[dId] = one;
+        after(l, h - one, 1);
+        out.push({ p: pLive, s: l });
+      }
       const k = cloneS(t);
       k.hp[dId] = 0;
       after(k, h, 1);
-      out.push({ p: pKO, s: k, note: 'ko' });
+      out.push({ p: pKO - pLive, s: k, note: 'ko' });
     }
     if (pKO < 1) {
       const n = cloneS(t);
@@ -765,7 +796,8 @@ export class Lookahead {
     const f = (xs: number[]) => xs.filter((x) => x >= h).length / xs.length;
     const fn = f(dd.n);
     const fc = dd.crit > 0 ? f(dd.c) : fn;
-    return { ko: pHit * ((1 - dd.crit) * fn + dd.crit * fc), critKo: pHit * dd.crit * Math.max(0, fc - fn), crit: dd.crit };
+    const live = 1 - (side === 1 ? this.survives(this.mons[d], h) : 0); // Friendship survival
+    return { ko: live * pHit * ((1 - dd.crit) * fn + dd.crit * fc), critKo: live * pHit * dd.crit * Math.max(0, fc - fn), crit: dd.crit };
   }
 
   /** Their chance to KO your active (or a switch-in) this turn with the reply distribution, and the crit-only part. */

@@ -13,7 +13,7 @@ Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing 
 
 ## ⬜ Planned (in order)
 
-0. **Game update catch-up (Nov 14–21 changes, Battle Simulator)**: Plan with workstreams and models: `docs/design/game-update-2026-11-plan.md`. Done in 0.13.0: Phase A (rules digest, data refresh, simulator export) and World Boss 2. Battle reader re-check (WS0) done on the League and Doubles saves, plus a wild battle, Rain and Misty Terrain read live 2026-11-22; World Boss still needed. Next: simulator golden tests (needs OK), then Friendship → field effects → NPC AI.
+0. **Game update catch-up (Nov 14–21 changes, Battle Simulator)**: Plan with workstreams and models: `docs/design/game-update-2026-11-plan.md`. Done in 0.13.0: Phase A (rules digest, data refresh, simulator export) and World Boss 2. Battle reader re-check (WS0) done on the League and Doubles saves, plus a wild battle, Rain and Misty Terrain read live 2026-11-22; World Boss still needed. Friendship (WS4) code done 🔶: box sync keeps `friendship`, the lookahead plays out the 1-HP survival, crit ×2 and −10 accuracy at 255, Battle tab note. Next: simulator golden tests (needs OK), then field effects → NPC AI.
 1. Later: Triples.
 
 ## 🔍 Needs real-game check
@@ -34,6 +34,7 @@ Claude reads the page through Claude in Chrome and the user plays. Tick an item 
 - [ ] Replace the Brock fixture (`brock-turn3.reconstructed.html`) with a real Ctrl+S save (real Gym save `shauntal-forced-switch.html` added 2026-11-22, but it is a forced switch: no move buttons)
 - [ ] 2026-11 reader changes (WS0) not seen live yet: a weather or terrain turn count, if the game ever shows one (Rain and Misty Terrain confirmed live 2026-11-22, `field-rain.live.html` / `field-misty.live.html`: button text "Rain" / "Misty terrain", no turns shown); stat tags read from the multiplier text when no label (accuracy/evasion table); greyed-out moves (`data-unavailable`); Belly Drum / Anger Point "maximized" wording; numbers with commas in the log; ±N% chips and crit-stage tags (ignored); silhouette rows for unrevealed NPC Pokémon in the opponent roster; revealed-ability and item-boost log lines; the Healing / PP tabs with the bag panel open
 - [ ] World Boss battle save (Ctrl+S) still missing: the World Boss battle reader is unchanged
+- [ ] Friendship (WS4) in a real battle: survive-at-1-HP and crit ×2 at 255. Guesses: the box sync field is named `friendship` (0–255, not seen in a real sync yet); survival never rolls when already at 1 HP and can trigger more than once per battle; "−10 accuracy" is 10 points off before stages (not ×0.9) and never-miss moves are unaffected; Battle Frontier has no Friendship (not mentioned by the guide); the gate reads the arena `data-kind` (only "gym" confirmed: league/elite/champion/rival/tower/mega/chamber/wild and player/world-boss are guessed values) or the matched NPC category; unknown kind = no effects. Doubles advice does not model it
 
 ## Known data gaps (not bugs)
 

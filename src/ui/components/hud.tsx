@@ -116,7 +116,8 @@ export function DangerStrip({ threat }: { threat?: ThreatInfo }) {
   const d = dangerOf(threat);
   const lvl = d === 'safe' ? 1 : d === 'watch' ? 2 : 3;
   const extra = d !== 'ko' && (threat.critKo ?? 0) >= 0.01 ? ` Crit KO ${pctTxt(threat.critKo!)}.` : d === 'watch' && threat.ko !== 'chance' && (threat.koChance ?? 0) >= 0.01 ? ` ~${pctTxt(threat.koChance!)} they KO you.` : '';
-  const text = d === 'ko' ? `Their ${threat.name} KOs you.` : threat.ko === 'chance' ? `Their ${threat.name} can KO you.` : `You survive their ${threat.name}.`;
+  const friend = threat.survive ? ` (${pctTxt(threat.survive)} Friendship survival)` : '';
+  const text = d === 'ko' ? `Their ${threat.name} KOs you${friend}.` : threat.ko === 'chance' ? `Their ${threat.name} can KO you${friend}.` : `You survive their ${threat.name}.`;
   return (
     <div class={`danger ${d}`} role="status">
       <span class="lvl">{DANGER_LABEL[d]}</span>

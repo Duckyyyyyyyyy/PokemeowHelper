@@ -266,4 +266,14 @@ describe('performance budget', () => {
     expect(best).toBeLessThan(100);
     expect(squash(120)).toBeLessThanOrEqual(100);
   });
+
+  it('Friendship 255 on all your Pokémon (survival chance nodes) keeps both boards within budget', () => {
+    const f = (m: LookMon): LookMon => ({ ...m, friendship: 255 });
+    const full = timed({ ds, mine: [me, ...allBench].map(f), foes: allFoes });
+    const near = timed({ ds, mine: [me, ...allBench.slice(0, 2)].map(f), foes: allFoes.slice(0, 1) });
+    console.log('friendship 255', { full: [full.r.depth, full.r.engine.nodes, full.best.toFixed(1)], near: [near.r.depth, near.r.engine.nodes, near.best.toFixed(1)] });
+    expect(full.r.depth).toBe(2);
+    expect(full.r.engine.nodes).toBeLessThan(800);
+    expect(near.r.engine.nodes).toBeLessThan(DEEPEN_BELOW + DEEPER_BUDGET);
+  });
 });

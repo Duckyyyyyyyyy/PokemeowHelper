@@ -36,6 +36,8 @@ export interface RawCollectionMon {
   shiny?: boolean;
   ivs?: Record<string, number>;
   evs?: Record<string, number>;
+  /** 0–255. */
+  friendship?: number;
   egg?: unknown;
 }
 
@@ -114,6 +116,7 @@ export function toBoxMons(ds: Dataset, raw: RawCollectionMon[]): BoxMon[] {
       shiny: !!p.shiny,
       ivs: p.ivs,
       evs: p.evs,
+      friendship: typeof p.friendship === 'number' && Number.isFinite(p.friendship) ? Math.max(0, Math.min(255, Math.round(p.friendship))) : undefined,
     }));
 }
 
