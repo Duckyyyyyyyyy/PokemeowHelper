@@ -388,9 +388,10 @@ function EncounterDetail({ ds, t, myLevel, isLive }: { ds: Dataset; t: Target; m
   if (!s) return null;
   const { main, alt, altLabel } = headlineBalls(advice);
   const afterMain = afterAdvice.bestOwned ?? afterAdvice.best;
-  // Catch / Defeat: follows the verdict for each new encounter until you pick one yourself.
+  // Catch / Defeat: every new encounter opens on Defeat (the user's choice); the CATCH/FIGHT stamp still shows the
+  // verdict, and a tab you pick sticks for that encounter.
   const encKey = t.liveKey ?? `${t.species}|${t.level}`;
-  const mode = modePick?.key === encKey ? modePick.mode : decision.verdict === 'catch' ? 'catch' : 'defeat';
+  const mode = modePick?.key === encKey ? modePick.mode : 'defeat';
   const catching = mode === 'catch';
   const hpClass = t.hpPct > 50 ? 'g' : t.hpPct > 20 ? 'y' : 'r';
   const gender = snap?.gender === 'F' ? '♀' : snap?.gender === 'M' ? '♂' : '';
