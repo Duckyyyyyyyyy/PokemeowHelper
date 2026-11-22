@@ -1,13 +1,14 @@
 {
   "name": "meowrpgadvisor",
   "private": true,
-  "version": "0.13.1",
+  "version": "0.14.0",
   "type": "module",
   "description": "MeowRPGAdvisor – advisory battle helper for PokeMeowRPG (Chrome side panel extension)",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build && vite build -c vite.content.config.ts && node scripts/check-content.mjs",
     "test": "vitest run",
+    "test:perf": "vitest run tests/lookahead.test.ts --mode perf",
     "fixture": "tsx scripts/make-fixture.ts",
     "validate-data": "tsx scripts/validate-data.ts",
     "package": "npm run build && tsx scripts/package.ts"
