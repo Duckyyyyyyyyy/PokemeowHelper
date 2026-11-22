@@ -14,7 +14,7 @@ Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing 
 ## ⬜ Planned (in order)
 
 0. **Game update catch-up (Nov 14–21 changes, Battle Simulator)**: Plan with workstreams and models: `docs/design/game-update-2026-11-plan.md`. Done in 0.13.0: Phase A (rules digest, data refresh, simulator export) and World Boss 2. Battle reader re-check (WS0) done on the League and Doubles saves, plus a wild battle, Rain and Misty Terrain read live 2026-11-22; World Boss still needed. Next: simulator golden tests (needs OK), then Friendship → field effects → NPC AI.
-1. Later: Chrome Web Store listing ($5 and a privacy policy), and Triples.
+1. Later: Triples.
 
 ## 🔍 Needs real-game check
 
