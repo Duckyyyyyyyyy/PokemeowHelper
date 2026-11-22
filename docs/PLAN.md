@@ -26,7 +26,7 @@ Claude reads the page through Claude in Chrome and the user plays. Tick an item 
 - [ ] Battle Tower: opponent name, fainted roster, reserve PP
 - [ ] Doubles build in a live battle: status badges, the Switch/Bag command tabs, and the screen while you pick a replacement after one of yours faints (fainted badge on one card: guessed from the singles save). The real save `tate-liza-doubles-turn4.html` (2026-11-22) confirms actives, stat tags, moves, and fainting and switch-in as log lines
 - [ ] Support-move scoring (4a) and lookahead (4d) guesses: sleep turns, crit 1/24, flinch, confusion
-- [ ] Wild battle screen after clicking Battle (HP %, status); Catchlist marker. The 2026-11-22 "wild" save was the Battle list page: save again from Explore after pressing Battle
+- [ ] Wild battle screen: a status condition (`.encounter-condition`) and the Catchlist marker. Confirmed live 2026-11-22 (`tests/fixtures/explore/wild-battle-palpitoad.html`): name, level, HP numbers, lead, moves and PP, `data-view="menu"` in battle
 - [ ] In-battle Items panel markup (`battle-items-panel.reconstructed.html`)
 - [ ] Hunt & Grind reachable maps (guess): map ids from the encounter card title, the Tips gate table (`GATE_TIP` in hunt.ts) and the region-order guess; Surf, rods and the Safari Ticket known only from ticked Tips or the Bag page (the Bag reader skips the key pocket, so they usually show "needs …?")
 - [ ] Hunt list on a live wild encounter: CATCH with "On your hunt list for <NPC>" and the Explore "hunt:" marker
