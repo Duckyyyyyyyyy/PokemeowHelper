@@ -11,6 +11,7 @@ import { itemAdvice, itemsAllowed, resolveItems } from './itemAdvisor';
 import { fieldFromLog, rateSupport, supportBlocked, supportEffect, type BenchMon, type SupportContext } from './supportMoves';
 import { runLookahead, searchable, setupScore, type LookMon, type Lookahead, type RootValue } from './lookahead';
 import { fxNotes } from './moveEffects';
+import { friendshipApplies, friendshipNote, friendshipSurvival } from './friendship';
 import { asHeavyBoss, bossAttackDs, bossFormOf, bossRules, bossVariant, capBossBoosts, cutBossHit, isWorldBoss } from './worldBoss';
 
 export { accuracyStageMul, battleSpeed };
@@ -84,6 +85,8 @@ export interface ThreatInfo {
   /** The damage calc threw for some of their moves: this may not be their best hit. */
   calcError?: boolean;
   critKo?: number;
+  /** Friendship: chance (0–1) a KO hit leaves your Pokémon at 1 HP instead (already in koChance). */
+  survive?: number;
 }
 
 export interface TurnAdvice {
@@ -255,6 +258,8 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
   ds = dsFor(ds, rules); // Battle Frontier: Gen III data and calc
   const idx = indexes(ds);
   const field = makeField('singles');
+  // Friendship (your side): not in Player Battles, World Boss or the Frontier (Gen III rules: a guess).
+  const friendOn = friendshipApplies(snap.kind, match?.npc.category, rules.gen === 3);
   // Safety gate: the lookahead is a singles 1v1 search. On a doubles battle (the Battle tab only
   // gets here when you force the singles view) keep the one-turn projection.
   const isDoubles = !!doublesReason(snap, match?.variant.format);
@@ -322,13 +327,14 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
   // No moves, no items (not even a Revive on it), no "KOs you" line for a Pokémon already down.
   if (activeFainted(snap)) {
     out.forcedSwitch = true;
-    const bench = benchFor(ds, idx, box, snap, rules);
+    const bench = benchFor(ds, idx, box, snap, rules, friendOn);
     const look = (opts.lookahead ?? 2) > 0 && !isDoubles && bench.length
       ? lookFor(ds, idx, snap, field, rules, null, bench, foe.mon.name, foeCalc, foeMoves, foesLeft(ds, idx, match?.variant, snap, npcBenchOf(ds, idx, match?.variant, snap)), undefined, opts.lookahead, bossF && bossRules(bossF).hitMult)
       : undefined;
     for (const r of snap.bench) {
       if (r.active || r.fainted || (r.hp ?? 1) <= 0) continue; // a same-species teammate (two Aggrons) still counts
       const adv = switchAdvice(ds, idx, box, r, foeCalc, foeMoves, rules, field, true);
+      markSurvive(adv.threat, bench.find((b) => b.row === r)?.friendship, (r.hp ?? 2) > 1);
       if (look) applySwitchLook(adv, look, bench.findIndex((b) => b.row === r) + 1);
       out.actions.push(adv);
     }
@@ -344,6 +350,10 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
     return out;
   }
   if (!me.known) notes.push(`${snap.player.name} is not in your box: using average IVs. Sync your box for exact numbers.`);
+  const myFriend = friendOn && me.known ? me.mon.friendship : undefined;
+  const friendTxt = friendshipNote(snap.player.name, myFriend);
+  if (friendTxt) notes.push(friendTxt);
+  else if (friendOn && me.known && me.mon.source === 'game' && me.mon.friendship === undefined) notes.push('Sync your box to use Friendship effects (survive a KO hit at 1 HP from 180).');
 
   const myCalc = applyState(boxToCalc(ds, me.mon), snap.player, snap.boosts.player);
   // Your accuracy vs their evasion (e.g. Kingdra at Evasion +1): lowers expected damage for ranking only.
@@ -387,6 +397,7 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
       youFirst: first,
       ...(threatError ? { calcError: true } : {}),
     };
+    markSurvive(out.threat, myFriend, myCalc.curHP() > 1);
   }
 
   // Might the NPC switch out? (Display, and stage drops on it would be lost.)
@@ -397,7 +408,7 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
   const support: SupportContext = {
     ds, rules, me: myCalc, myBoosts: snap.boosts.player, myMoves: myMoveIds,
     foe: foeCalc, foeName: foe.mon.name, foeBoosts: snap.boosts.opponent, foeMoves,
-    bench: benchFor(ds, idx, box, snap, rules),
+    bench: benchFor(ds, idx, box, snap, rules, friendOn),
     foesLeft: foesLeft(ds, idx, match?.variant, snap, npcBench),
     npcMaySwitch: !!out.npcSwitch,
     field: fieldFromLog(snap.events, snap.turn, (n) => idx.moves.get(lc(n))?.id),
@@ -406,7 +417,7 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
   // Lookahead (default): a few turns of expectimax; the cheap path keeps the one-turn projection.
   const myLegal = myMoveIds.filter((id) => ds.moves[id]?.category !== 'Status' || (searchable(ds, id) && !supportBlocked(support, id)));
   const look = (opts.lookahead ?? 2) > 0 && !isDoubles
-    ? lookFor(ds, idx, snap, field, rules, { name: snap.player.name, calc: myCalc, moves: myLegal }, support.bench as BenchRow[], foe.mon.name, foeCalc, foeMoves, support.foesLeft ?? [], out.prediction, opts.lookahead, bossF && bossRules(bossF).hitMult)
+    ? lookFor(ds, idx, snap, field, rules, { name: snap.player.name, calc: myCalc, moves: myLegal, friendship: myFriend }, support.bench as BenchRow[], foe.mon.name, foeCalc, foeMoves, support.foesLeft ?? [], out.prediction, opts.lookahead, bossF && bossRules(bossF).hitMult)
     : undefined;
   if (look && out.threat) {
     const t = look.engine.threatOdds();
@@ -577,6 +588,7 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
   for (const r of snap.bench) {
     if (r.active || r.fainted || (r.hp ?? 1) <= 0) continue;
     const adv = switchAdvice(ds, idx, box, r, foeCalc, foeMoves, rules, field);
+    markSurvive(adv.threat, benchRows.find((b) => b.row === r)?.friendship, (r.hp ?? 2) > 1);
     if (look) applySwitchLook(adv, look, benchRows.findIndex((b) => b.row === r) + 1);
     out.actions.push(adv);
   }
@@ -590,18 +602,27 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
 }
 
 /** Your healthy bench as calc Pokémon with their legal attacks (later-Pokémon credit of support moves). */
-function benchFor(ds: Dataset, idx: Idx, box: BoxMon[], snap: BattleSnapshot, rules: BattleRules): BenchRow[] {
+function benchFor(ds: Dataset, idx: Idx, box: BoxMon[], snap: BattleSnapshot, rules: BattleRules, friendOn = false): BenchRow[] {
   const out: BenchRow[] = [];
   for (const r of snap.bench) {
     if (r.active || r.fainted || (r.hp ?? 1) <= 0) continue;
     const mine = mySet(idx, box, r, (r.moves ?? []).map((m) => m.name));
     if (!mine) continue;
-    out.push({ row: r, name: r.name, calc: applyState(boxToCalc(ds, mine.mon), r), moves: repeatable(movesForBox(ds, mine.mon).filter((id) => !rules.bannedMoves.has(id))) });
+    out.push({
+      row: r, name: r.name, calc: applyState(boxToCalc(ds, mine.mon), r), moves: repeatable(movesForBox(ds, mine.mon).filter((id) => !rules.bannedMoves.has(id))),
+      friendship: friendOn && mine.known ? mine.mon.friendship : undefined,
+    });
   }
   return out;
 }
 
-type BenchRow = BenchMon & { row: RosterMon };
+type BenchRow = BenchMon & { row: RosterMon; friendship?: number };
+
+/** Friendship survival on a threat (the UI shows it when the hit can KO; not when already at 1 HP: a guess). */
+function markSurvive(t: ThreatInfo | undefined, friendship: number | undefined, above1: boolean) {
+  const p = friendshipSurvival(friendship);
+  if (t && p > 0 && above1) t.survive = p;
+}
 
 /** The NPC's healthy Pokémon on its team bar (not the active one). */
 function npcBenchOf(ds: Dataset, idx: Idx, v: NpcTeamVariant | undefined, snap: BattleSnapshot) {
@@ -646,7 +667,7 @@ function lookFor(
   }
   const mine: LookMon[] = [
     { ...active, asDefender: defenderVsNpc(active.calc, rules) },
-    ...bench.map((b) => ({ name: b.name, calc: b.calc, asDefender: defenderVsNpc(b.calc, rules), moves: b.moves })),
+    ...bench.map((b) => ({ name: b.name, calc: b.calc, asDefender: defenderVsNpc(b.calc, rules), moves: b.moves, friendship: b.friendship })),
   ];
   const foes: LookMon[] = [{ name: foeName, calc: foeCalc, moves: repeatable(foeMoves) }, ...left.map((f) => ({ name: f.name, calc: f.calc, moves: repeatable(f.moves) }))];
   return runLookahead({

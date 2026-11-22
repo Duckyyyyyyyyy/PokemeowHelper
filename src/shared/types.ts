@@ -251,6 +251,8 @@ export interface BoxMon {
   shiny?: boolean;
   ivs?: Partial<StatTable>;
   evs?: Partial<StatTable>;
+  /** 0–255 from box sync (missing in older synced boxes = no Friendship effects). */
+  friendship?: number;
 }
 
 export interface BoxSyncMeta {
