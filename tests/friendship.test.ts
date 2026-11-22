@@ -58,6 +58,19 @@ describe('friendship: lookahead KO odds on you', () => {
   });
 });
 
+describe('friendship 255: their status moves lose 10 accuracy too', () => {
+  it('Thunder Wave (90) lands 90% → 80% (subtractive points, a guess)', () => {
+    const land = (f?: number) => {
+      const e = new Lookahead({ ds, mine: [L(machamp(), undefined, f)], foes: [F(npc('Snorlax', 50, ['thunderwave']))] });
+      const kids = (e as unknown as { act(s: unknown, side: 0 | 1, id: string, first: boolean): { p: number; s: { st: string[] } }[] }).act(e.root, 1, 'thunderwave', true);
+      return kids.filter((k) => k.s.st[0] === 'par').reduce((x, k) => x + k.p, 0);
+    };
+    expect(land()).toBeCloseTo(0.9, 5);
+    expect(land(254)).toBeCloseTo(0.9, 5);
+    expect(land(255)).toBeCloseTo(0.8, 5);
+  });
+});
+
 describe('friendship 255: your crit chance doubles', () => {
   it('1/24 → 1/12 on your hit, unchanged below 255 and for their hits', () => {
     const crit = (f?: number) => new Lookahead({ ds, mine: [L(machamp(), undefined, f)], foes: [F(npc('Snorlax', 50, ['bodyslam']))] }).hitOdds(0, 'brickbreak')!.crit;
@@ -116,6 +129,14 @@ describe('friendship in the Battle tab advice', () => {
     expect(a.notes.some((n) => /^Friendship 220: 15% to survive a KO hit at 1 HP/.test(n))).toBe(true);
     expect(a.threat?.survive).toBeCloseTo(0.15, 5);
     expect(a.threat?.koChance).toBeLessThan(0.9);
+  });
+
+  it('forced switch: the "Send in" row gets the survival chance of the Pokémon coming in', () => {
+    const base = snap('gym');
+    const s = { ...base, player: { ...base.player!, hp: 0 }, bench: [{ name: 'Snorlax', level: 50, hp: 30, maxHp: 200, active: false, fainted: false }] };
+    const b = [...box(), { ...mine('Snorlax', 50, ['bodyslam']), uid: 'snor', friendship: 255 }];
+    const row = adviseTurn(ds, s, b).actions.find((a) => a.kind === 'switch')!;
+    expect(row.threat?.survive).toBeCloseTo(0.2, 5);
   });
 
   it('nothing in a Player Battle or a World Boss battle', () => {
