@@ -12,6 +12,11 @@ describe('battle reader: live field status (Rain)', () => {
     expect(readField(arena)).toEqual({ weather: 'Rain', labels: ['Rain'] });
   });
 
+  it('reads Misty Terrain from its button ("Misty terrain", lowercase t), with no weather', () => {
+    document.body.innerHTML = readFileSync('tests/fixtures/battle/field-misty.live.html', 'utf8');
+    expect(readField(document.querySelector('.battle-arena')!)).toEqual({ terrain: 'Misty', labels: ['Misty terrain'] });
+  });
+
   it('falls back to the weather layer when the button is missing', () => {
     document.body.innerHTML = readFileSync('tests/fixtures/battle/field-rain.live.html', 'utf8');
     document.querySelector('.battle-field-status')!.remove();

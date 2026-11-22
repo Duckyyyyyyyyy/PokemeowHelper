@@ -13,7 +13,7 @@ Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing 
 
 ## ⬜ Planned (in order)
 
-0. **Game update catch-up (Nov 14–21 changes, Battle Simulator)**: Plan with workstreams and models: `docs/design/game-update-2026-11-plan.md`. Done in 0.13.0: Phase A (rules digest, data refresh, simulator export) and World Boss 2. Battle reader re-check (WS0) done on the League and Doubles saves, plus a wild battle and Rain read live 2026-11-22; World Boss still needed. Next: simulator golden tests (needs OK), then Friendship → field effects → NPC AI.
+0. **Game update catch-up (Nov 14–21 changes, Battle Simulator)**: Plan with workstreams and models: `docs/design/game-update-2026-11-plan.md`. Done in 0.13.0: Phase A (rules digest, data refresh, simulator export) and World Boss 2. Battle reader re-check (WS0) done on the League and Doubles saves, plus a wild battle, Rain and Misty Terrain read live 2026-11-22; World Boss still needed. Next: simulator golden tests (needs OK), then Friendship → field effects → NPC AI.
 1. Later: Chrome Web Store listing ($5 and a privacy policy), and Triples.
 
 ## 🔍 Needs real-game check
@@ -32,7 +32,7 @@ Claude reads the page through Claude in Chrome and the user plays. Tick an item 
 - [ ] Hunt list on a live wild encounter: CATCH with "On your hunt list for <NPC>" and the Explore "hunt:" marker
 - [ ] Battle tab "Hunt for a counter →" link (shows when nothing rates 45+ vs a known NPC; not seen in a live battle)
 - [ ] Replace the Brock fixture (`brock-turn3.reconstructed.html`) with a real Ctrl+S save (real Gym save `shauntal-forced-switch.html` added 2026-11-22, but it is a forced switch: no move buttons)
-- [ ] 2026-11 reader changes (WS0) not seen live yet: terrain buttons and a weather turn count (Rain confirmed live 2026-11-22, `field-rain.live.html`: button text "Rain", no turns shown); stat tags read from the multiplier text when no label (accuracy/evasion table); greyed-out moves (`data-unavailable`); Belly Drum / Anger Point "maximized" wording; numbers with commas in the log; ±N% chips and crit-stage tags (ignored); silhouette rows for unrevealed NPC Pokémon in the opponent roster; revealed-ability and item-boost log lines; the Healing / PP tabs with the bag panel open
+- [ ] 2026-11 reader changes (WS0) not seen live yet: a weather or terrain turn count, if the game ever shows one (Rain and Misty Terrain confirmed live 2026-11-22, `field-rain.live.html` / `field-misty.live.html`: button text "Rain" / "Misty terrain", no turns shown); stat tags read from the multiplier text when no label (accuracy/evasion table); greyed-out moves (`data-unavailable`); Belly Drum / Anger Point "maximized" wording; numbers with commas in the log; ±N% chips and crit-stage tags (ignored); silhouette rows for unrevealed NPC Pokémon in the opponent roster; revealed-ability and item-boost log lines; the Healing / PP tabs with the bag panel open
 - [ ] World Boss battle save (Ctrl+S) still missing: the World Boss battle reader is unchanged
 
 ## Known data gaps (not bugs)
