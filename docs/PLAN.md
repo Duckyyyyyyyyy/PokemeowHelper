@@ -1,6 +1,6 @@
 # MeowRPGAdvisor: Plan
 
-Current version: **0.14.0** · Details and history: `docs/archive/PLAN-v1.md` (Vietnamese; grep, don't read whole)
+Current version: **0.14.2** · Details and history: `docs/archive/PLAN-v1.md` (Vietnamese; grep, don't read whole)
 Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing · ⬜ planned
 
 ## ⏳ Ongoing
@@ -59,3 +59,5 @@ Claude reads the page through Claude in Chrome and the user plays. Tick an item 
 | 0.13.0 | World Boss (move picker, lobby reader, counter team) + World Boss 2 rules (2026-11 wiki), Hunt for NPC (catch suggestions, hunt list), evolutions in the data (schema 6: Sync again), League source-edition stats in the calc, copy for the wiki Battle Simulator |
 | 0.13.1 | Battle reader for the game's new screen: "2× Atk" stat tags, fainted image badge (forced switch, Doubles), numbers with commas, greyed-out moves, "maximized" log lines, weather/terrain read from the field buttons (unverified) |
 | 0.14.0 | Friendship (your side; trainer, League, Chamber, wild): 10/15/20% to survive a KO hit at 1 HP at 180/220/255, crit ×2 and −10 opponent accuracy at 255, read from Box Sync (press Box Sync once) |
+| 0.14.1 | Wild encounters always open on "Defeat it (EXP)" (the CATCH/FIGHT stamp still shows the verdict) |
+| 0.14.2 | World Boss lobby: boss build and "Moves this appearance" read from the live Next card ("GMAX Melmetal" matched to the wiki's Gigantamax name) |
