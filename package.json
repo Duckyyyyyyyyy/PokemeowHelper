@@ -1,7 +1,7 @@
 {
   "name": "meowrpgadvisor",
   "private": true,
-  "version": "0.14.4",
+  "version": "0.15.0",
   "type": "module",
   "description": "MeowRPGAdvisor – advisory battle helper for PokeMeowRPG (Chrome side panel extension)",
   "scripts": {
