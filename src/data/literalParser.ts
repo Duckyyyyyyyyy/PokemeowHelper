@@ -13,6 +13,19 @@ export function parseDataModule(source: string): unknown {
   return evalLiteral(decl.declarations[0].init);
 }
 
+/**
+ * Every declarator of the module's first declaration (`const e={…},d={…};function a(p){…}`), as plain
+ * values by name. Same literal-only rules: the rest of the module (functions, exports) is ignored, never run.
+ */
+export function parseDataDeclarations(source: string): Record<string, unknown> {
+  const program = parse(source, { ecmaVersion: 'latest', sourceType: 'module' }) as any;
+  const decl = program.body.find((n: any) => n.type === 'VariableDeclaration');
+  if (!decl) throw new Error('No data declaration found in the wiki module.');
+  const out: Record<string, unknown> = {};
+  for (const d of decl.declarations) if (d.id.type === 'Identifier' && d.init) out[d.id.name] = evalLiteral(d.init);
+  return out;
+}
+
 function evalLiteral(node: any): unknown {
   switch (node.type) {
     case 'ObjectExpression': {

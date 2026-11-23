@@ -37,6 +37,8 @@ export interface Species {
   spawnRequirement?: string | null;
   /** Supported evolutions out of this species (schema 6+). `level` = minimum level when the method is "Level N or higher". */
   evolvesTo?: { to: number; methods: string[]; level?: number }[];
+  /** EVs it gives when defeated or caught in battle (schema 7+, from the wiki's EV Training data; missing = unknown). */
+  evYield?: StatTable;
 }
 
 /** One wild encounter row of an explore map (rows with the same species + method are merged). */
@@ -168,7 +170,7 @@ export interface Npc {
 }
 
 /** Bump when normalize() output changes, so cached data is rebuilt on next sync. */
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export interface Dataset {
   /** `${SCHEMA_VERSION}:${hashed wiki data file name}` – changes on every game deploy or schema change. */
