@@ -1,4 +1,4 @@
-import { DEFAULT_BOUNDS, MODE_KEY, WINDOW_BOUNDS_KEY, isGameUrl, normalizeMode, sanitizeBounds, type UiMode } from '../shared/uiMode';
+import { DEFAULT_BOUNDS, MODE_KEY, WINDOW_BOUNDS_KEY, isGameUrl, normalizeMode, retryNoSw, sanitizeBounds, type UiMode } from '../shared/uiMode';
 
 // The toolbar icon either opens a small standalone window (default) or a side panel that is only enabled on
 // pokemeowrpg.com tabs. Live data does not depend on which tab is active: the content script writes to
@@ -57,8 +57,9 @@ function rememberBounds(windowId: number) {
   }, 400);
 }
 
-chrome.runtime.onInstalled.addListener(() => applyMode().catch(log));
-chrome.runtime.onStartup.addListener(() => applyMode().catch(log));
+// Right after an install or update Chrome may answer "No SW" to the side panel calls: retry briefly.
+chrome.runtime.onInstalled.addListener(() => retryNoSw(applyMode).catch(log));
+chrome.runtime.onStartup.addListener(() => retryNoSw(applyMode).catch(log));
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes[MODE_KEY]) applyMode().catch(log);
 });

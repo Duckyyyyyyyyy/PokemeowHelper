@@ -49,3 +49,18 @@ export function sanitizeBounds(v: unknown): WindowBounds {
   }
   return out;
 }
+
+/**
+ * Runs `fn`, retrying while Chrome answers "No SW": right after an install or update the side panel API
+ * can be called before Chrome has finished registering the service worker. Other errors are thrown at once.
+ */
+export async function retryNoSw<T>(fn: () => Promise<T>, tries = 4, delayMs = 500, wait = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<T> {
+  for (let i = 1; ; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (i >= tries || !/No SW/i.test(e instanceof Error ? e.message : String(e))) throw e;
+      await wait(delayMs * i);
+    }
+  }
+}
