@@ -53,6 +53,8 @@ function find(snap: BattleSnapshot, side: 'player' | 'opponent', name?: string):
 
 export function checkEvent(ds: Dataset, box: BoxMon[], before: BattleSnapshot, ev: BattleEvent): DamageCheck | null {
   if (ev.damage === undefined || ev.missed || ev.unusual || !ev.target) return null;
+  // World Boss: your hits are 125x and capped, its hits are cut 55-70%; the log is not ordinary damage.
+  if (before.kind === 'world-boss') return null;
   const idx = indexes(ds);
   const move = idx.moves.get(lc(ev.move));
   if (!move || move.category === 'Status') return null;

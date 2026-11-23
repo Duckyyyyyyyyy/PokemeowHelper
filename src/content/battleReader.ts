@@ -53,6 +53,18 @@ export const SEL = {
   positionLabel: '.double-position-label',
   /** "Choose for Slowbro · Position 1" above the moves of the position being chosen. */
   commandHeading: '.double-command-heading',
+  /**
+   * World Boss raid screen (seen live 2026-11-23, tests/fixtures/worldboss/raid-turn1.live.html): no
+   * `.battle-arena`. The boss is in `section.world-boss-hero` (name, "5,929,910 / 10,000,000 HP", status,
+   * `.world-boss-stages` stat tags); your side is `.world-boss-combat` with the usual `.battle-combatant-player`,
+   * move buttons, switch cards and battle log.
+   */
+  bossHero: 'section.world-boss-hero',
+  bossCombat: '.world-boss-combat',
+  bossName: 'h2 [class^="pokemon-name"], h2 .world-boss-next-name, h2',
+  bossHp: '.world-boss-hp-count',
+  bossStages: '.world-boss-stages',
+  playerCombatant: '.battle-combatant-player',
 } as const;
 
 /** Seen live (Drake, 2026-11-18) after your Pokémon fainted. Matched as text: its markup is not known yet. */
@@ -325,13 +337,20 @@ export function parseBoostLine(text: string, who: Who = {}): { side: 'player' | 
 export function switchSide(text: string): 'player' | 'opponent' | null {
   if (/^Go,\s/i.test(text)) return 'player';
   if (/\bsent out\b/i.test(text)) return 'opponent';
+  if (WORLD_BOSS_IN.test(text)) return 'opponent';
   return null;
 }
 
-/** Name of the Pokémon sent in: "Go, Turtwig!" / "Brock sent out Onix!" */
+/** Name of the Pokémon sent in: "Go, Turtwig!" / "Brock sent out Onix!" / "World Boss GMAX Rillaboom appeared!" */
 export function switchedIn(text: string): string | undefined {
-  return (text.match(/^Go,\s+(.+?)!/i) ?? text.match(/\bsent out\s+(.+?)!/i))?.[1]?.trim();
+  return (text.match(/^Go,\s+(.+?)!/i) ?? text.match(/\bsent out\s+(.+?)!/i) ?? text.match(WORLD_BOSS_IN))?.[1]?.trim();
 }
+
+/** "World Boss GMAX Rillaboom appeared!" (World Boss log, seen live 2026-11-23). */
+const WORLD_BOSS_IN = /^World Boss\s+(.+?)\s+appeared!/i;
+
+/** The raid screen says "GMAX Rillaboom"; the wiki data (and so the NPC) says "Gigantamax Rillaboom". */
+export const wikiBossName = (s: string) => s.replace(/(^|\s)G-?MAX\s+(?=\S)/g, '$1Gigantamax ');
 
 /** Who is battling: the opponent trainer's name and each side's active Pokémon (from the log so far). */
 export interface Who {
@@ -505,14 +524,14 @@ export function parseLog(lines: LogLine[], trainer?: string): { boosts: BattleSn
   return { boosts, events, monBoosts };
 }
 
-function readLog(doc: ParentNode, trainer?: string): { lines: string[]; boosts: BattleSnapshot['boosts']; events: BattleEvent[]; monBoosts: Record<string, Boosts> } {
+function readLog(doc: ParentNode, trainer?: string, fix: (s: string) => string = (s) => s): { lines: string[]; boosts: BattleSnapshot['boosts']; events: BattleEvent[]; monBoosts: Record<string, Boosts> } {
   let turn: number | undefined;
   const lines: LogLine[] = [...doc.querySelectorAll(SEL.logLine)].map((li) => {
     const label = li.querySelector(SEL.logTurn)?.textContent ?? '';
     const t = label.match(/Turn (\d+)/i);
     if (t) turn = parseInt(t[1], 10);
     // Gender is shown as text after the name ("CottoneeFemale"); drop it so lines read naturally.
-    return { text: clean((li.textContent ?? '').replace(label, '')).replace(/(\S)(Male|Female)\b/g, '$1'), turn };
+    return { text: fix(clean((li.textContent ?? '').replace(label, '')).replace(/(\S)(Male|Female)\b/g, '$1')), turn };
   });
   const { boosts, events, monBoosts } = parseLog(lines, trainer);
   return { lines: lines.slice(-12).map((l) => l.text), boosts, events: events.slice(-80), monBoosts };
@@ -608,9 +627,65 @@ export function readField(arena: ParentNode): BattleField | undefined {
   return Object.keys(out).length ? out : undefined;
 }
 
+/** Stat stages from the Showdown-style tags inside `root` ("Attack +2"), or undefined. */
+function tagStages(root: Element | null): Boosts | undefined {
+  if (!root) return undefined;
+  const changes = [...root.querySelectorAll(SEL.statChange)].map((t) => t.getAttribute('aria-label') || t.getAttribute('title') || t.textContent || '').join(', ');
+  const st = changes ? parseStatChanges(changes) : undefined;
+  return st && Object.keys(st).length ? st : undefined;
+}
+
+/**
+ * World Boss raid screen (seen live 2026-11-23). Your side reads like any battle; the boss comes from its
+ * hero panel: name ("GMAX X" → the wiki's "Gigantamax X"), shared HP, status and stat stages. No level is shown.
+ */
+function readWorldBoss(doc: ParentNode, now: number): BattleSnapshot | null {
+  const hero = doc.querySelector(SEL.bossHero);
+  const combat = doc.querySelector(SEL.bossCombat);
+  if (!hero || !combat) return null;
+  const name = wikiBossName(clean(hero.querySelector(SEL.bossName)?.textContent));
+  const log = readLog(combat, undefined, wikiBossName);
+  const playerRoot = combat.querySelector(SEL.playerCombatant);
+  const player = readCombatant(playerRoot);
+  const stages = tagStages(hero.querySelector(SEL.bossStages));
+  const status = hero.querySelector(SEL.status)?.getAttribute('data-status') || undefined;
+  // The shared HP counts down smoothly (many DOM changes a second): round it to 1% steps so the snapshot,
+  // and the advice computed from it, only change when it really moved.
+  const hp = parseHp(clean(hero.querySelector(SEL.bossHp)?.textContent));
+  if (hp.hp !== undefined && hp.maxHp) hp.hp = Math.round((hp.hp / hp.maxHp) * 100) * (hp.maxHp / 100);
+  const opponent: BattleMon | undefined = name
+    ? { name, ...hp, ...(status ? { status } : {}), ...(stages ? { stages } : {}) }
+    : undefined;
+  const bench = readBench(combat);
+  const forcedSwitch = (!!player && hasFntBadge(playerRoot)) || hasNextPrompt(combat) || activeFainted({ player, bench } as BattleSnapshot);
+  const bag = readBattleBag(combat);
+  const field = readField(combat.parentElement ?? combat);
+  const turns = [...combat.querySelectorAll(SEL.logTurn)].map((t) => t.textContent?.match(/Turn (\d+)/i)?.[1]).filter(Boolean);
+  return {
+    v: 2,
+    at: now,
+    status: 'active',
+    kind: 'world-boss',
+    opponentName: name || undefined,
+    turn: num(turns[turns.length - 1]),
+    player,
+    opponent,
+    moves: readMoves(combat),
+    bench,
+    opponentTeam: [],
+    boosts: { player: player?.stages ?? log.boosts.player, opponent: stages ?? log.boosts.opponent },
+    log: log.lines,
+    events: log.events,
+    ...(forcedSwitch ? { forcedSwitch: true } : {}),
+    ...(bag ? { bag } : {}),
+    sides: { player: 1, opponent: 1 },
+    ...(field ? { field } : {}),
+  };
+}
+
 export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | null {
   const arena = doc.querySelector(SEL.arena);
-  if (!arena) return null;
+  if (!arena) return readWorldBoss(doc, now);
   const log = readLog(arena, clean(arena.querySelector(SEL.opponentName)?.textContent) || undefined);
   const myActives = readActives(arena.querySelector(SEL.playerStats));
   const theirActives = readActives(arena.querySelector(SEL.opponentStats));
