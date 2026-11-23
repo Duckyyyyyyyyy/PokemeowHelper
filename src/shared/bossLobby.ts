@@ -2,10 +2,11 @@
  * The World Boss page (sidebar → Battling → "World Boss Battles"), as read by the content script
  * (chrome.storage.local "mdBossLobby"). Plain JSON.
  *
- * UNVERIFIED LIVE: the shape comes from the game's WorldBossBattles chunk (class names and the
- * order of its elements, read 2026-11-20), not from a page seen open. Tests use a fixture built
- * from those class names.
- *  - "Next scheduled boss" card: section.world-boss-next (name button, types, <time>, countdown).
+ * The "Next Scheduled Boss" card was checked live on 2026-11-23 (tests/fixtures/worldboss/next-card.live.html):
+ * section.world-boss-next with the name button ("GMAX Melmetal", form icon span.pokemon-name-gmax), types,
+ * <time datetime>, countdown, and .world-boss-next-build holding the same facts and "Moves this appearance"
+ * list as the dialog (move name in button.world-boss-info-move, category in an aria-label).
+ * The details dialog below is still UNVERIFIED (reconstructed from the game's WorldBossBattles chunk).
  *  - The boss details dialog (opened from the next boss's name or a schedule row's "About this
  *    boss"): .world-boss-schedule-info with Level / Ability / Nature and, when the game has them,
  *    "Moves this appearance" (ul.world-boss-info-moves). Otherwise it says the moves are confirmed

@@ -253,6 +253,45 @@ describe('World Boss lobby → selected moves', () => {
   });
 });
 
+/* ---------------- live page: the Next card carries the build (2026-11-23) ---------------- */
+
+const liveHtml = readFileSync(resolve(__dirname, 'fixtures/worldboss/next-card.live.html'), 'utf8');
+const melPool = ['darkestlariat', 'thunderpunch', 'superpower', 'solarbeam', 'earthquake', 'icepunch', 'selfdestruct', 'rockslide', 'steelroller'];
+const melmetal: Npc = {
+  ...venu, id: 'boss:melmetal-gmax', name: 'Gigantamax Melmetal',
+  variants: [{ ...v, team: [{ ...boss, name: 'Gigantamax Melmetal', moves: melPool }] }],
+};
+const ds3: Dataset = {
+  ...ds, npcs: [...ds.npcs, melmetal],
+  moves: { ...ds.moves, steelroller: { ...ds.moves.earthpower, id: 'steelroller', name: 'Steel Roller' }, superpower: { ...ds.moves.earthpower, id: 'superpower', name: 'Superpower' }, solarbeam: { ...ds.moves.earthpower, id: 'solarbeam', name: 'Solar Beam' }, selfdestruct: { ...ds.moves.earthpower, id: 'selfdestruct', name: 'Self-Destruct' } },
+};
+
+describe('World Boss page reader (live Next card)', () => {
+  const read = readBossLobby(load(liveHtml), 5)!;
+
+  it('reads the next boss without the "GMAX" prefix, with its form', () => {
+    expect(read.next).toEqual({ name: 'Melmetal', form: 'gmax', types: ['Steel'], startsAt: '2026-11-23T05:00:00.000Z', staff: undefined });
+  });
+
+  it('reads the build from the card (no dialog open): facts, moves, categories', () => {
+    expect(read.build).toMatchObject({ name: 'Melmetal', form: 'gmax', level: 100, ability: 'Iron Fist', nature: 'Hardy', at: 5 });
+    expect(read.build!.moves).toEqual([
+      { name: 'Steel Roller', type: 'Steel', category: 'Physical' },
+      { name: 'Superpower', type: 'Fighting', category: 'Physical' },
+      { name: 'Solar Beam', type: 'Grass', category: 'Special' },
+      { name: 'Self-Destruct', type: 'Normal', category: 'Physical' },
+    ]);
+  });
+
+  it('matches the wiki boss "Gigantamax Melmetal" and pre-selects the four moves for the next spawn', () => {
+    const lobby = mergeBossLobby(null, read, 1000);
+    const m = lobbyMovesFor(ds3, melmetal, lobby)!;
+    expect(m.ids).toEqual(['steelroller', 'superpower', 'solarbeam', 'selfdestruct']);
+    expect(m.unknown).toEqual([]);
+    expect(m.isNext).toBe(true);
+  });
+});
+
 describe('World Boss moves handed to the Battle tab', () => {
   const snap: BattleSnapshot = {
     v: 2, at: 1, status: 'active', kind: 'world-boss', turn: 1, opponentName: 'Gigantamax Venusaur',

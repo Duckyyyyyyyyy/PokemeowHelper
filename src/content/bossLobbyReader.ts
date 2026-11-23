@@ -1,8 +1,9 @@
 import { bossKey, type BossBuild, type BossLobbySnapshot, type BossNext } from '../shared/bossLobby';
 
 /**
- * Reads the World Boss page (READ-ONLY). See shared/bossLobby.ts: the selectors come from the game's
- * WorldBossBattles code and are not yet checked against a live page.
+ * Reads the World Boss page (READ-ONLY). See shared/bossLobby.ts. The "Next Scheduled Boss" card was
+ * checked live on 2026-11-23 (tests/fixtures/worldboss/next-card.live.html): it shows "GMAX Melmetal" and
+ * its build (facts + "Moves this appearance") in the card itself. The details dialog is still unverified.
  */
 
 const txt = (el: Element | null | undefined) => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
@@ -30,29 +31,41 @@ function formIn(root: Element | null): string | undefined {
   return undefined;
 }
 
+/** "GMAX Melmetal" → "Melmetal" once the form is known (the wiki calls it "Gigantamax Melmetal"). */
+const bareName = (name: string, form: string | undefined) =>
+  form ? name.replace(/^(?:g-?max|gigantamax|eternamax)\s+/i, '') : name;
+
 function readNext(doc: Document): BossNext | undefined {
   const sec = doc.querySelector('section.world-boss-next');
   if (!sec) return undefined;
   const identity = sec.querySelector('.world-boss-next-identity');
   const nameEl = sec.querySelector('.world-boss-next-name') ?? identity?.querySelector('h3');
-  const name = txt(nameEl);
+  const form = formIn(identity);
+  const name = bareName(txt(nameEl), form);
   if (!name) return undefined;
   const time = sec.querySelector('time[datetime]')?.getAttribute('datetime') ?? undefined;
   return {
     name,
-    form: formIn(identity),
+    form,
     types: typesIn(identity),
     startsAt: time || undefined,
     staff: sec.getAttribute('data-staff') === 'true' || undefined,
   };
 }
 
-/** The boss details dialog (one at a time), with its moves when the game lists them. */
+/**
+ * A boss build: from the details dialog when one is open, else from the Next card (live page: the card
+ * lists Level / Ability / Nature and "Moves this appearance" itself).
+ */
 function readBuild(doc: Document, at: number): BossBuild | undefined {
-  const info = doc.querySelector('.world-boss-schedule-info');
+  const dialog = doc.querySelector('.world-boss-schedule-info');
+  const card = doc.querySelector('section.world-boss-next');
+  const info = dialog ?? card?.querySelector('.world-boss-next-build');
   if (!info) return undefined;
-  const identity = info.querySelector('.world-boss-detail-identity');
-  const name = txt(identity?.querySelector('h3'));
+  const identity = dialog ? dialog.querySelector('.world-boss-detail-identity') : card!.querySelector('.world-boss-next-identity');
+  const form = formIn(identity);
+  const nameEl = dialog ? identity?.querySelector('h3') : card!.querySelector('.world-boss-next-name') ?? identity?.querySelector('h3');
+  const name = bareName(txt(nameEl), form);
   if (!name) return undefined;
   const facts: Record<string, string> = {};
   for (const row of info.querySelectorAll('dl.world-boss-info-facts > div')) {
@@ -64,18 +77,19 @@ function readBuild(doc: Document, at: number): BossBuild | undefined {
     ? [...list.querySelectorAll('li')].map((li) => {
         const t = li.querySelector('.type');
         const cls = t ? [...t.classList].find((c) => /^type-[a-z]+$/.test(c)) : undefined;
+        const catEl = li.querySelector('.world-boss-info-move-category');
         return {
-          name: txt(li.querySelector('strong')),
+          name: txt(li.querySelector('.world-boss-info-move, strong')),
           type: cls ? cap(cls.slice(5)) : txt(t) ? cap(txt(t)) : undefined,
-          category: txt(li.querySelector('small')) || undefined,
+          category: catEl?.getAttribute('aria-label') || txt(li.querySelector('small')) || undefined,
         };
       }).filter((m) => m.name)
     : [];
   const level = Number((facts.level ?? '').replace(/[^\d]/g, ''));
-  const notes = [...info.querySelectorAll('.world-boss-note')].map(txt).join(' ');
+  const notes = [...(dialog ?? card!).querySelectorAll('.world-boss-note')].map(txt).join(' ');
   return {
     name,
-    form: formIn(identity),
+    form,
     types: typesIn(identity),
     level: level > 0 ? level : undefined,
     ability: facts.ability || undefined,

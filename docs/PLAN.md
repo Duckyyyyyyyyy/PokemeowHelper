@@ -9,7 +9,7 @@ Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing 
 - 🔶 **World Boss**: per-spawn move picker, lobby reader, counter team (Prep). Released in 0.13.0, not checked in a real raid yet.
   - World Boss 2 (2026-11 wiki rules, WS1): 10M HP fallback (Eternamax 100M), 125x with a 50k cap per action (350k), Max Barrier, drain cut by phase, Encore/Leech Seed/Salt Cure fail, very heavy, boss boost cap, Eternamax Overdrive, loot tiers in Prep.
   - Gap resolved: Battle and Prep share one rule (`bossRules`/`bossAttackDs` in worldBoss.ts: Max Moves only for GMAX/Eternamax, 55%/70% cut). The Battle tab cuts every row: threat, likely moves, the 2–3-turn plan and switch-ins (`foeHitMult` in lookahead.ts).
-  - Lobby fixture is unverified. Archive: "World Boss".
+  - Lobby Next card confirmed live (2026-11-23); the details dialog fixture is still unverified. Archive: "World Boss".
 
 ## ⬜ Planned (in order)
 
@@ -20,7 +20,7 @@ Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing 
 
 Claude reads the page through Claude in Chrome and the user plays. Tick an item or remove it when confirmed.
 
-- [ ] World Boss lobby selectors (`tests/fixtures/worldboss/lobby.unverified.html`) and the battle `kind`/boss name
+- [ ] World Boss lobby: the Next card was confirmed live 2026-11-23 (`next-card.live.html`: "GMAX Melmetal", build and moves shown in the card, name matched to the wiki's "Gigantamax Melmetal"). Still unverified: the details dialog (`lobby.unverified.html`), Eternamax naming on the card, a staff-summoned card, and the battle `kind`/boss name
 - [ ] World Boss in a real raid: Max Moves only for GMAX/Eternamax (name test), barrier ramp (straight line 20%→100% is a guess), order 125x → Overdrive → barrier → cap, Overdrive stacked on top of the normal stage boost, drain cut phases (75%/40% HP), loot tiers
 - [ ] Battle Frontier battle: `data-kind`, Brain name, Gen III damage vs Calc check
 - [ ] Battle Tower: opponent name, fainted roster, reserve PP
