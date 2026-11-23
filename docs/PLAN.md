@@ -1,6 +1,6 @@
 # MeowRPGAdvisor: Plan
 
-Current version: **0.15.0** · Details and history: `docs/archive/PLAN-v1.md` (Vietnamese; grep, don't read whole)
+Current version: **0.15.1** · Details and history: `docs/archive/PLAN-v1.md` (Vietnamese; grep, don't read whole)
 Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing · ⬜ planned
 
 ## ⏳ Ongoing
@@ -68,3 +68,4 @@ Claude reads the page through Claude in Chrome and the user plays. Tick an item 
 | 0.14.3 | World Boss (changelog Nov 22–23): cap per action by effectiveness (50k / 25k / 12.5k; Eternamax 350k / 175k / 87.5k), counter team picks by the capped number, loot tiers 75k / 150k / 300k / 600k, 10 s idle attack, Eternamax crowd note |
 | 0.14.4 | World Boss raids in the Battle tab: battle reader for the raid screen (boss panel, GMAX → Gigantamax name, shared HP, status, stages), Max Moves in the log count as the boss's own moves, no damage check on raid hits |
 | 0.15.0 | Prep → Team: Grind levels per member, Grind plan for the team, EV advice (best 252/252 spread vs the NPC, what to raise/lower, where to farm: vitamins, Power items, wild Pokémon, NPC rematches, EV training accounts). EV yields from Sync (schema 7: press Sync data once) |
+| 0.15.1 | Fix for the "No SW" error after installing or updating (the side panel setup retries until Chrome has registered the background worker) |
