@@ -26,6 +26,7 @@ import { BossCounter } from '../components/WorldBoss';
 import { leadPairs } from '../../engine/leadPairs';
 import { boxToShowdown, npcToShowdown, toShowdownTeam } from '../../engine/showdownExport';
 import { SimExport } from '../components/SimExport';
+import { GrindPlanCard, LadderPanel } from '../components/GrindLadder';
 
 /** Battle Frontier entry problems: who can't enter, what changes under Gen III rules, item clause. */
 function FrontierNotes({ ds, team, entries, blocked, ownTeam }: { ds: Dataset; team: BoxMon[]; entries: Map<string, { blocking: string[]; notes: string[] }>; blocked: string[]; ownTeam: boolean }) {
@@ -134,6 +135,9 @@ function Suggestion({ ds: base, part }: { ds: Dataset; part: 'team' | 'hunt' }) 
   const name = (c: Candidate) => ds.species[c.mon.species]?.name ?? '?';
   const [cell, setCell] = useState<{ j: number; uid: string } | null>(null);
   const [movesFor, setMovesFor] = useState<string | null>(null);
+  const [grindFor, setGrindFor] = useState<string | null>(null);
+  // Grind levels: not for the Battle Frontier (fixed levels) or World Bosses (a damage race, see Prep's counter team).
+  const showGrind = !facility && !(npc && isWorldBoss(npc));
   const [allRows, setAllRows] = useState(false);
 
   return (
@@ -215,8 +219,17 @@ function Suggestion({ ds: base, part }: { ds: Dataset; part: 'team' | 'hunt' }) 
                     <button class="link small" onClick={() => setMovesFor(movesFor === c.mon.uid ? null : c.mon.uid)} aria-expanded={movesFor === c.mon.uid}>
                       {movesFor === c.mon.uid ? 'Hide move advice' : 'Best moves for this fight →'}
                     </button>
+                    {showGrind && (
+                      <>
+                        {' · '}
+                        <button class="link small" onClick={() => setGrindFor(grindFor === c.mon.uid ? null : c.mon.uid)} aria-expanded={grindFor === c.mon.uid}>
+                          {grindFor === c.mon.uid ? 'Hide grind levels' : 'Grind levels →'}
+                        </button>
+                      </>
+                    )}
                   </div>
                   {movesFor === c.mon.uid && <div class="full"><MovesetPanel ds={ds} mon={c.mon} v={v} rules={rules} /></div>}
+                  {showGrind && grindFor === c.mon.uid && <div class="full"><LadderPanel ds={ds} v={v} rules={rules} tower={tower} c={c} wins={c.pairs.filter((p) => outcomeOf(p, tower) === 'win').length} /></div>}
                 </div>
               );
             })}
@@ -235,6 +248,7 @@ function Suggestion({ ds: base, part }: { ds: Dataset; part: 'team' | 'hunt' }) 
             <div class="small muted" style={{ marginTop: '4px' }}>Lock keeps a Pokémon on the team · ✕ never suggests it · tap a bench name to lock it in.</div>
             <div class="small muted">{held ? '🎒 Held items: from your bag, one each. Damage items use the calc; the rest are rules of thumb.' : '🎒 Open your Bag page in the game once to get held item advice from what you own.'}</div>
           </div>
+          {showGrind && res.team.length > 0 && <GrindPlanCard ds={ds} v={v} rules={rules} tower={tower} team={res.team} />}
           {lockedOut.length > 0 && (
             <Tip kind="warn">Locked but not on the team: {lockedOut.map((c) => `${name(c)} (${c.reason ?? 'team is full'})`).join(', ')}</Tip>
           )}
