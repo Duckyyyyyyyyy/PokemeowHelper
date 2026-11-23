@@ -192,6 +192,21 @@ export function maxMoveName(mv: Pick<Move, 'type' | 'category'>): string {
   return mv.category === 'Status' ? 'Max Guard' : MAX_NAMES[mv.type] ?? 'Max Move';
 }
 
+/**
+ * A Max Move the battle log names ("Max Flutterby", "G-Max Meltdown") → the moves in `pool` it can come
+ * from (attacks of the same type). Null when the name is not a Max Move. Max Guard → [] (any status move).
+ */
+export function baseMovesForMax(ds: Dataset, logged: string, pool: readonly string[]): string[] | null {
+  const name = logged.trim();
+  if (!/^(?:g-)?max\s/i.test(name)) return null;
+  if (/^max guard$/i.test(name)) return [];
+  const key = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const type = Object.entries(MAX_NAMES).find(([, n]) => n.toLowerCase().replace(/[^a-z0-9]/g, '') === key)?.[0]
+    ?? Object.values(ds.moves).find((m) => m.name.toLowerCase().replace(/[^a-z0-9]/g, '') === key)?.type;
+  if (!type) return null;
+  return pool.filter((id) => ds.moves[id] && ds.moves[id].category !== 'Status' && ds.moves[id].type === type);
+}
+
 /** Mainline Gen 8 Max Move power from the base move's power (assumption: the game follows it). */
 export function maxMovePower(mv: Pick<Move, 'type' | 'power'>): number {
   const weak = mv.type === 'Fighting' || mv.type === 'Poison';

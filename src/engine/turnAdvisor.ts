@@ -12,7 +12,7 @@ import { fieldFromLog, rateSupport, supportBlocked, supportEffect, type BenchMon
 import { runLookahead, searchable, setupScore, type LookMon, type Lookahead, type RootValue } from './lookahead';
 import { fxNotes } from './moveEffects';
 import { friendshipApplies, friendshipNote, friendshipSurvival } from './friendship';
-import { asHeavyBoss, bossAttackDs, bossFormOf, bossRules, bossVariant, capBossBoosts, cutBossHit, isWorldBoss } from './worldBoss';
+import { asHeavyBoss, baseMovesForMax, bossAttackDs, bossFormOf, bossRules, bossVariant, capBossBoosts, cutBossHit, isWorldBoss } from './worldBoss';
 
 export { accuracyStageMul, battleSpeed };
 
@@ -274,7 +274,20 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
     return out;
   }
 
-  const sinceInIds = sinceIn(snap, 'opponent', snap.opponent.name).map((e) => idx.moves.get(lc(e.move))?.id).filter((x): x is string => !!x);
+  // World Boss: the log names its Max Moves ("Max Flutterby"): count them as the boss's own moves of that
+  // type, from this appearance's set first, else its whole pool.
+  const bossMatch = match && isWorldBoss(match.npc) ? match : undefined;
+  const foeMoveIds = (name: string): string[] => {
+    if (bossMatch) {
+      const inSet = baseMovesForMax(ds, name, bossMatch.variant.team[0]?.moves ?? []);
+      if (inSet?.length) return inSet;
+      const inPool = baseMovesForMax(ds, name, bossMatch.npc.variants[0]?.team[0]?.moves ?? []);
+      if (inPool) return inPool;
+    }
+    const id = idx.moves.get(lc(name))?.id;
+    return id ? [id] : [];
+  };
+  const sinceInIds = sinceIn(snap, 'opponent', snap.opponent.name).flatMap((e) => foeMoveIds(e.move));
   const foe = foeSet(ds, idx, match?.variant, snap.opponent, { roster: snap.opponentTeam, used: sinceInIds });
   out.foe = foe;
   if (!foe) {
@@ -285,8 +298,7 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
   // A move since it came in is certainly its own; earlier uses by the same name may be a twin's.
   const usedThisBattle = [...new Set([...sinceInIds, ...seenFor((snap.events ?? [])
     .filter((e) => e.side === 'opponent' && lc(e.mon) === lc(foe.mon.name))
-    .map((e) => idx.moves.get(lc(e.move))?.id)
-    .filter((x): x is string => !!x), foe.mon, match?.variant.team ?? [])])];
+    .flatMap((e) => foeMoveIds(e.move)), foe.mon, match?.variant.team ?? [])])];
   // Moves it used in earlier battles against this trainer + team (battle-observed).
   // Two of the same species and level share one record: keep only what fits this one (seenFor).
   const team = match?.variant.team ?? [];

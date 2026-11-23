@@ -61,7 +61,10 @@ export const SEL = {
    */
   bossHero: 'section.world-boss-hero',
   bossCombat: '.world-boss-combat',
-  bossName: 'h2 [class^="pokemon-name"], h2 .world-boss-next-name, h2',
+  /** The name button's text ("GMAX Rillaboom"); its first child is an empty `svg.pokemon-name-icon`. */
+  bossName: 'h2 .world-boss-next-name, h2',
+  /** Boss status icon: only in the heading (the arena ring shows other trainers' Pokémon). */
+  bossStatus: '.world-boss-hero-heading [data-status]',
   bossHp: '.world-boss-hp-count',
   bossStages: '.world-boss-stages',
   playerCombatant: '.battle-combatant-player',
@@ -648,7 +651,7 @@ function readWorldBoss(doc: ParentNode, now: number): BattleSnapshot | null {
   const playerRoot = combat.querySelector(SEL.playerCombatant);
   const player = readCombatant(playerRoot);
   const stages = tagStages(hero.querySelector(SEL.bossStages));
-  const status = hero.querySelector(SEL.status)?.getAttribute('data-status') || undefined;
+  const status = hero.querySelector(SEL.bossStatus)?.getAttribute('data-status') || undefined;
   // The shared HP counts down smoothly (many DOM changes a second): round it to 1% steps so the snapshot,
   // and the advice computed from it, only change when it really moved.
   const hp = parseHp(clean(hero.querySelector(SEL.bossHp)?.textContent));

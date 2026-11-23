@@ -8,6 +8,7 @@ import type { BoxMon, Dataset } from '../src/shared/types';
 import { readBattle, wikiBossName } from '../src/content/battleReader';
 import { adviseTurn, matchNpc } from '../src/engine/turnAdvisor';
 import { checkEvent } from '../src/engine/damageCheck';
+import { baseMovesForMax } from '../src/engine/worldBoss';
 
 const html = readFileSync(resolve(__dirname, 'fixtures/worldboss/raid-turn1.live.html'), 'utf8');
 const load = (markup: string) => {
@@ -64,6 +65,21 @@ describe('World Boss raid → Battle tab advice', () => {
     expect(a.npc?.name).toBe('Gigantamax Venusaur');
     expect(a.actions.length).toBeGreaterThan(0);
     expect(a.actions[0].moveId).toBe('flamethrower');
+  });
+
+  it('a logged Max Move counts as the boss’s own move of that type, not an extra threat', () => {
+    const venu = ds.npcs.find((n) => n.name === 'Gigantamax Venusaur')!;
+    const pool = venu.variants[0].team[0].moves;
+    expect(baseMovesForMax(ds, 'Max Flutterby', pool)).toEqual(['furycutter']);
+    expect(baseMovesForMax(ds, 'Max Guard', pool)).toEqual([]);
+    expect(baseMovesForMax(ds, 'Flamethrower', pool)).toBeNull();
+    const a = adviseTurn(ds, snap, box, { lookahead: 0 });
+    expect(a.notes.join(' ')).not.toMatch(/Max Flutterby/);
+    expect(a.prediction!.map((g) => g.moveId)).not.toContain('maxflutterby');
+    // Picked set without its Bug move: Fury Cutter (from the pool) is the out-of-set move, by its real name.
+    const picked = adviseTurn(ds, snap, box, { lookahead: 0, bossMoves: { [venu.id]: ['knockoff', 'outrage', 'sludgebomb', 'earthpower'] } });
+    expect(picked.notes.join(' ')).toMatch(/seen using Fury Cutter, which is not in the moves picked/);
+    expect(picked.prediction!.map((g) => g.moveId)).toContain('furycutter');
   });
 
   it('no calc check on raid damage (125x, capped)', () => {
