@@ -10,7 +10,7 @@ import { BOSS_RULES, rulesFor } from '../src/engine/rules';
 import { adviseTurn, matchWithBossMoves } from '../src/engine/turnAdvisor';
 import { recordObserved } from '../src/engine/observed';
 import {
-  BOSS_DAMAGE_MULT, RAID_MULT, asHeavyBoss, barrierMult, bossActionDamage, bossDrainHeal, bossForm, bossPhase, byRace, bossDs, bossHits, bossPool, bossVariant,
+  BOSS_DAMAGE_MULT, RAID_MULT, asHeavyBoss, barrierMult, bossActionDamage, bossCap, bossDrainHeal, bossForm, bossPhase, byRace, bossDs, bossHits, bossPool, bossVariant,
   bossFormOf, capBossBoosts, lootTier, maxMoveName, maxMovePower, overdriveMult, rateBossMember, suggestBossTeam,
 } from '../src/engine/worldBoss';
 import { boxToCalc, defenderVsNpc, moveDamage, npcToCalc } from '../src/engine/damage';
@@ -445,8 +445,24 @@ describe('World Boss rules 2026-11', () => {
     expect(barrierMult(0.01, 'eternamax')).toBe(1);
     expect(bossActionDamage(100, 'normal', { barrierDown: true })).toBe(100 * RAID_MULT);
     expect(bossActionDamage(100, 'normal')).toBeCloseTo(100 * RAID_MULT * 0.2, 6);
-    expect(bossActionDamage(1000, 'normal', { barrierDown: true })).toBe(50_000);
-    expect(bossActionDamage(10_000, 'eternamax', { barrierDown: true })).toBe(350_000);
+    // Cap by effectiveness (changelog Nov 22): 50k / 25k / 12.5k, Eternamax 350k / 175k / 87.5k.
+    expect(bossActionDamage(1000, 'normal', { barrierDown: true, eff: 2 })).toBe(50_000);
+    expect(bossActionDamage(1000, 'normal', { barrierDown: true, eff: 4 })).toBe(50_000);
+    expect(bossActionDamage(1000, 'normal', { barrierDown: true })).toBe(25_000);
+    expect(bossActionDamage(1000, 'normal', { barrierDown: true, eff: 0.5 })).toBe(12_500);
+    expect(bossActionDamage(1000, 'normal', { barrierDown: true, eff: 0.25 })).toBe(12_500);
+    expect(bossActionDamage(10_000, 'eternamax', { barrierDown: true, eff: 2 })).toBe(350_000);
+    expect(bossActionDamage(10_000, 'eternamax', { barrierDown: true })).toBe(175_000);
+    expect(bossActionDamage(10_000, 'eternamax', { barrierDown: true, eff: 0.5 })).toBe(87_500);
+    // Fixed-damage moves use the neutral cap whatever their type.
+    expect(bossCap('normal', 0.5, 'seismictoss')).toBe(25_000);
+    expect(bossCap('normal', 2, 'nightshade')).toBe(25_000);
+    // The counter team picks by the capped number: vs Grass/Poison Venusaur, Close Combat (resisted, 12.5k)
+    // loses to Body Slam (neutral) once both pass the resisted cap; a neutral Giga Impact stops at 25k.
+    const cc = rateBossMember(ds, mon('Machamp', 100, ['closecombat']), boss);
+    expect(cc.perTurn).toBe(12_500);
+    expect(rateBossMember(ds, mon('Machamp', 100, ['closecombat', 'bodyslam'], { nature: 'Adamant' }), boss).moveId).toBe('bodyslam');
+    expect(rateBossMember(ds, mon('Snorlax', 100, ['gigaimpact']), boss).perTurn).toBe(25_000);
     const m = rateBossMember(ds, mon('Charizard', 60, ['flamethrower']), boss);
     expect(m.perTurn).toBeLessThanOrEqual(50_000);
     expect(m.total).toBeGreaterThan(0.19 * m.totalDown);
@@ -487,7 +503,7 @@ describe('World Boss rules 2026-11', () => {
 
   it('Eternamax Overdrive: +75% per Atk/SpA stage makes setup worth more', () => {
     expect([overdriveMult(2), overdriveMult(4), overdriveMult(6), overdriveMult(-1)]).toEqual([2.5, 4, 5.5, 1]);
-    expect(bossActionDamage(1000, 'eternamax', { stage: 2, barrierDown: true })).toBe(312_500);
+    expect(bossActionDamage(1000, 'eternamax', { stage: 2, barrierDown: true, eff: 2 })).toBe(312_500);
     const sd = mon('Machamp', 60, ['crosschop', 'swordsdance']);
     const plainSd = mon('Machamp', 60, ['crosschop']);
     const gain = (b: typeof boss) => rateBossMember(ds, sd, b).total / rateBossMember(ds, plainSd, b).total;
@@ -497,10 +513,10 @@ describe('World Boss rules 2026-11', () => {
     expect(gain(eterna)).toBeGreaterThan(gain(plain));
   });
 
-  it('loot tiers 50k / 150k / 350k / 750k (Eternamax x10)', () => {
-    expect(lootTier(49_999)).toEqual({ tier: 0, next: 50_000 });
-    expect(lootTier(150_000)).toEqual({ tier: 2, next: 350_000 });
-    expect(lootTier(800_000)).toEqual({ tier: 4, next: undefined });
+  it('loot tiers 75k / 150k / 300k / 600k (Eternamax x10; changelog Nov 22)', () => {
+    expect(lootTier(74_999)).toEqual({ tier: 0, next: 75_000 });
+    expect(lootTier(150_000)).toEqual({ tier: 2, next: 300_000 });
+    expect(lootTier(600_000)).toEqual({ tier: 4, next: undefined });
     expect(lootTier(800_000, 'eternamax')).toEqual({ tier: 1, next: 1_500_000 });
     const s = suggestBossTeam(ds, [mon('Charizard', 60, ['flamethrower'])], v, { size: 1 });
     expect(s.form).toBe('gmax');

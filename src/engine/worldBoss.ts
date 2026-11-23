@@ -6,6 +6,7 @@ import { npcAttackWeight } from './npcModel';
 import { BOSS_RULES, type BattleRules } from './rules';
 import { supportEffect, type SupportEffect } from './supportMoves';
 import { movesForBox } from './teamSuggest';
+import { typeEffectiveness } from './typeChart';
 
 /**
  * World Boss counter-team (a damage race against a shared HP pool).
@@ -13,7 +14,9 @@ import { movesForBox } from './teamSuggest';
  * Wiki "World Boss Battles" + "Max Moves" (read 2026-11-22, docs/design/wiki-rules-2026-11.md):
  *  - A boss carries a random part of its move pool per appearance (the lobby lists them).
  *  - Boss HP 10,000,000 (Eternamax 100,000,000); the data's "Shared HP" line wins when present.
- *  - Your damage is 125x ordinary, capped at 50,000 per action (Eternamax 350,000).
+ *  - Your damage is 125x ordinary, capped per action by effectiveness (changelog Nov 22): super effective
+ *    50,000, neutral 25,000, resisted 12,500 (Eternamax 350,000 / 175,000 / 87,500); fixed-damage moves
+ *    use the neutral cap.
  *  - Boss attacks deal 55% less (Eternamax 70% less), every boss (confirmed by the wiki).
  *  - Only Gigantamax and Eternamax bosses use Max Moves for every attack; other bosses use their
  *    normal moves (a Max Move only for the phase-3 extra attack, shown as a note).
@@ -56,8 +59,8 @@ export interface BossRules {
   hitMult: number;
   /** Shared HP when the data has none. */
   hp: number;
-  /** Your damage per action is capped here. */
-  cap: number;
+  /** Your damage per action is capped here: super effective, neutral, resisted. */
+  caps: { se: number; neutral: number; resisted: number };
   /** The Max Barrier breaks once the boss has lost this share of its HP. */
   barrierBreak: number;
   /** Loot tiers (damage you dealt). */
@@ -75,7 +78,8 @@ export const DEFAULT_BOSS_HP = 10_000_000;
 export const ETERNAMAX_BOSS_HP = 100_000_000;
 /** Your damage while the Max Barrier is fully up. */
 export const BARRIER_START = 0.2;
-export const LOOT_TIERS: readonly number[] = [50_000, 150_000, 350_000, 750_000];
+/** Changelog Nov 22. */
+export const LOOT_TIERS: readonly number[] = [75_000, 150_000, 300_000, 600_000];
 /** Overdrive (Eternamax): damage added per Atk/SpA stage. */
 export const OVERDRIVE_PER_STAGE = 0.75;
 /** Healing from damaging moves is cut this much in phases 1, 2, 3. */
@@ -96,7 +100,7 @@ export function bossRules(form: BossForm): BossRules {
     maxMoves: form !== 'normal',
     hitMult: eterna ? ETERNAMAX_DAMAGE_MULT : BOSS_DAMAGE_MULT,
     hp: eterna ? ETERNAMAX_BOSS_HP : DEFAULT_BOSS_HP,
-    cap: eterna ? 350_000 : 50_000,
+    caps: eterna ? { se: 350_000, neutral: 175_000, resisted: 87_500 } : { se: 50_000, neutral: 25_000, resisted: 12_500 },
     barrierBreak: eterna ? 0.01 : 0.4,
     tiers: eterna ? LOOT_TIERS.map((t) => t * 10) : LOOT_TIERS,
   };
@@ -119,11 +123,21 @@ export function bossDrainHeal(ordinaryDamage: number, share: number, phase: 1 | 
 /** Eternamax Overdrive: x(1 + 0.75 per Atk/SpA stage). Lowered stages take the bonus away (never below x1). */
 export const overdriveMult = (stage: number) => 1 + OVERDRIVE_PER_STAGE * Math.max(0, stage);
 
+/** Moves that deal set damage: they use the neutral cap whatever their type. */
+const FIXED_DAMAGE = new Set(['seismictoss', 'nightshade', 'dragonrage', 'sonicboom', 'superfang', 'naturesmadness', 'ruination', 'psywave', 'finalgambit', 'counter', 'mirrorcoat', 'metalburst', 'bide', 'guardianofalola', 'comeuppance']);
+
+/** The per-action cap for a move with this type effectiveness against the boss. */
+export function bossCap(form: BossForm, eff = 1, moveId?: string): number {
+  const c = bossRules(form).caps;
+  if (moveId && FIXED_DAMAGE.has(moveId)) return c.neutral;
+  return eff > 1 ? c.se : eff < 1 ? c.resisted : c.neutral;
+}
+
 /** What one action of yours takes off the pool: 125x, Overdrive, barrier, then the cap (order is a GUESS). */
-export function bossActionDamage(ordinary: number, form: BossForm, opts: { lostFrac?: number; stage?: number; barrierDown?: boolean } = {}): number {
+export function bossActionDamage(ordinary: number, form: BossForm, opts: { lostFrac?: number; stage?: number; barrierDown?: boolean; eff?: number; moveId?: string } = {}): number {
   const od = form === 'eternamax' ? overdriveMult(opts.stage ?? 0) : 1;
   const bar = opts.barrierDown ? 1 : barrierMult(opts.lostFrac ?? 0, form);
-  return Math.min(bossRules(form).cap, ordinary * RAID_MULT * od * bar);
+  return Math.min(bossCap(form, opts.eff, opts.moveId), ordinary * RAID_MULT * od * bar);
 }
 
 /** Boss boosts are capped at +2 Atk/SpA and +1 Def/SpD (a copy). */
@@ -312,7 +326,7 @@ function statusOk(status: string, bossTypes: string[], moveId: string, ds: Datas
 }
 
 /** One action of yours in the race: ordinary damage (accuracy in), the attack stat's stage, HP drained (share). */
-interface Act { ordinary: number; stage: number; drain: number }
+interface Act { ordinary: number; stage: number; drain: number; eff: number; moveId: string }
 
 interface RaceCtx { form: BossForm; pool: number; maxHp: number; barrierDown?: boolean }
 
@@ -331,7 +345,7 @@ function race(actFor: (t: number) => Act | null, takenFor: (t: number) => number
     if (a) {
       // Only this race's own damage lowers the barrier here (other trainers' damage is unknown).
       const lost = total / ctx.pool;
-      total += bossActionDamage(a.ordinary, ctx.form, { lostFrac: lost, stage: a.stage, barrierDown: ctx.barrierDown });
+      total += bossActionDamage(a.ordinary, ctx.form, { lostFrac: lost, stage: a.stage, barrierDown: ctx.barrierDown, eff: a.eff, moveId: a.moveId });
       if (a.drain) hp = Math.min(100, hp + (100 * bossDrainHeal(a.ordinary, a.drain, bossPhase(lost))) / ctx.maxHp);
     }
     actions++;
@@ -361,8 +375,11 @@ export function rateBossMember(ds: Dataset, mon: BoxMon, boss: NpcMon, opts: Bos
   asHeavyBoss(foe);
   const field = makeField('singles');
   const legal = repeatable(movesForBox(ds, mon).filter((id) => !rules.bannedMoves.has(id) && ds.moves[id] && ds.moves[id].category !== 'Status'));
+  const bossTypes = ds.species[boss.species]?.types ?? [];
+  const effOf = (id: string) => typeEffectiveness(ds.types, ds.moves[id]?.type ?? '', bossTypes);
+  type Best = { id: string; raw: number; stage: number; eff: number };
   const best = (atk: CalcPokemon) => {
-    let top: { id: string; raw: number; stage: number } | undefined;
+    let top: Best | undefined;
     let topDealt = -1;
     for (const id of legal) {
       const d = moveDamage(ds, atk, foe, id, field);
@@ -370,26 +387,26 @@ export function rateBossMember(ds: Dataset, mon: BoxMon, boss: NpcMon, opts: Bos
       const acc = ds.moves[id].accuracy === true ? 1 : (ds.moves[id].accuracy as number) / 100;
       const raw = ((d.lo + d.hi) / 2) * acc;
       const stage = (ds.moves[id].category === 'Physical' ? atk.boosts.atk : atk.boosts.spa) ?? 0;
-      const dealt = bossActionDamage(raw, form, { stage, barrierDown: true }) + raw * 1e-9; // equal at the cap: harder hit
-      if (dealt > topDealt) { top = { id, raw, stage }; topDealt = dealt; }
+      const eff = effOf(id);
+      const dealt = bossActionDamage(raw, form, { stage, barrierDown: true, eff, moveId: id }) + raw * 1e-9; // equal at the cap: harder hit
+      if (dealt > topDealt) { top = { id, raw, stage, eff }; topDealt = dealt; }
     }
     return top;
   };
-  const act = (b: { id: string; raw: number; stage: number } | undefined): Act | null => (b ? { ordinary: b.raw, stage: b.stage, drain: drainShare(b.id, mon.item) } : null);
+  const act = (b: Best | undefined): Act | null => (b ? { ordinary: b.raw, stage: b.stage, drain: drainShare(b.id, mon.item), eff: b.eff, moveId: b.id } : null);
   const hits = bossHits(ds, boss, me, { ...opts, form });
   const takenPct = hits.reduce((s, h) => s + h.prob * h.pct, 0);
   const phys = hits.reduce((s, h) => s + (h.category === 'Physical' ? h.prob * h.pct : 0), 0);
   const spec = takenPct - phys;
   const youFirst = me.stats.spe > foe.stats.spe; // ties counted pessimistically; Max Moves have no priority
   const base = best(me);
-  const bossTypes = ds.species[boss.species]?.types ?? [];
   const ctx: RaceCtx = { form, pool, maxHp: me.maxHP() };
   const both = (actFor: (t: number) => Act | null, takenFor: (t: number) => number, first: boolean) => ({
     ...race(actFor, takenFor, first, ctx),
     down: race(actFor, takenFor, first, { ...ctx, barrierDown: true }).total,
   });
 
-  type Option = { plan: BossPlan; move?: { id: string; raw: number; stage: number }; r: ReturnType<typeof both> };
+  type Option = { plan: BossPlan; move?: Best; r: ReturnType<typeof both> };
   const options: Option[] = [];
   options.push({ plan: { kind: 'attack', label: 'Attack every turn' }, move: base, r: both(() => act(base), () => takenPct, youFirst) });
 
@@ -434,7 +451,7 @@ export function rateBossMember(ds: Dataset, mon: BoxMon, boss: NpcMon, opts: Bos
   if (pick.plan.kind === 'boost' && form === 'eternamax') notes.push('Overdrive: the boosts carry over to your next Pokémon until your team faints or a phase shockwave (not counted here).');
   if (pick.move && drainShare(pick.move.id, mon.item) > 0) notes.push('Drain and Shell Bell heal is cut 50% / 75% / 90% in phases 1 / 2 / 3 (counted as phase 1 here).');
   if (!base) notes.push('No damaging move that works here.');
-  const perTurn = pick.move ? bossActionDamage(pick.move.raw, form, { stage: pick.move.stage, barrierDown: true }) : 0;
+  const perTurn = pick.move ? bossActionDamage(pick.move.raw, form, { stage: pick.move.stage, barrierDown: true, eff: pick.move.eff, moveId: pick.move.id }) : 0;
   return {
     mon,
     plan: pick.plan,
@@ -520,14 +537,14 @@ export function suggestBossTeam(ds: Dataset, box: BoxMon[], v: NpcTeamVariant, o
       ? `Every attack it makes is a Max Move (Gen 8 power table, assumed), ${eterna ? '70' : '55'}% less damage.`
       : 'It uses its normal moves at 55% less damage; only the phase-3 extra attack is a Max Move.',
     'Phase 3 (below 40% HP): it adds an extra Max Move every third turn you take. Not counted.',
-    `Your damage is ${RAID_MULT}x ordinary, at most ${k(R.cap)} per action.`,
+    `Your damage is ${RAID_MULT}x ordinary, at most ${k(R.caps.se)} per action when super effective, ${k(R.caps.neutral)} neutral (and set-damage moves like Seismic Toss), ${k(R.caps.resisted)} resisted.`,
     `Max Barrier: your damage starts at 20% and is full once the boss has lost ${eterna ? '1' : '40'}% HP or after ${eterna ? '30 seconds' : '2 minutes'}. Totals count only your own damage toward it; "barrier down" is the likely number in a busy raid or after ${eterna ? '30 s' : '2 min'}. The ramp is a guess.`,
     'Its shield (start, 75%, 40% HP) halves your damage for 20 seconds and blocks status moves on it. Not counted.',
     'Encore, Leech Seed, Curse and Salt Cure fail. Poison and burn deal at most 1,000 a tick. A phase change clears its status and lowered stats, and your Aqua Ring, Ingrain, Focus Energy, Charge and Magnet Rise; its boosts stop at +2 Atk/SpA, +1 Def/SpD.',
     'Drain and Shell Bell heal from ordinary damage, cut 50/75/90% by phase; Recover-type moves, abilities, items and Bag medicine heal in full.',
-    'If you do not act for 20 seconds, it attacks you anyway, every 20 seconds.',
+    'If you do not act for 10 seconds, it attacks you anyway, every 10 seconds.',
   ];
-  if (eterna) notes.push('Overdrive: each Atk/SpA boost stage adds 75% damage and carries to your next Pokémon (until your team faints or a phase shockwave). Above 25 trainers, damage and the cap drop 4% per extra trainer (down to 60%); not counted.');
+  if (eterna) notes.push('Overdrive: each Atk/SpA boost stage adds 75% damage and carries to your next Pokémon (until your team faints or a phase shockwave). Above 50 trainers, damage and the cap drop 0.5% per extra trainer (down to 60% at 130); not counted.');
   if (team.some((m) => m.plan.kind === 'screen')) notes.push('Screens also cover the Pokémon that come in after the setter (not counted in their numbers).');
   return { team, ranked, total, totalPct: (100 * total) / pool, totalDown, pool, form, dangers: [...dangers.values()].sort((a, b) => b.heavy - a.heavy || b.top - a.top), notes };
 }

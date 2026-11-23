@@ -97,7 +97,7 @@ function MemberRow({ ds, m }: { ds: Dataset; m: BossMember }) {
   );
 }
 
-/** Your team's expected damage → loot tier (50k / 150k / 350k / 750k; Eternamax x10). Tiers also need a win. */
+/** Your team's expected damage → loot tier (75k / 150k / 300k / 600k; Eternamax x10). Tiers also need a win. */
 function LootLine({ low, high, form }: { low: number; high: number; form: ReturnType<typeof bossForm> }) {
   const a = lootTier(low, form);
   const b = lootTier(high, form);

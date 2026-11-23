@@ -75,9 +75,9 @@ Checked against the code; none of these are in it yet.
 
 | Change | Source | Affects | Action |
 |---|---|---|---|
-| Per-action cap depends on effectiveness: super effective 50,000, neutral 25,000, resisted 12,500 (Eternamax 350,000 / 175,000 / 87,500). Fixed-damage moves use the neutral cap. | [CL] Nov 22 | `worldBoss.ts` `bossRules().cap`, `bossActionDamage`, Prep counter team, Battle notes | **WS1b**: cap by effectiveness |
-| Loot tiers are 75,000 / 150,000 / 300,000 / 600,000 (Eternamax ×10) | [CL] Nov 22 | `LOOT_TIERS` (still 50k/150k/350k/750k) | **WS1b** |
-| Eternamax crowd scaling: full damage up to 50 trainers, then −0.5% per extra trainer (damage and cap), down to 60% at 130 | [CL] Nov 23 | Eternamax note in `worldBoss.ts` (says "above 25, 4% per trainer") | **WS1b**: fix the note (still not modelled) |
+| Per-action cap depends on effectiveness: super effective 50,000, neutral 25,000, resisted 12,500 (Eternamax 350,000 / 175,000 / 87,500). Fixed-damage moves use the neutral cap. | [CL] Nov 22 | `worldBoss.ts` `bossRules().cap`, `bossActionDamage`, Prep counter team, Battle notes | done (WS1b, 2026-11-23) |
+| Loot tiers are 75,000 / 150,000 / 300,000 / 600,000 (Eternamax ×10) | [CL] Nov 22 | `LOOT_TIERS` (still 50k/150k/350k/750k) | done (WS1b, 2026-11-23) |
+| Eternamax crowd scaling: full damage up to 50 trainers, then −0.5% per extra trainer (damage and cap), down to 60% at 130 | [CL] Nov 23 | Eternamax note in `worldBoss.ts` (says "above 25, 4% per trainer") | note fixed (WS1b, 2026-11-23; still not modelled) |
 | Eternamax Eternatus: Eternabeam (160 BP, 90% acc, **no recharge**) replaces Dynamax Cannon; one Poison attack + two rotating moves | [CL] Nov 23 | Boss move pool comes from the wiki data (Sync); the lobby card lists the moves; no boss recharge is modelled | Sync data; check the pool after Sync |
 | The boss attacks a waiting trainer after 10 s, then every 10 s | [CL] Nov 22 | Timing only | none (note in Prep at most) |
 | Unavailable World Boss moves, switches and Team/Bag tabs grey out | [CL] Nov 22 | `battleReader` (`data-unavailable` already read) | check live in a raid |

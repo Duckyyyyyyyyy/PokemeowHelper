@@ -7,7 +7,7 @@ Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing 
 
 - 🔶 **Hunt & Grind for an NPC** (Prep step 3): wild Pokémon to catch and train, hunt list (`mdHunt`), Explore marker, wild CATCH rule, Battle link. Released in 0.13.0, not checked in the real game yet. Spec: `docs/design/hunt-and-grind-spec.md`.
 - 🔶 **World Boss**: per-spawn move picker, lobby reader, counter team (Prep). Released in 0.13.0, not checked in a real raid yet.
-  - World Boss 2 (2026-11 wiki rules, WS1): 10M HP fallback (Eternamax 100M), 125x with a 50k cap per action (350k), Max Barrier, drain cut by phase, Encore/Leech Seed/Salt Cure fail, very heavy, boss boost cap, Eternamax Overdrive, loot tiers in Prep.
+  - World Boss 2 (2026-11 wiki rules, WS1): 10M HP fallback (Eternamax 100M), 125x with a cap per action by effectiveness (50k / 25k / 12.5k; Eternamax 350k / 175k / 87.5k, changelog 2026-11-22), Max Barrier, drain cut by phase, Encore/Leech Seed/Salt Cure fail, very heavy, boss boost cap, Eternamax Overdrive, loot tiers in Prep.
   - Gap resolved: Battle and Prep share one rule (`bossRules`/`bossAttackDs` in worldBoss.ts: Max Moves only for GMAX/Eternamax, 55%/70% cut). The Battle tab cuts every row: threat, likely moves, the 2–3-turn plan and switch-ins (`foeHitMult` in lookahead.ts).
   - Lobby Next card confirmed live (2026-11-23); the details dialog fixture is still unverified. Archive: "World Boss".
 
@@ -21,7 +21,7 @@ Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing 
 Claude reads the page through Claude in Chrome and the user plays. Tick an item or remove it when confirmed.
 
 - [ ] World Boss lobby: the Next card was confirmed live 2026-11-23 (`next-card.live.html`: "GMAX Melmetal", build and moves shown in the card, name matched to the wiki's "Gigantamax Melmetal"). Still unverified: the details dialog (`lobby.unverified.html`), Eternamax naming on the card, a staff-summoned card, and the battle `kind`/boss name
-- [ ] World Boss in a real raid: Max Moves only for GMAX/Eternamax (name test), barrier ramp (straight line 20%→100% is a guess), order 125x → Overdrive → barrier → cap, Overdrive stacked on top of the normal stage boost, drain cut phases (75%/40% HP), loot tiers
+- [ ] World Boss in a real raid: Max Moves only for GMAX/Eternamax (name test), barrier ramp (straight line 20%→100% is a guess), order 125x → Overdrive → barrier → cap, Overdrive stacked on top of the normal stage boost, drain cut phases (75%/40% HP), loot tiers, the cap by effectiveness (type chart only: -ate abilities and Freeze-Dry not counted; the fixed-damage move list is a guess)
 - [ ] Battle Frontier battle: `data-kind`, Brain name, Gen III damage vs Calc check
 - [ ] Battle Tower: opponent name, fainted roster, reserve PP
 - [ ] Doubles build in a live battle: status badges, the Switch/Bag command tabs, and the screen while you pick a replacement after one of yours faints (fainted badge on one card: guessed from the singles save). The real save `tate-liza-doubles-turn4.html` (2026-11-22) confirms actives, stat tags, moves, and fainting and switch-in as log lines
