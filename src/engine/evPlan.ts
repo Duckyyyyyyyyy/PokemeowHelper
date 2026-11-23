@@ -2,6 +2,7 @@ import type { Pokemon as CalcPokemon } from '@smogon/calc';
 import type { BoxMon, Dataset, Npc, NpcTeamVariant, StatTable } from '../shared/types';
 import { movesForBox, outcomeOf, scoreAgainstTeam, type PairResult, type SuggestOptions } from './teamSuggest';
 import { targetLevel } from './potential';
+import { EV_TRAINING_ACCOUNTS, type EvTrainingAccount } from '../data/evTraining';
 
 /**
  * EV advice for one Pokémon against one NPC, and where to farm each stat.
@@ -229,4 +230,19 @@ export function npcEvBattles(ds: Dataset, stat: StatKey, limit = 3, maxLevel?: n
 export function koCount(need: number, per: number): { plain: number; power: number; brace: number } {
   const n = (x: number) => (x > 0 ? Math.ceil(need / x) : Infinity);
   return { plain: n(per), power: n(per + POWER_BONUS), brace: n(per * 2) };
+}
+
+export interface TrainingAccountSpot {
+  account: EvTrainingAccount;
+  /** EVs of this stat per battle (the species' yield); undefined when its yield is unknown (no EV data synced). */
+  amount?: number;
+}
+
+/** Community EV training accounts for this stat (Player Battles; UNVERIFIED, see data/evTraining.ts). */
+export function trainingAccounts(ds: Dataset, stat: StatKey): TrainingAccountSpot[] {
+  const byName = new Map(Object.values(ds.species).map((s) => [s.name.toLowerCase(), s]));
+  return EV_TRAINING_ACCOUNTS.filter((a) => a.stat === stat).map((account) => {
+    const y = byName.get(account.pokemon.toLowerCase())?.evYield;
+    return { account, ...(y ? { amount: y[stat] } : {}) };
+  });
 }

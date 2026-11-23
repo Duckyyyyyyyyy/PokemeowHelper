@@ -2,7 +2,7 @@ import { useMemo } from 'preact/hooks';
 import type { BoxMon, Dataset, NpcTeamVariant } from '../../shared/types';
 import type { BattleRules } from '../../engine/rules';
 import {
-  EV_BERRY, POWER_ITEM, STAT_NAME, VITAMIN, VITAMIN_EVS, evPlanFor, koCount, npcEvBattles, wildEvSpots, type StatKey,
+  EV_BERRY, POWER_ITEM, STAT_NAME, VITAMIN, VITAMIN_EVS, evPlanFor, koCount, npcEvBattles, trainingAccounts, wildEvSpots, type StatKey,
 } from '../../engine/evPlan';
 
 const evText = (e: Record<StatKey, number>) => {
@@ -52,12 +52,23 @@ export function EvPanel({ ds, mon, v, rules, tower }: { ds: Dataset; mon: BoxMon
 function FarmStat({ ds, stat, need, hasYields, maxLevel }: { ds: Dataset; stat: StatKey; need: number; hasYields: boolean; maxLevel: number }) {
   const wild = useMemo(() => wildEvSpots(ds, stat, 2), [ds, stat]);
   const npcs = useMemo(() => npcEvBattles(ds, stat, 2, maxLevel), [ds, stat, maxLevel]);
+  const accounts = useMemo(() => trainingAccounts(ds, stat), [ds, stat]);
   const vit = Math.ceil(need / VITAMIN_EVS);
   return (
     <div style={{ marginTop: '4px' }}>
       <b>{STAT_NAME[stat]} +{need}</b>
       <div>· {vit} × {VITAMIN[stat]} (10 each) · hold a <b>{POWER_ITEM[stat]}</b> while farming: +8 per knockout</div>
       {!hasYields && <div class="muted">· Press Sync data once in Settings (⚙) to see which Pokémon and NPCs give {STAT_NAME[stat]} EVs.</div>}
+      {accounts.map(({ account: a, amount }) => {
+        const k = amount ? koCount(need, amount) : null;
+        return (
+          <div>
+            · Training account <b>{a.account}</b> (Player Battles): {a.pokemon} Lv {a.levels[0]}{a.levels[1] !== a.levels[0] ? `–${a.levels[1]}` : ''}, weak to {a.weakTo.join(', ')}
+            {k ? `: ${amount} ${STAT_NAME[stat]} per win → ${k.power} wins with ${POWER_ITEM[stat]}, ${k.plain} without` : ''}
+            <span class="muted"> (shared by players, unverified; no EVs at the Lv 50/100 settings or on Hardcore)</span>
+          </div>
+        );
+      })}
       {wild.map((s) => {
         const k = koCount(need, s.amount);
         return (

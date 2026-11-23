@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import fixture from './fixtures/wiki-mini.json';
 import type { BoxMon, Dataset, StatTable } from '../src/shared/types';
 import {
-  EV_MAX_STAT, EV_MAX_TOTAL, STATS, attackSide, evPlanFor, koCount, lowerNeeded, npcEvBattles, npcEvTotal, spreadCandidates, wildEvSpots,
+  EV_MAX_STAT, EV_MAX_TOTAL, STATS, attackSide, evPlanFor, koCount, lowerNeeded, npcEvBattles, npcEvTotal, spreadCandidates, trainingAccounts, wildEvSpots,
 } from '../src/engine/evPlan';
 
 const base = fixture as unknown as Dataset;
@@ -50,6 +50,14 @@ describe('EV yields per NPC battle', () => {
     const top = npcEvBattles(ds, 'def', 3);
     expect(top[0]).toMatchObject({ label: 'Rematch', amount: 7 });
     expect(top[0].npc.id).toBe('challenge:brock');
+  });
+});
+
+describe('EV training accounts', () => {
+  it('one account per stat, with EVs per win from its species when synced', () => {
+    for (const k of STATS) expect(trainingAccounts(ds, k)).toHaveLength(1);
+    expect(trainingAccounts(ds, 'def')[0]).toMatchObject({ account: { account: 'Pies3_Defense', pokemon: 'Golem' }, amount: 3 });
+    expect(trainingAccounts(base, 'def')[0].amount).toBeUndefined();
   });
 });
 
