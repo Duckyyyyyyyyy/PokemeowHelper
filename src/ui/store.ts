@@ -61,6 +61,7 @@ export async function loadDevFixture() {
     const ds = { ...(mod.default as unknown as Dataset), version: 'dev-fixture', syncedAt: Date.now() };
     await addDevExplore(ds);
     addSampleBattleSpecies(ds);
+    addDevEvYields(ds);
     await saveDataset(ds);
     dataset.value = ds;
   }
@@ -100,6 +101,18 @@ function addSampleBattleSpecies(ds: Dataset) {
 }
 
 /** Dev harness only: adds the explore-map subset (tests/fixtures/wiki-explore-raw.json). */
+/** Dev harness only: a few EV yields (as the wiki's EV Training table gives them) so the EV panel can be previewed. */
+function addDevEvYields(ds: Dataset) {
+  const Y: Record<number, Partial<Record<'hp' | 'atk' | 'def' | 'spa' | 'spd' | 'spe', number>>> = {
+    41: { spe: 1 }, 74: { def: 1 }, 76: { def: 3 }, 95: { def: 1 }, 139: { def: 2 }, 141: { atk: 2 }, 369: { hp: 1, def: 1 }, 409: { atk: 2 },
+    63: { spa: 1 }, 54: { spa: 1 }, 109: { def: 1 }, 89: { hp: 1, atk: 1 }, 110: { def: 2 }, 66: { atk: 1 }, 68: { atk: 3 }, 43: { spa: 1 },
+  };
+  for (const [id, y] of Object.entries(Y)) {
+    const s = ds.species[+id];
+    if (s) s.evYield = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0, ...y };
+  }
+}
+
 async function addDevExplore(ds: Dataset) {
   const [{ default: raw }, { fromWild, itemExtras, wildSpeciesFields }] = await Promise.all([
     import('../../tests/fixtures/wiki-explore-raw.json') as Promise<{ default: any }>,

@@ -27,6 +27,7 @@ import { leadPairs } from '../../engine/leadPairs';
 import { boxToShowdown, npcToShowdown, toShowdownTeam } from '../../engine/showdownExport';
 import { SimExport } from '../components/SimExport';
 import { GrindPlanCard, LadderPanel } from '../components/GrindLadder';
+import { EvPanel } from '../components/EvPanel';
 
 /** Battle Frontier entry problems: who can't enter, what changes under Gen III rules, item clause. */
 function FrontierNotes({ ds, team, entries, blocked, ownTeam }: { ds: Dataset; team: BoxMon[]; entries: Map<string, { blocking: string[]; notes: string[] }>; blocked: string[]; ownTeam: boolean }) {
@@ -138,6 +139,9 @@ function Suggestion({ ds: base, part }: { ds: Dataset; part: 'team' | 'hunt' }) 
   const [grindFor, setGrindFor] = useState<string | null>(null);
   // Grind levels: not for the Battle Frontier (fixed levels) or World Bosses (a damage race, see Prep's counter team).
   const showGrind = !facility && !(npc && isWorldBoss(npc));
+  // EVs: not for World Bosses (a damage race; Prep's counter team covers it).
+  const [evsFor, setEvsFor] = useState<string | null>(null);
+  const showEvs = !(npc && isWorldBoss(npc));
   const [allRows, setAllRows] = useState(false);
 
   return (
@@ -227,7 +231,16 @@ function Suggestion({ ds: base, part }: { ds: Dataset; part: 'team' | 'hunt' }) 
                         </button>
                       </>
                     )}
+                    {showEvs && (
+                      <>
+                        {' · '}
+                        <button class="link small" onClick={() => setEvsFor(evsFor === c.mon.uid ? null : c.mon.uid)} aria-expanded={evsFor === c.mon.uid}>
+                          {evsFor === c.mon.uid ? 'Hide EVs' : 'EVs →'}
+                        </button>
+                      </>
+                    )}
                   </div>
+                  {showEvs && evsFor === c.mon.uid && <div class="full"><EvPanel ds={ds} mon={c.mon} v={v} rules={rules} tower={tower} /></div>}
                   {movesFor === c.mon.uid && <div class="full"><MovesetPanel ds={ds} mon={c.mon} v={v} rules={rules} /></div>}
                   {showGrind && grindFor === c.mon.uid && <div class="full"><LadderPanel ds={ds} v={v} rules={rules} tower={tower} c={c} wins={c.pairs.filter((p) => outcomeOf(p, tower) === 'win').length} /></div>}
                 </div>
