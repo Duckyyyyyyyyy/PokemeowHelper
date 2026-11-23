@@ -69,6 +69,25 @@ Dawn (06:00–06:59 UTC) and Dusk (18:00–18:59 UTC) phases. Dusk Ball ×3.5 at
 
 ---
 
+### 1.7 Changes from Nov 22–23 (changelog read 2026-11-23)
+
+Checked against the code; none of these are in it yet.
+
+| Change | Source | Affects | Action |
+|---|---|---|---|
+| Per-action cap depends on effectiveness: super effective 50,000, neutral 25,000, resisted 12,500 (Eternamax 350,000 / 175,000 / 87,500). Fixed-damage moves use the neutral cap. | [CL] Nov 22 | `worldBoss.ts` `bossRules().cap`, `bossActionDamage`, Prep counter team, Battle notes | **WS1b**: cap by effectiveness |
+| Loot tiers are 75,000 / 150,000 / 300,000 / 600,000 (Eternamax ×10) | [CL] Nov 22 | `LOOT_TIERS` (still 50k/150k/350k/750k) | **WS1b** |
+| Eternamax crowd scaling: full damage up to 50 trainers, then −0.5% per extra trainer (damage and cap), down to 60% at 130 | [CL] Nov 23 | Eternamax note in `worldBoss.ts` (says "above 25, 4% per trainer") | **WS1b**: fix the note (still not modelled) |
+| Eternamax Eternatus: Eternabeam (160 BP, 90% acc, **no recharge**) replaces Dynamax Cannon; one Poison attack + two rotating moves | [CL] Nov 23 | Boss move pool comes from the wiki data (Sync); the lobby card lists the moves; no boss recharge is modelled | Sync data; check the pool after Sync |
+| The boss attacks a waiting trainer after 10 s, then every 10 s | [CL] Nov 22 | Timing only | none (note in Prep at most) |
+| Unavailable World Boss moves, switches and Team/Bag tabs grey out | [CL] Nov 22 | `battleReader` (`data-unavailable` already read) | check live in a raid |
+| NPC AI: no wasted turns vs Fly/Dig, no Sucker Punch vs status moves, no draining Liquid Ooze, no double Protect, no Fake Out / Future Sight / Poltergeist / Roar once they can't work; answers boosts with Haze/Roar/Taunt; picks attacks that work through raised evasion/Defense; remembers revealed abilities, items and immunity fails; pops Air Balloon with a Ground move | [CL] Nov 23 | `npcModel.ts` (only a flat Protect weight today) | **WS5** |
+| Battle log: move name fixed for crash damage (High Jump Kick, Axe Kick, Supercell Slam, Mind Blown, Steel Beam); heals show HP restored | [CL] Nov 22–23 | `battleReader` log parsing (heals already count as "unusual") | check in the next live battle |
+| Opposing team panel shows the trainer's icon and name | [CL] Nov 22 | `battleReader` opponent name | check in the next live battle |
+| Player Battles: your damage in HP, opponent's as % | [CL] Nov 22 | Player battle reader | check live |
+| Next World Boss card shows level, Ability, nature, moves | [CL] Nov 23 | Lobby reader | **done in 0.14.2** |
+| Legendary summon items (Prism Sap, Rusted Sword/Shield, Oblivion Husk), Weekly Catchlist rewards and maps, Box search, last team in Rocket/Towers/Rivals/Chambers, hiker sphere prices, quest changes | [CL] Nov 23 | Tips / Explore at most (hiker prices come from the wiki data) | none now |
+
 ## 2. Workstreams
 
 ### WS-R `rules-research` · **Haiku or Sonnet @ low** (read-only subagent)
@@ -118,6 +137,7 @@ Rebuild the NPC guess around 1.2's "What NPCs know":
 - Files: `npcModel.ts`, `lookahead.ts` (switch guess), `teamSuggest.ts`, `leadPairs.ts`, `frontier.ts` (also the chosen Gen III ability), tests.
 - Verify: unit tests; `npm test`, `npm run build`; then "Needs real-game check" for switch behaviour.
 - Depends on: WS-R (Doubles and Frontier pages).
+- Add the Nov 23 AI rules (§1.7): no wasted turns vs semi-invulnerable, Sucker Punch, Liquid Ooze, double Protect, Fake Out and the others once they can't work; Haze/Roar/Taunt vs boosts; memory of revealed abilities, items and immunities; Air Balloon pop.
 
 ### WS6 `data-refresh` · **Sonnet @ medium**
 - Re-run the sync against the current 7.9 MB file (acorn parse time and memory, any new or renamed fields). Add a test with a trimmed made-up sample, not a dump.
