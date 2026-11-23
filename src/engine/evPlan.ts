@@ -1,6 +1,7 @@
 import type { Pokemon as CalcPokemon } from '@smogon/calc';
 import type { BoxMon, Dataset, Npc, NpcTeamVariant, StatTable } from '../shared/types';
 import { movesForBox, outcomeOf, scoreAgainstTeam, type PairResult, type SuggestOptions } from './teamSuggest';
+import { targetLevel } from './potential';
 
 /**
  * EV advice for one Pokémon against one NPC, and where to farm each stat.
@@ -49,8 +50,17 @@ export interface EvPlan {
   best: SpreadResult;
   /** Every spread tried, best first. */
   ranked: SpreadResult[];
-  /** Stats to raise (to > from) or lower (to < from) to reach `best`. */
+  /** Stats to raise (to > from) or lower (to < from) to reach `best` exactly. */
   changes: EvChange[];
+  /** Stats below the spread: raise these. */
+  raise: EvChange[];
+  /**
+   * Only the lowering needed to make room within 510 (EVs in other stats can stay when there is room),
+   * taken from the stats with the most extra first.
+   */
+  lower: EvChange[];
+  /** Scored at the fight's level (it is below it now), not its current level. */
+  atFightLevel: boolean;
   /** The best spread wins more 1v1, or scores clearly better (+5), than the current EVs. */
   improves: boolean;
 }
@@ -87,11 +97,33 @@ export function spreadCandidates(sides: readonly ('atk' | 'spa')[]): { label: st
 const winsOf = (pairs: PairResult[], tower: boolean) => pairs.filter((p) => outcomeOf(p, tower) === 'win').length;
 const avgOf = (pairs: PairResult[]) => (pairs.length ? pairs.reduce((s, p) => s + p.score, 0) / pairs.length : 0);
 
-/** Scores its current EVs and each spread vs this NPC team at its current level. */
-export function evPlanFor(ds: Dataset, mon: BoxMon, v: NpcTeamVariant, opts: SuggestOptions & { tower?: boolean } = {}, npcCalc?: CalcPokemon[]): EvPlan {
+/** EVs to remove so the spread fits in 510 next to what it keeps; the stats with the most extra go first. */
+export function lowerNeeded(cur: StatTable, target: StatTable): EvChange[] {
+  const kept = STATS.reduce((s, k) => s + Math.max(cur[k], target[k]), 0);
+  let over = kept - EV_MAX_TOTAL;
+  const out: EvChange[] = [];
+  for (const k of [...STATS].sort((a, b) => cur[b] - target[b] - (cur[a] - target[a]))) {
+    if (over <= 0) break;
+    const extra = cur[k] - target[k];
+    if (extra <= 0) continue;
+    const cut = Math.min(extra, over);
+    out.push({ stat: k, from: cur[k], to: cur[k] - cut });
+    over -= cut;
+  }
+  return out;
+}
+
+/**
+ * Scores its current EVs and each spread vs this NPC team: at its level, or at the fight's level when it
+ * is below it (EVs are for the fight it will take, and a low level hides what they do).
+ */
+export function evPlanFor(ds: Dataset, orig: BoxMon, v: NpcTeamVariant, opts: SuggestOptions & { tower?: boolean } = {}, npcCalc?: CalcPokemon[]): EvPlan {
   const tower = !!opts.tower;
+  const fight = targetLevel(v);
+  const atFightLevel = orig.level !== undefined && orig.level < fight;
+  const mon: BoxMon = atFightLevel ? { ...orig, level: fight } : orig;
   const so: SuggestOptions = { ...opts, levelCap: opts.levelCap ?? v.levelCap };
-  const cur = spread(mon.evs ?? {});
+  const cur = spread(orig.evs ?? {});
   const nowPairs = scoreAgainstTeam(ds, { ...mon, evs: cur }, v, so, npcCalc);
   const now = { evs: cur, wins: winsOf(nowPairs, tower), avg: avgOf(nowPairs) };
   const ranked = spreadCandidates(attackSide(ds, mon))
@@ -103,7 +135,9 @@ export function evPlanFor(ds: Dataset, mon: BoxMon, v: NpcTeamVariant, opts: Sug
   const best = ranked[0];
   const changes = STATS.filter((k) => best.evs[k] !== cur[k]).map((k) => ({ stat: k, from: cur[k], to: best.evs[k] }));
   const improves = best.wins > now.wins || (best.wins === now.wins && best.avg >= now.avg + 5);
-  return { level: mon.level ?? opts.levelCap ?? 50, now, best, ranked, changes, improves };
+  const raise = changes.filter((c) => c.to > c.from);
+  const lower = lowerNeeded(cur, best.evs);
+  return { level: mon.level ?? opts.levelCap ?? 50, now, best, ranked, changes, raise, lower, improves, atFightLevel };
 }
 
 /* ---------------- where to farm ---------------- */
@@ -169,12 +203,18 @@ export interface NpcEvBattle {
   topLevel: number;
 }
 
-/** NPC battles that give the most of this stat per win (no World Bosses or Frontier: they give no EVs). */
+/**
+ * NPC battles that give the most of this stat per win (no World Bosses or Frontier: they give no EVs).
+ * GUESS: an NPC with a "Rematch" team is farmed through its rematch (the first battle is assumed not
+ * repeatable); `maxLevel` drops teams far above the Pokémon.
+ */
 export function npcEvBattles(ds: Dataset, stat: StatKey, limit = 3, maxLevel?: number): NpcEvBattle[] {
   const out: NpcEvBattle[] = [];
   for (const npc of ds.npcs) {
     if (NO_EV_CATEGORIES.has(npc.category)) continue;
+    const hasRematch = npc.variants.some((x) => /rematch/i.test(x.label));
     npc.variants.forEach((v, i) => {
+      if (hasRematch && !/rematch/i.test(v.label)) return;
       const total = npcEvTotal(ds, v);
       if (!total || !total[stat]) return;
       const topLevel = Math.max(0, ...v.team.map((m) => m.level ?? 0));

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import fixture from './fixtures/wiki-mini.json';
 import type { BoxMon, Dataset, StatTable } from '../src/shared/types';
 import {
-  EV_MAX_STAT, EV_MAX_TOTAL, STATS, attackSide, evPlanFor, koCount, npcEvBattles, npcEvTotal, spreadCandidates, wildEvSpots,
+  EV_MAX_STAT, EV_MAX_TOTAL, STATS, attackSide, evPlanFor, koCount, lowerNeeded, npcEvBattles, npcEvTotal, spreadCandidates, wildEvSpots,
 } from '../src/engine/evPlan';
 
 const base = fixture as unknown as Dataset;
@@ -41,6 +41,10 @@ describe('EV yields per NPC battle', () => {
   });
   it('unknown yields (no EV data synced) give undefined, not zeros', () => {
     expect(npcEvTotal(base, ds.npcs.find((n) => n.id === 'challenge:brock')!.variants[1])).toBeUndefined();
+  });
+  it('farms an NPC with a rematch only through its rematch; drops teams far above maxLevel', () => {
+    expect(npcEvBattles(ds, 'def', 10).filter((b) => b.npc.id === 'challenge:brock').map((b) => b.label)).toEqual(['Rematch']);
+    expect(npcEvBattles(ds, 'def', 10, 30).some((b) => b.topLevel > 30)).toBe(false);
   });
   it('best NPC battles for a stat, most per win first', () => {
     const top = npcEvBattles(ds, 'def', 3);
@@ -92,5 +96,19 @@ describe('EV spread advice', () => {
     const done = evPlanFor(ds, { ...m, evs: p.best.evs }, v);
     expect(done.changes).toEqual([]);
     expect(done.improves).toBe(false);
+  });
+  it('below the fight level it scores at the fight level', () => {
+    const v = ds.npcs.find((n) => n.id === 'challenge:koga')!.variants[0];
+    const p = evPlanFor(ds, mon('Machamp', 20, ['karatechop', 'lowkick']), v);
+    expect(p.atFightLevel).toBe(true);
+    expect(p.level).toBe(48);
+  });
+  it('lowers only what the 510 total needs, most extra first', () => {
+    const target = y({ atk: 252, spe: 252 });
+    expect(lowerNeeded(y({ hp: 6 }), target)).toEqual([]); // 510 has room for 6 stray HP EVs
+    expect(lowerNeeded(y({ hp: 100, def: 40 }), target)).toEqual([{ stat: 'hp', from: 100, to: 0 }, { stat: 'def', from: 40, to: 6 }]);
+    expect(lowerNeeded(y({ hp: 30, def: 100, spd: 100 }), target)).toEqual([
+      { stat: 'def', from: 100, to: 0 }, { stat: 'spd', from: 100, to: 0 }, { stat: 'hp', from: 30, to: 6 },
+    ]);
   });
 });

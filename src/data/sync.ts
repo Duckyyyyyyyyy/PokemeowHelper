@@ -85,7 +85,9 @@ export async function syncDataset(currentVersion: string | undefined, onStep: Sy
   onStep('Finding the wiki data file…');
   const files = await discoverWikiFiles(fetcher);
   const url = files.data;
-  const version = `${SCHEMA_VERSION}:${url.split('/').pop()}`;
+  // The EV file is part of the version only once its yields are in: a Sync that missed them runs again.
+  const base = `${SCHEMA_VERSION}:${url.split('/').pop()}`;
+  const version = files.evYield ? `${base}+${files.evYield.split('/').pop()}` : base;
   if (version === currentVersion) return null; // already up to date
   onStep('Downloading data (~8 MB)…');
   const res = await fetcher(url);
@@ -95,7 +97,7 @@ export async function syncDataset(currentVersion: string | undefined, onStep: Sy
   await new Promise((r) => setTimeout(r, 0)); // let the UI paint before the heavy parse
   const raw = parseDataModule(source) as Record<string, unknown>;
   if (!raw || !Array.isArray((raw as any).challenges)) throw new SyncError('The data file is not in the expected format.');
-  const ds = normalizeDataset(raw, version);
+  const ds = normalizeDataset(raw, base);
   // EV yields (EV Training page): optional; a missing or changed file only leaves them unknown.
   if (files.evYield) {
     try {
@@ -107,6 +109,7 @@ export async function syncDataset(currentVersion: string | undefined, onStep: Sy
           const y = yieldOf(sp.id);
           if (y) sp.evYield = y;
         }
+        ds.version = version;
       }
     } catch {
       // keep the dataset without EV yields

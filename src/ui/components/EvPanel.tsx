@@ -15,42 +15,43 @@ export function EvPanel({ ds, mon, v, rules, tower }: { ds: Dataset; mon: BoxMon
   const plan = useMemo(() => evPlanFor(ds, mon, v, { levelCap: v.levelCap, rules, tower }), [ds, mon, v]);
   const hasYields = useMemo(() => Object.values(ds.species).some((s) => s.evYield), [ds]);
   const n = v.team.length;
-  const raise = plan.changes.filter((c) => c.to > c.from);
-  const lower = plan.changes.filter((c) => c.to < c.from);
+  const { raise, lower } = plan;
   const known = !!mon.evs && Object.keys(mon.evs).length > 0;
+  const maxLevel = (mon.level ?? plan.level) + 10;
   return (
     <div class="small" style={{ marginTop: '4px' }}>
       <div>
         EVs now: <b>{evText(plan.now.evs)}</b>{!known && mon.source !== 'game' ? <span class="muted"> (not known for hand-typed Pokémon: Box Sync reads them)</span> : null} → wins {plan.now.wins}/{n}
+        {plan.atFightLevel ? <span class="muted"> at Lv {plan.level}</span> : null}
       </div>
-      {plan.improves ? (
+      {plan.changes.length ? (
         <>
-          <div>Best vs this NPC: <b>{plan.best.label}</b> ({evText(plan.best.evs)}) → <b>wins {plan.best.wins}/{n}</b></div>
+          <div>
+            Best vs this NPC: <b>{plan.best.label}</b> ({evText(plan.best.evs)}) → <b>wins {plan.best.wins}/{n}</b>
+            {!plan.improves ? <span class="muted"> · no 1v1 result changes yet: a small edge; levels or moves matter more (see Grind levels)</span> : null}
+          </div>
           {raise.length > 0 && <div>Raise: {raise.map((c) => `${STAT_NAME[c.stat]} +${c.to - c.from}`).join(', ')}</div>}
           {lower.length > 0 && (
-            <div>Lower first (510 total): {lower.map((c) => `${STAT_NAME[c.stat]} −${c.from - c.to} (${Math.ceil((c.from - c.to) / VITAMIN_EVS)} ${EV_BERRY[c.stat]})`).join(', ')}, or reset all with a Fresh-Start Mochi.</div>
+            <div>Lower first to fit 510: {lower.map((c) => `${STAT_NAME[c.stat]} −${c.from - c.to} (${Math.ceil((c.from - c.to) / VITAMIN_EVS)} ${EV_BERRY[c.stat]})`).join(', ')}, or reset all with a Fresh-Start Mochi.</div>
           )}
         </>
       ) : (
-        <div class="muted">
-          {plan.changes.length
-            ? `EVs don't change any 1v1 result here (best common spread: ${plan.best.label}, ${plan.best.wins}/${n}). Levels or moves matter more: see Grind levels.`
-            : `Your EVs already match the best common spread here (${plan.best.label}).`}
-        </div>
+        <div class="muted">Your EVs already match the best common spread here ({plan.best.label}).</div>
       )}
       <div class="muted">Others: {plan.ranked.slice(1, 4).map((r) => `${r.label} ${r.wins}/${n}`).join(' · ')}</div>
-      {plan.improves && raise.map((c) => <FarmStat ds={ds} stat={c.stat} need={c.to - c.from} hasYields={hasYields} />)}
+      {raise.map((c) => <FarmStat ds={ds} stat={c.stat} need={c.to - c.from} hasYields={hasYields} maxLevel={maxLevel} />)}
+      {raise.length > 0 && <div class="muted">Tip: a teammate that holds an Exp. Share gets the same EVs while another Pokémon does the battling.</div>}
       <div class="muted" style={{ marginTop: '4px' }}>
-        Scored at Lv {plan.level}: 252 EVs add {Math.floor((63 * plan.level) / 100)} points to a stat at this level (63 at Lv 100). Max 252 per stat, 510 total.
+        Scored at Lv {plan.level}{plan.atFightLevel ? " (this fight's level)" : ''}: 252 EVs add {Math.floor((63 * plan.level) / 100)} points to a stat there (63 at Lv 100). Max 252 per stat, 510 total.
         EVs come from wild and trainer/NPC battles; World Bosses, the Battle Frontier, live PvP and Quick catch give none.
       </div>
     </div>
   );
 }
 
-function FarmStat({ ds, stat, need, hasYields }: { ds: Dataset; stat: StatKey; need: number; hasYields: boolean }) {
+function FarmStat({ ds, stat, need, hasYields, maxLevel }: { ds: Dataset; stat: StatKey; need: number; hasYields: boolean; maxLevel: number }) {
   const wild = useMemo(() => wildEvSpots(ds, stat, 2), [ds, stat]);
-  const npcs = useMemo(() => npcEvBattles(ds, stat, 2), [ds, stat]);
+  const npcs = useMemo(() => npcEvBattles(ds, stat, 2, maxLevel), [ds, stat, maxLevel]);
   const vit = Math.ceil(need / VITAMIN_EVS);
   return (
     <div style={{ marginTop: '4px' }}>
