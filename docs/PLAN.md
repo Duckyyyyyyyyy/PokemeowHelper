@@ -1,6 +1,6 @@
 # MeowRPGAdvisor: Plan
 
-Current version: **0.14.4** · Details and history: `docs/archive/PLAN-v1.md` (Vietnamese; grep, don't read whole)
+Current version: **0.15.0** · Details and history: `docs/archive/PLAN-v1.md` (Vietnamese; grep, don't read whole)
 Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing · ⬜ planned
 
 ## ⏳ Ongoing
@@ -14,7 +14,7 @@ Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing 
 ## ⬜ Planned (in order)
 
 0. **Game update catch-up (Nov 14–21 changes, Battle Simulator)**: Plan with workstreams and models: `docs/design/game-update-2026-11-plan.md`. Done in 0.13.0: Phase A (rules digest, data refresh, simulator export) and World Boss 2. Battle reader re-check (WS0) done on the League and Doubles saves, plus a wild battle, Rain and Misty Terrain read live 2026-11-22; World Boss still needed. Friendship (WS4) released in 0.14.0 🔶: box sync keeps `friendship`, the lookahead plays out the 1-HP survival, crit ×2 and −10 accuracy at 255, Battle tab note. Next: simulator golden tests (needs OK), then field effects → NPC AI.
-1. 🔶 **Grind levels, grind plan and EVs** (Prep → Team, 2026-11-23, unreleased): per member "Grind levels" (wins at its level, every 5 levels, each evolution and the fight's level, best moves by then), "Make a grind plan" (fewest levels to answer the rest), "EVs" (best common 252/252 spread vs this NPC, what to raise/lower, where to farm: vitamins, Power items, wild Pokémon, NPC battles). EV yields come from Sync (schema 7). Community EV training accounts (Player Battles, one per stat) listed with the user's OK; unverified.
+1. 🔶 **Grind levels, grind plan and EVs** (Prep → Team, released in 0.15.0): per member "Grind levels" (wins at its level, every 5 levels, each evolution and the fight's level, best moves by then), "Make a grind plan" (fewest levels to answer the rest), "EVs" (best common 252/252 spread vs this NPC, what to raise/lower, where to farm: vitamins, Power items, wild Pokémon, NPC battles). EV yields come from Sync (schema 7). Community EV training accounts (Player Battles, one per stat) listed with the user's OK; unverified.
 2. Later: Triples.
 
 ## 🔍 Needs real-game check
@@ -67,3 +67,4 @@ Claude reads the page through Claude in Chrome and the user plays. Tick an item 
 | 0.14.2 | World Boss lobby: boss build and "Moves this appearance" read from the live Next card ("GMAX Melmetal" matched to the wiki's Gigantamax name) |
 | 0.14.3 | World Boss (changelog Nov 22–23): cap per action by effectiveness (50k / 25k / 12.5k; Eternamax 350k / 175k / 87.5k), counter team picks by the capped number, loot tiers 75k / 150k / 300k / 600k, 10 s idle attack, Eternamax crowd note |
 | 0.14.4 | World Boss raids in the Battle tab: battle reader for the raid screen (boss panel, GMAX → Gigantamax name, shared HP, status, stages), Max Moves in the log count as the boss's own moves, no damage check on raid hits |
+| 0.15.0 | Prep → Team: Grind levels per member, Grind plan for the team, EV advice (best 252/252 spread vs the NPC, what to raise/lower, where to farm: vitamins, Power items, wild Pokémon, NPC rematches, EV training accounts). EV yields from Sync (schema 7: press Sync data once) |
