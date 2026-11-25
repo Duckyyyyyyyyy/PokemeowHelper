@@ -12,9 +12,12 @@ async function getMode(): Promise<UiMode> {
   return normalizeMode(r[MODE_KEY]);
 }
 
-async function setTabPanel(tabId: number, url: string | undefined) {
-  await chrome.sidePanel.setOptions({ tabId, path: PAGE, enabled: isGameUrl(url) });
-}
+/** The tab can close before the call reaches it ("No tab with id: 123."): nothing left to do for it. */
+const ifOpen = (p: Promise<void>) => p.catch((e) => {
+  if (!/No tab with id/i.test(e instanceof Error ? e.message : String(e))) throw e;
+});
+
+const setTabPanel = (tabId: number, url: string | undefined) => ifOpen(chrome.sidePanel.setOptions({ tabId, path: PAGE, enabled: isGameUrl(url) }));
 
 async function applyMode() {
   const mode = await getMode();
@@ -26,7 +29,7 @@ async function applyMode() {
   } else {
     await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
     // Clear per-tab overrides left over from panel mode.
-    await Promise.all(tabs.map((t) => chrome.sidePanel.setOptions({ tabId: t.id!, enabled: false })));
+    await Promise.all(tabs.map((t) => ifOpen(chrome.sidePanel.setOptions({ tabId: t.id!, enabled: false }))));
   }
 }
 
@@ -80,7 +83,7 @@ chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
 chrome.tabs.onActivated.addListener(({ tabId }) => {
   getMode()
     .then(async (m) => {
-      if (m === 'panel') await setTabPanel(tabId, (await chrome.tabs.get(tabId)).url);
+      if (m === 'panel') await ifOpen(chrome.tabs.get(tabId).then((t) => setTabPanel(tabId, t.url)));
     })
     .catch(log);
 });
