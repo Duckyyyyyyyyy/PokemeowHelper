@@ -14,6 +14,8 @@ export const SEL = {
   name: '.battle-combatant-name',
   level: '.battle-pokemon-level',
   hp: '.battle-hp-numbers',
+  /** The bar itself. Opponents show only this since 2026-11-25: aria-valuemax 100, aria-valuenow 57, "57% HP". */
+  hpTrack: '.battle-hp-track[aria-valuenow]',
   status: '[data-status]',
   item: '.battle-held-item',
   moveButton: '.battle-move-button',
@@ -130,6 +132,15 @@ export function monName(el: Element | null): string {
     .trim();
 }
 
+/** HP in % from the bar, when the numbers are hidden. 0 HP only with a fainted mark (0% may be a rounded 1 HP). */
+function parseHpBar(root: Element, fainted: boolean): { hp?: number; hpPct?: number } {
+  const track = root.querySelector(SEL.hpTrack);
+  const now = parseFloat(track?.getAttribute('aria-valuenow') ?? '');
+  const max = parseFloat(track?.getAttribute('aria-valuemax') ?? '');
+  if (!(max > 0) || !(now >= 0)) return {};
+  return { hpPct: Math.min(100, (100 * now) / max), ...(fainted && now === 0 ? { hp: 0 } : {}) };
+}
+
 function readCombatant(root: Element | null, position?: number): BattleMon | undefined {
   if (!root) return undefined;
   const name = monName(root.querySelector(SEL.name));
@@ -144,10 +155,11 @@ function readCombatant(root: Element | null, position?: number): BattleMon | und
     ? tags.map((t) => t.getAttribute('aria-label') || t.getAttribute('title') || t.textContent || '').join(', ')
     : [...root.querySelectorAll(SEL.statChanges)].map((c) => c.getAttribute('title') || c.textContent || '').join(', ');
   const stages = changes ? parseStatChanges(changes) : undefined;
+  const hp = parseHp(root.querySelector(SEL.hp)?.textContent ?? '');
   return {
     name,
     level: num(root.querySelector(SEL.level)?.textContent?.match(/(\d+)/)?.[1]),
-    ...parseHp(root.querySelector(SEL.hp)?.textContent ?? ''),
+    ...(hp.hp !== undefined ? hp : parseHpBar(root, !!root.querySelector(SEL.faintedBadge))),
     status: statusEl?.getAttribute('data-status') || (root.querySelector(SEL.faintedBadge) ? 'fnt' : undefined),
     item,
     stages: stages && Object.keys(stages).length ? stages : undefined,
@@ -284,13 +296,15 @@ function readOpponentTeam(doc: ParentNode): RosterMon[] {
   return [...doc.querySelectorAll(SEL.rosterRow)].map((row) => {
     const heading = row.querySelector(SEL.rosterHeading);
     const name = monName(heading);
+    const fainted = row.getAttribute('data-fainted') === 'true';
+    // Without a health element, drop the heading first: "Lv. 41" + "0/112 HP" would read as 410/112.
+    const hp = parseHp(clean(row.querySelector(SEL.rosterHealth)?.textContent ?? (row.textContent ?? '').replace(heading?.textContent ?? '', ' ')));
     return {
       name,
       level: num(clean(heading?.textContent).match(/Lv\.?\s*(\d+)/i)?.[1]),
-      // Without a health element, drop the heading first: "Lv. 41" + "0/112 HP" would read as 410/112.
-      ...parseHp(clean(row.querySelector(SEL.rosterHealth)?.textContent ?? (row.textContent ?? '').replace(heading?.textContent ?? '', ' '))),
+      ...(hp.hp !== undefined ? hp : parseHpBar(row, fainted)),
       active: row.getAttribute('data-active') === 'true',
-      fainted: row.getAttribute('data-fainted') === 'true',
+      fainted,
     };
   }).filter((r) => r.name);
 }
@@ -433,7 +447,7 @@ function subjectLine(text: string, re: RegExp, who: Who): { side: Side; mon: str
 }
 
 /** Wording we have not seen in a real battle yet: keep those hits out of damage checks. */
-const UNUSUAL = /hit \d+ times?|times!|recoil|restored|had its energy drained|substitute/i;
+const UNUSUAL = /hit \d+ times?|times!|recoil|restored|had its energy drained|substitute|endured the hit/i;
 /** A critical hit ("A critical hit!" in mainline; the game's exact wording is a guess): checked against the crit range. */
 const CRIT = /critical hit/i;
 
@@ -442,7 +456,7 @@ interface LogLine {
   turn?: number;
 }
 
-export function parseLog(lines: LogLine[], trainer?: string): { boosts: BattleSnapshot['boosts']; events: BattleEvent[]; monBoosts: Record<string, Boosts> } {
+export function parseLog(lines: LogLine[], trainer?: string): { boosts: BattleSnapshot['boosts']; events: BattleEvent[]; monBoosts: Record<string, Boosts>; npcItems: string[] } {
   const boosts: { player: Boosts; opponent: Boosts } = { player: {}, opponent: {} };
   /** Stages per Pokémon ("side|name"): doubles has two Pokémon per side. */
   const monBoosts: Record<string, Boosts> = {};
@@ -451,6 +465,9 @@ export function parseLog(lines: LogLine[], trainer?: string): { boosts: BattleSn
   const seen = { player: new Set<string>(), opponent: new Set<string>() };
   const who: Who = { trainer, active, seen };
   const events: BattleEvent[] = [];
+  /** "Lt. Surge used Super Potion on opponent’s Voltorb!", "Tate & Liza used Hyper Potion on Tate & Liza’s Claydol." (both seen live) */
+  const npcItems: string[] = [];
+  const itemUse = trainer ? new RegExp(`^${escRe(trainer.trim())} used (.+?) on (?:opponent|${escRe(trainer.trim())})[’']s `, 'i') : undefined;
   const other = (s: 'player' | 'opponent') => (s === 'player' ? 'opponent' : 'player');
   const note = (side: Side, mon?: string) => mon && seen[side].add(lcName(mon));
   lines.forEach(({ text, turn }, idx) => {
@@ -461,6 +478,8 @@ export function parseLog(lines: LogLine[], trainer?: string): { boosts: BattleSn
       note(sw, active[sw]);
       if (active[sw]) monBoosts[key(sw, active[sw]!)] = {};
     }
+    const item = itemUse?.exec(text)?.[1];
+    if (item) npcItems.push(item.toLowerCase().replace(/[^a-z0-9]/g, ''));
     const use = parseUseLine(text, who);
     if (use) {
       active[use.side] ??= use.mon;
@@ -524,10 +543,10 @@ export function parseLog(lines: LogLine[], trainer?: string): { boosts: BattleSn
       }
     }
   });
-  return { boosts, events, monBoosts };
+  return { boosts, events, monBoosts, npcItems };
 }
 
-function readLog(doc: ParentNode, trainer?: string, fix: (s: string) => string = (s) => s): { lines: string[]; boosts: BattleSnapshot['boosts']; events: BattleEvent[]; monBoosts: Record<string, Boosts> } {
+function readLog(doc: ParentNode, trainer?: string, fix: (s: string) => string = (s) => s): { lines: string[]; boosts: BattleSnapshot['boosts']; events: BattleEvent[]; monBoosts: Record<string, Boosts>; npcItems: string[] } {
   let turn: number | undefined;
   const lines: LogLine[] = [...doc.querySelectorAll(SEL.logLine)].map((li) => {
     const label = li.querySelector(SEL.logTurn)?.textContent ?? '';
@@ -536,8 +555,8 @@ function readLog(doc: ParentNode, trainer?: string, fix: (s: string) => string =
     // Gender is shown as text after the name ("CottoneeFemale"); drop it so lines read naturally.
     return { text: fix(clean((li.textContent ?? '').replace(label, '')).replace(/(\S)(Male|Female)\b/g, '$1')), turn };
   });
-  const { boosts, events, monBoosts } = parseLog(lines, trainer);
-  return { lines: lines.slice(-12).map((l) => l.text), boosts, events: events.slice(-80), monBoosts };
+  const { boosts, events, monBoosts, npcItems } = parseLog(lines, trainer);
+  return { lines: lines.slice(-12).map((l) => l.text), boosts, events: events.slice(-80), monBoosts, npcItems };
 }
 
 /** Active Pokémon shown on a side: one card per position in doubles, else one per stats box. */
@@ -728,6 +747,7 @@ export function readBattle(doc: ParentNode, now = Date.now()): BattleSnapshot | 
     boosts: { player: player?.stages ?? log.boosts.player, opponent: opponent?.stages ?? log.boosts.opponent },
     log: log.lines,
     events: log.events,
+    ...(log.npcItems.length ? { npcItems: log.npcItems } : {}),
     ...(forcedSwitch ? { forcedSwitch: true } : {}),
     ...(bag ? { bag } : {}),
     // Seen live (Tate & Liza, 2026-11-19): doubles has ONE stats box per side holding a card per position.

@@ -1,6 +1,6 @@
 # MeowRPGAdvisor: Plan
 
-Current version: **0.15.1** · Details and history: `docs/archive/PLAN-v1.md` (Vietnamese; grep, don't read whole)
+Current version: **0.16.0** · Details and history: `docs/archive/PLAN-v1.md` (Vietnamese; grep, don't read whole)
 Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing · ⬜ planned
 
 ## ⏳ Ongoing
@@ -10,6 +10,13 @@ Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing 
   - World Boss 2 (2026-11 wiki rules, WS1): 10M HP fallback (Eternamax 100M), 125x with a cap per action by effectiveness (50k / 25k / 12.5k; Eternamax 350k / 175k / 87.5k, changelog 2026-11-22), Max Barrier, drain cut by phase, Encore/Leech Seed/Salt Cure fail, very heavy, boss boost cap, Eternamax Overdrive, loot tiers in Prep.
   - Gap resolved: Battle and Prep share one rule (`bossRules`/`bossAttackDs` in worldBoss.ts: Max Moves only for GMAX/Eternamax, 55%/70% cut). The Battle tab cuts every row: threat, likely moves, the 2–3-turn plan and switch-ins (`foeHitMult` in lookahead.ts).
   - Lobby Next card confirmed live (2026-11-23); the details dialog fixture is still unverified. Archive: "World Boss".
+
+- 🔶 **Battle advice (0.16.0)**, measured in simulated battles, not checked in a real battle. Handoff: switch-scoring. Harness: `scripts/audit/README.md` (Showdown engine as the judge; paired battles, 480 per row, SE about 2 points). It compares versions; the win rates are not the real game's.
+  - Released: opponent HP from the bar, Truant, sure KO with better accuracy, a drain-move crash, switch scoring (`leaf()` plays the rest of the battle out), Revive judged by the lookahead, Sturdy / Focus Sash, lead ties, note when an NPC may heal.
+  - 0.16.0 minus 0.15.1, no bag: 6v6 +7.3 ± 2.2, 4v4 +6.9 ± 2.2, 6v6 with the old heal rule +10.0 ± 2.0. With bag: +3.1 ± 2.0, +6.3 ± 2.0, +9.4 ± 2.0. (Measured before Sturdy, which changes nothing: between −0.2 and +0.4, ± 0.4.) No bag, 6v6: 56.7 against 49.4 for 0.15.1 and 48.3 for "strongest move, never switch".
+  - Revive alone: +2.3 ± 1.4, +0.8 ± 1.3, +1.0 ± 1.2.
+  - **NPC medicine in the scores was left out** (user's choice, 2026-11-26): the search played the heal out and counted what was left. If NPCs heal as the user reported: +1.7 ± 0.8 with bag, −1.0 ± 0.9 without (4 runs each). If they only heal at 25% HP or less: −2.4 ± 1.2 and −2.0 ± 1.2 (2 runs each). Only the note stayed. Look at it again once the real heal rule is known.
+  - Not done: weather, terrain, screens, Tailwind, Trick Room and hazards in singles damage (`makeField('singles')` is empty; hazards and screens looked worst in the first audit); Struggle sometimes above a switch; Sitrus Berry's heal in the turn advice; Sturdy in Doubles; KO chance and move text assume no heal. One switch-loop battle in a few hundred still ends unfinished.
 
 ## ⬜ Planned (in order)
 
@@ -21,6 +28,11 @@ Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing 
 
 Claude reads the page through Claude in Chrome and the user plays. Tick an item or remove it when confirmed.
 
+- [ ] Opponent HP bar (2026-11-25): max 100 / now 57 / "57% HP" was read live on a Brock rematch, but the fixture is reconstructed (`brock-rematch-hp-bar.reconstructed.html`). Not seen: 0% without a fainted badge, Doubles bars, how the game rounds
+- [ ] 0.16.0 in a real battle: switch scoring, Revive advice, the note "X may use Full Restore on Y now", a Sturdy row ("leaves it at 1 HP"). Sturdy itself was seen live 2026-11-25 (a full-HP Golem endured a hit that would KO)
+- [ ] NPC heal rule (guess, from the user's report 2026-11-25): under about 50% HP, "could be lower, maybe 30-40", when at risk of a KO, usually. Note the HP, the item and whether your hit could KO each time it is seen
+- [ ] Focus Sash (mainline rule, never seen): survives one hit from full HP, not a move with several hits
+- [ ] Truant: the alternation (moved T1, loafed T2, moved T3) was seen live 2026-11-25. Guesses: it restarts on switch-in, flinch/sleep turns are not tracked, an NPC's Truant uses the same rule. Not modelled: one-turn projection text ("wins the 1v1"), item rows, Doubles, Prep
 - [ ] World Boss lobby: the Next card was confirmed live 2026-11-23 (`next-card.live.html`: "GMAX Melmetal", build and moves shown in the card, name matched to the wiki's "Gigantamax Melmetal"). Still unverified: the details dialog (`lobby.unverified.html`), Eternamax naming on the card, a staff-summoned card, and the battle `kind`/boss name
 - [ ] World Boss in a real raid: Max Moves only for GMAX/Eternamax (name test), barrier ramp (straight line 20%→100% is a guess), order 125x → Overdrive → barrier → cap, Overdrive stacked on top of the normal stage boost, drain cut phases (75%/40% HP), loot tiers, the cap by effectiveness (type chart only: -ate abilities and Freeze-Dry not counted; the fixed-damage move list is a guess)
 - [ ] Battle Frontier battle: `data-kind`, Brain name, Gen III damage vs Calc check
@@ -69,3 +81,4 @@ Claude reads the page through Claude in Chrome and the user plays. Tick an item 
 | 0.14.4 | World Boss raids in the Battle tab: battle reader for the raid screen (boss panel, GMAX → Gigantamax name, shared HP, status, stages), Max Moves in the log count as the boss's own moves, no damage check on raid hits |
 | 0.15.0 | Prep → Team: Grind levels per member, Grind plan for the team, EV advice (best 252/252 spread vs the NPC, what to raise/lower, where to farm: vitamins, Power items, wild Pokémon, NPC rematches, EV training accounts). EV yields from Sync (schema 7: press Sync data once) |
 | 0.15.1 | Fix for the "No SW" error after installing or updating (the side panel setup retries until Chrome has registered the background worker) |
+| 0.16.0 | Battle advice: switch and move scoring plays the rest of the battle out (beats 0.15.1 in simulated battles), opponent HP read from the bar, Revive judged by the lookahead, Sturdy / Focus Sash, Truant, sure KO with better accuracy, better lead on ties, note when an NPC may heal |

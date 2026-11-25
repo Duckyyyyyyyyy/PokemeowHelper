@@ -257,7 +257,7 @@ describe('performance budget', () => {
     console.log('full board', { depth: r.depth, nodes: r.engine.nodes, calcs: r.engine.calcs, bestMs: best.toFixed(1) });
     expect(r.depth).toBe(2);
     expect(r.engine.nodes).toBeLessThan(800);
-    expect(r.engine.calcs).toBeLessThan(250);
+    expect(r.engine.calcs).toBeLessThan(350); // 250 until the leaf played the whole battle out (2026-11-25): 329, same time
     // ~25 ms alone (npm run test:perf); the counts above are the check in the full suite.
     timeBound(best, 100);
   });

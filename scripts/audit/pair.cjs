@@ -1,0 +1,5 @@
+// pair.cjs <tag[:key]> <tag[:key]> ... : wins per tag, and paired diff of the first against each other
+const fs=require('fs');const P=(a)=>{const [t,k='advNoItems']=a.split(':');const o={};for(let i=1;i<=8;i++){try{for(const l of fs.readFileSync(`${__dirname}/.out/${t}_${i}.jsonl`,'utf8').trim().split('\n')){const x=JSON.parse(l);if(!x.error&&x[k+'Win']!==undefined)o[i+':'+x.n]=[x[k+'Win'],x[k+'X'],x.sc]}}catch{}}return o};
+const m=a=>a.reduce((s,x)=>s+x,0)/a.length,se=a=>{const k=m(a);return Math.sqrt(m(a.map(z=>(z-k)**2))/a.length)};
+const A=process.argv.slice(2).map(a=>[a,P(a)]);const [n0,o0]=A[0];
+for(const [n,o] of A){const v=Object.values(o);const d=Object.keys(o0).filter(k=>o[k]).map(k=>o0[k][0]-o[k][0]);console.log(n.padEnd(22),'n',v.length,'win',(100*m(v.map(x=>x[0]))).toFixed(1),'turns',m(v.map(x=>x[1][1])).toFixed(1),'sw',m(v.map(x=>x[1][2])).toFixed(2),'back',m(v.map(x=>x[1][8]??0)).toFixed(2),'unended',v.filter(x=>!x[1][0]).length,n===n0?'':`| ${n0} minus this: ${(100*m(d)).toFixed(1)} ± ${(100*se(d)).toFixed(1)} (n ${d.length})`)}

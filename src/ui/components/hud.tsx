@@ -79,7 +79,7 @@ export function Plate({ ds, mon, boosts, foe, threat, small, children }: {
   ds: Dataset; mon: BattleMon; boosts?: Boosts; foe?: boolean; threat?: ThreatInfo; small?: boolean; children?: ComponentChildren;
 }) {
   const types = speciesTypes(ds, mon.name);
-  const pct = hpPct(mon.hp, mon.maxHp);
+  const pct = hpPct(mon.hp, mon.maxHp) ?? mon.hpPct;
   const stages = Object.entries(boosts ?? mon.stages ?? {}).filter(([, v]) => v);
   const ko = !!threat && threat.ko === 'sure';
   return (
@@ -94,7 +94,7 @@ export function Plate({ ds, mon, boosts, foe, threat, small, children }: {
         </div>
         <Hp pct={pct} ghost={threat ? [threat.minPct, threat.maxPct] : undefined} label={`${mon.name} HP`} />
         <div class="pf">
-          <span>{mon.hp ?? '?'}/{mon.maxHp ?? '?'}{mon.item ? <span class="item"> · {mon.item}</span> : null}</span>
+          <span>{mon.maxHp === undefined && mon.hpPct !== undefined ? `${Math.round(mon.hpPct)}%` : `${mon.hp ?? '?'}/${mon.maxHp ?? '?'}`}{mon.item ? <span class="item"> · {mon.item}</span> : null}</span>
           {threat && <span class="hit">{ko ? 'KO range · ' : ''}{threat.name} −{Math.round(threat.minPct)}–{Math.round(threat.maxPct)}%</span>}
         </div>
         {children}
