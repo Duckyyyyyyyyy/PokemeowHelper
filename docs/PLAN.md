@@ -1,6 +1,6 @@
 # MeowRPGAdvisor: Plan
 
-Current version: **0.16.0** · Details and history: `docs/archive/PLAN-v1.md` (Vietnamese; grep, don't read whole)
+Current version: **0.16.1** · Details and history: `docs/archive/PLAN-v1.md` (Vietnamese; grep, don't read whole)
 Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing · ⬜ planned
 
 ## ⏳ Ongoing
@@ -82,3 +82,4 @@ Claude reads the page through Claude in Chrome and the user plays. Tick an item 
 | 0.15.0 | Prep → Team: Grind levels per member, Grind plan for the team, EV advice (best 252/252 spread vs the NPC, what to raise/lower, where to farm: vitamins, Power items, wild Pokémon, NPC rematches, EV training accounts). EV yields from Sync (schema 7: press Sync data once) |
 | 0.15.1 | Fix for the "No SW" error after installing or updating (the side panel setup retries until Chrome has registered the background worker) |
 | 0.16.0 | Battle advice: switch and move scoring plays the rest of the battle out (beats 0.15.1 in simulated battles), opponent HP read from the bar, Revive judged by the lookahead, Sturdy / Focus Sash, Truant, sure KO with better accuracy, better lead on ties, note when an NPC may heal |
+| 0.16.1 | Fix for the "No tab with id" error in side panel mode when a tab closes at once |
