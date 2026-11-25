@@ -27,3 +27,8 @@ meowhelper-box*.json
 .DS_Store
 Thumbs.db
 *.log
+
+# Battle audit (scripts/audit): the Showdown engine, an older source to compare with, results
+scripts/audit/.sim/
+scripts/audit/.base/
+scripts/audit/.out/

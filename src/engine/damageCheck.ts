@@ -48,7 +48,7 @@ function find(snap: BattleSnapshot, side: 'player' | 'opponent', name?: string):
   }
   const roster = side === 'player' ? snap.bench : snap.opponentTeam;
   const r = roster.find((x) => lc(x.name) === lc(name));
-  return r && { mon: { name: r.name, level: r.level, hp: r.hp, maxHp: r.maxHp }, moves: (r.moves ?? []).map((m) => m.name) };
+  return r && { mon: { name: r.name, level: r.level, hp: r.hp, maxHp: r.maxHp, hpPct: r.hpPct }, moves: (r.moves ?? []).map((m) => m.name) };
 }
 
 export function checkEvent(ds: Dataset, box: BoxMon[], before: BattleSnapshot, ev: BattleEvent): DamageCheck | null {
@@ -89,7 +89,8 @@ export function checkEvent(ds: Dataset, box: BoxMon[], before: BattleSnapshot, e
   }
 
   const hpBefore = defState.mon.hp;
-  const capped = !!ev.targetFainted && hpBefore !== undefined && ev.damage >= hpBefore;
+  // HP not shown as a number (opponent bar): a KO hit may be cut.
+  const capped = !!ev.targetFainted && (hpBefore === undefined || ev.damage >= hpBefore);
   let verdict: DamageCheck['verdict'];
   if (defState.mon.maxHp !== undefined && defState.mon.maxHp !== def.maxHP()) verdict = 'set-mismatch';
   else if (capped) verdict = ev.damage <= d.hi ? 'ok' : 'off';
@@ -152,7 +153,7 @@ export function checkDoublesEvent(ds: Dataset, box: BoxMon[], before: BattleSnap
     const d = moveDamage(ds, atk, def, move.id, doublesField(screens, ev.side, t.side), { singleTarget: !spread });
     if (!d) continue;
     const hpBefore = defState.mon.hp;
-    const capped = t.fainted && hpBefore !== undefined && t.damage >= hpBefore;
+    const capped = t.fainted && (hpBefore === undefined || t.damage >= hpBefore);
     let verdict: DamageCheck['verdict'];
     if (defState.mon.maxHp !== undefined && defState.mon.maxHp !== def.maxHP()) verdict = 'set-mismatch';
     else if (capped) verdict = t.damage <= d.hi ? 'ok' : 'off';

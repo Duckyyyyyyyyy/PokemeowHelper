@@ -199,7 +199,10 @@ export function suggestTeam(ds: Dataset, box: BoxMon[], v: NpcTeamVariant, opts:
     clause();
   }
 
-  const lead = team.length ? [...team].sort((a, b) => (b.pairs[0]?.score ?? 0) - (a.pairs[0]?.score ?? 0))[0] : undefined;
+  // Best against their first Pokémon; a tie goes to the one its best hit hurts less, then to the more reliable move.
+  const hurt = (c: Candidate) => c.pairs[0]?.duel?.theirs?.maxPct ?? 0;
+  const sure = (c: Candidate) => { const d = c.pairs[0]?.duel?.mine; return d ? d.expectedPct / Math.max(1, (d.minPct + d.maxPct) / 2) : 0; };
+  const lead = team.length ? [...team].sort((a, b) => (b.pairs[0]?.score ?? 0) - (a.pairs[0]?.score ?? 0) || hurt(a) - hurt(b) || sure(b) - sure(a))[0] : undefined;
   const coverage = bestPer.length ? Math.round(bestPer.reduce((s, x) => s + x, 0) / bestPer.length) : 0;
   return { team, lead, coverage, ranked };
 }

@@ -23,6 +23,7 @@ import { matchNpc, lc } from '../../engine/turnAdvisor';
 import { ALL_TYPES } from '../../engine/typeChart';
 import { MapTips } from './TipsTab';
 import { huntBySpecies } from '../huntStore';
+import { hpPct as pctOfHp } from '../components/hud';
 
 type View = 'maps' | 'encounter' | 'balls';
 const view = signal<View>('maps');
@@ -243,7 +244,7 @@ function liveWild(ds: Dataset) {
   if (snap.opponentTeam.length > 1) return null;
   const s = Object.values(ds.species).find((x) => lc(x.name) === lc(snap.opponent!.name));
   if (!s) return null;
-  return { species: s.id, level: snap.opponent.level, item: snap.opponent.item, status: snap.opponent.status, hp: snap.opponent.hp, maxHp: snap.opponent.maxHp, turn: snap.turn, myLevel: snap.player?.level, myName: snap.player?.name };
+  return { species: s.id, level: snap.opponent.level, item: snap.opponent.item, status: snap.opponent.status, hpPct: pctOfHp(snap.opponent.hp, snap.opponent.maxHp) ?? snap.opponent.hpPct, turn: snap.turn, myLevel: snap.player?.level, myName: snap.player?.name };
 }
 
 function Encounter({ ds }: { ds: Dataset }) {
@@ -268,7 +269,7 @@ function Encounter({ ds }: { ds: Dataset }) {
     target.value = {
       species: live.species, level: live.level ?? where?.enc.levels[1] ?? 20, mapId: where?.map.id ?? '', method: where?.enc.method ?? 'walking',
       item: live.item ?? '', shiny: false, goodIvs: false, status: live.status ?? '',
-      hpPct: live.hp && live.maxHp ? Math.max(1, Math.round((live.hp / live.maxHp) * 100)) : 100, turn: live.turn ?? 1, throws: 0,
+      hpPct: live.hpPct !== undefined ? Math.max(1, Math.round(live.hpPct)) : 100, turn: live.turn ?? 1, throws: 0,
     };
   };
 

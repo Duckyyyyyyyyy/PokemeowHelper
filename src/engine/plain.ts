@@ -40,7 +40,7 @@ export function factsLine(f: MoveFacts | undefined): string | undefined {
   let s: string;
   if (f.koNow === 'sure') s = f.movesFirst === false ? 'Knocks it out, after their hit' : f.movesFirst === null ? 'Knocks it out (speed tie)' : 'Knocks it out before it moves';
   else if (f.koNow === 'chance') s = 'Can knock it out with a high roll';
-  else if (f.hitsToKo) s = `${f.hitsToKo} hits to knock it out`;
+  else if (f.hitsToKo) s = `${f.hitsToKo} hits to knock it out${f.holds ? ` (${f.holds} leaves it at 1 HP)` : ''}`;
   else s = 'Won’t knock it out';
   if (f.accuracy !== undefined) s += ` · ${f.accuracy}% to hit`;
   return s;

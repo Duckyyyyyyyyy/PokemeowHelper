@@ -1,16 +1,16 @@
 import type { Pokemon as CalcPokemon } from '@smogon/calc';
 import { activeFainted, doublesReason, type BattleMon, type BattleSnapshot, type Boosts, type RosterMon } from '../shared/battle';
 import type { BoxMon, Dataset, Npc, NpcMon, NpcTeamVariant } from '../shared/types';
-import { ASSUMED_NPC_LEVEL, SELF_KO_MOVES, bestMove, boxToCalc, calcErrorCount, defenderVsNpc, makeField, npcToCalc, repeatable, takeCalcErrors, tryMoveDamage, type CalcError, type MoveDamage } from './damage';
+import { ASSUMED_NPC_LEVEL, SELF_KO_MOVES, bestMove, boxToCalc, calcErrorCount, defenderVsNpc, holdsOn, makeField, npcToCalc, repeatable, takeCalcErrors, tryMoveDamage, type CalcError, type MoveDamage } from './damage';
 import { battleRulesFor, dsFor, type BattleRules } from './rules';
 import { movesForBox } from './teamSuggest';
 import { guessNpcSwitch, predictNpcMove, type NpcGuess, type NpcSwitchGuess } from './npcModel';
 import { npcKey, observedMoves, seenFor, type ObservedStore } from './observed';
 import { accuracyStageMul, battleSpeed, order, project } from './projection';
-import { itemAdvice, itemsAllowed, resolveItems } from './itemAdvisor';
+import { HEAL_ITEMS, itemAdvice, itemsAllowed, resolveItems } from './itemAdvisor';
 import { fieldFromLog, rateSupport, supportBlocked, supportEffect, type BenchMon, type SupportContext } from './supportMoves';
 import { runLookahead, searchable, setupScore, type LookMon, type Lookahead, type RootValue } from './lookahead';
-import { fxNotes } from './moveEffects';
+import { fxNotes, moveFx } from './moveEffects';
 import { friendshipApplies, friendshipNote, friendshipSurvival } from './friendship';
 import { asHeavyBoss, baseMovesForMax, bossAttackDs, bossFormOf, bossRules, bossVariant, capBossBoosts, cutBossHit, isWorldBoss } from './worldBoss';
 
@@ -47,6 +47,10 @@ export interface ActionAdvice {
   /** Lookahead: chance (0–1) this move KOs this turn, and the part only a critical hit gives. */
   koChance?: number;
   critKo?: number;
+  /** Lookahead: the value that orders the rows; breaks ties of the rounded score. */
+  rank?: number;
+  /** Item rows: already on the lookahead's scale (Revive). */
+  looked?: boolean;
   /** Lookahead: line of play, e.g. "Swords Dance → Earthquake KOs both remaining". */
   line?: string;
   /** The damage calc threw for this row: its numbers are missing or incomplete (shown as "calc error"). */
@@ -69,6 +73,8 @@ export interface MoveFacts {
   hitsToKo?: number;
   /** You move before their best hit (null = speed tie). */
   movesFirst: boolean | null;
+  /** It would KO, but the target stays at 1 HP: "Sturdy" or "Focus Sash". */
+  holds?: string;
   /** Chance to hit in %, only when below 100 (base accuracy and accuracy/evasion stages). */
   accuracy?: number;
 }
@@ -226,8 +232,10 @@ export function mySet(idx: Idx, box: BoxMon[], b: { name: string; level?: number
 
 const STATUS: Record<string, Exclude<CalcPokemon['status'], ''>> = { par: 'par', brn: 'brn', psn: 'psn', tox: 'tox', slp: 'slp', frz: 'frz' };
 
-export function applyState(p: CalcPokemon, b: { hp?: number; maxHp?: number; status?: string }, boosts?: Boosts) {
+export function applyState(p: CalcPokemon, b: { hp?: number; maxHp?: number; hpPct?: number; status?: string }, boosts?: Boosts) {
   if (b.hp !== undefined && b.maxHp) p.originalCurHP = Math.max(0, Math.round((p.maxHP() * b.hp) / b.maxHp));
+  // Only a bar on screen: 0% without a fainted mark is a rounded sliver of HP.
+  else if (b.hpPct !== undefined) p.originalCurHP = b.hp === 0 ? 0 : Math.max(1, Math.round((p.maxHP() * b.hpPct) / 100));
   const st = b.status ? STATUS[b.status] : undefined;
   if (st) p.status = st;
   if (boosts) for (const k of ['atk', 'def', 'spa', 'spd', 'spe'] as const) if (boosts[k]) p.boosts[k] = boosts[k]!;
@@ -236,8 +244,13 @@ export function applyState(p: CalcPokemon, b: { hp?: number; maxHp?: number; sta
 
 const curPct = (p: CalcPokemon) => (100 * p.curHP()) / p.maxHP();
 
+/** This hit leaves it at 1 HP: full HP with Sturdy or Focus Sash. */
+const holdsFull = (ds: Dataset, atk: CalcPokemon, def: CalcPokemon, d: MoveDamage) => d.maxPct >= 100 && curPct(def) >= 100 && !!holdsOn(ds, atk, def, d.moveId);
 const avg = (d: MoveDamage | null) => (d ? (d.minPct + d.maxPct) / 2 : 0);
 const pctTxt = (d: { minPct: number; maxPct: number }) => `${Math.round(d.minPct)}–${Math.round(d.maxPct)}%`;
+
+/** Best score first; the lookahead's unrounded value breaks ties. */
+const byScore = (a: ActionAdvice, b: ActionAdvice) => (b.score ?? -1) - (a.score ?? -1) || (a.rank !== undefined && b.rank !== undefined ? b.rank - a.rank : 0);
 
 export function adviseTurn(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts: AdviseOptions = {}): TurnAdvice {
   takeCalcErrors(); // start the turn clean
@@ -351,7 +364,7 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
       out.actions.push(adv);
     }
     if (!out.actions.length) notes.push('No healthy Pokémon left to send in.');
-    out.actions.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+    out.actions.sort(byScore);
     return out;
   }
 
@@ -372,6 +385,8 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
   const accMul = accuracyStageMul((snap.boosts.player.accuracy ?? 0) - (snap.boosts.opponent.evasion ?? 0));
   const myHp = curPct(myCalc);
   const foeHp = curPct(foeCalc);
+  const loafs = !isDoubles && loafsNow(snap, 'player', snap.player.name, myCalc);
+  if (!isDoubles && loafsNow(snap, 'opponent', snap.opponent.name, foeCalc)) notes.push(`${foe.mon.name} should loaf around this turn (Truant, a guess): the KO warning still assumes it attacks.`);
   const myMoveIds = repeatable(snap.moves.filter((m) => !m.disabled).map((m) => idx.moves.get(lc(m.name))?.id).filter((x): x is string => !!x && !rules.bannedMoves.has(x)));
   const myBestHit = bestMove(ds, myCalc, foeCalc, myMoveIds, field);
 
@@ -405,7 +420,7 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
     const first = order(myCalc, foeCalc, 0, threat.priority);
     out.threat = {
       name: threat.name, minPct: threat.minPct, maxPct: threat.maxPct,
-      ko: threat.minPct >= myHp ? 'sure' : threat.maxPct >= myHp ? 'chance' : undefined,
+      ko: holdsFull(ds, foeCalc, myCalc, threat) ? undefined : threat.minPct >= myHp ? 'sure' : threat.maxPct >= myHp ? 'chance' : undefined,
       youFirst: first,
       ...(threatError ? { calcError: true } : {}),
     };
@@ -426,11 +441,18 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
     field: fieldFromLog(snap.events, snap.turn, (n) => idx.moves.get(lc(n))?.id),
   };
 
+  // Items from your bag
+  const supply = resolveItems(snap, opts.items);
+  const useItems = supply.counts.size > 0 && itemsAllowed(snap, rules);
+  const fainted = useItems ? faintedFor(ds, idx, box, snap, rules) : [];
+
   // Lookahead (default): a few turns of expectimax; the cheap path keeps the one-turn projection.
   const myLegal = myMoveIds.filter((id) => ds.moves[id]?.category !== 'Status' || (searchable(ds, id) && !supportBlocked(support, id)));
   const look = (opts.lookahead ?? 2) > 0 && !isDoubles
-    ? lookFor(ds, idx, snap, field, rules, { name: snap.player.name, calc: myCalc, moves: myLegal, friendship: myFriend }, support.bench as BenchRow[], foe.mon.name, foeCalc, foeMoves, support.foesLeft ?? [], out.prediction, opts.lookahead, bossF && bossRules(bossF).hitMult)
+    ? lookFor(ds, idx, snap, field, rules, { name: snap.player.name, calc: myCalc, moves: myLegal, friendship: myFriend }, support.bench as BenchRow[], foe.mon.name, foeCalc, foeMoves, support.foesLeft ?? [], out.prediction, opts.lookahead, bossF && bossRules(bossF).hitMult, fainted)
     : undefined;
+  const meds = medicinesLeft(ds, match?.variant, snap);
+  if (meds.length && look?.engine.mayHeal()) notes.push(`${snap.opponentName ?? 'The NPC'} may use ${meds[0]} on ${foe.mon.name} now (${meds.length} healing item${meds.length > 1 ? 's' : ''} left). A guess: NPCs usually heal a Pokémon under about half HP that your next hit could KO. The advice still assumes it attacks.`);
   if (look && out.threat) {
     const t = look.engine.threatOdds();
     out.threat.koChance = t.ko;
@@ -439,6 +461,13 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
   const lookMove = (id: string) => look?.values.find((v) => v.action.kind === 'move' && v.action.moveId === id);
   const attackLooks = look?.values.filter((v) => v.action.kind === 'move' && ds.moves[v.action.moveId]?.category !== 'Status').map((v) => v.score) ?? [];
   const bestAttackLook = attackLooks.length ? Math.max(...attackLooks) : -1;
+  const topAttacks = (look?.values ?? []).flatMap((v) => (v.action.kind === 'move' && ds.moves[v.action.moveId]?.category !== 'Status' ? [{ id: v.action.moveId, rank: v.rank }] : [])).sort((a, b) => b.rank - a.rank).slice(0, 2).map((x) => x.id);
+  /** Revive on the lookahead's scale: its gain over the best attack. One that doesn't beat attacking stays clearly below it. */
+  const revive = (frac: number) => {
+    const r = bestAttackLook >= 0 ? look?.engine.revive(100 * frac, look.depth, topAttacks) : undefined;
+    const f = r && fainted[r.to - 1 - (support.bench?.length ?? 0)];
+    return f && { row: f.row, score: Math.round(setupScore(bestAttackLook + r.gain, bestAttackLook).score) };
+  };
 
   // Best attack's one-turn projection score (plan A), to rebase item rows onto the lookahead scale.
   let planA1 = -1;
@@ -457,6 +486,10 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
     }
     if (rules.bannedMoves.has(g.id)) {
       out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: 0, reason: 'Fails in this battle (World Boss / Mega Chamber rules).' });
+      continue;
+    }
+    if (loafs && g.category === 'Status') {
+      out.actions.push({ kind: 'move', label: m.name, moveId: g.id, score: 0, reason: `${snap.player.name} loafs around this turn (Truant): no move does anything` });
       continue;
     }
     if (g.category === 'Status') {
@@ -501,13 +534,15 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
     const alwaysHits = baseAcc === true || typeof baseAcc !== 'number' || baseAcc <= 0; // same rule as accOf() in damage.ts
     const base = alwaysHits ? 1 : (baseAcc as number) / 100;
     const hitChance = alwaysHits ? 1 : Math.min(1, base * accMul);
-    const p = project(d.expectedPct * (hitChance / base), theirHit, myHp, foeHp, first);
-    const ko = d.minPct >= foeHp ? 'sure' : d.maxPct >= foeHp ? 'chance' : undefined;
+    const holds = d.maxPct >= foeHp && curPct(foeCalc) >= 100 ? holdsOn(ds, myCalc, foeCalc, g.id) : undefined;
+    const p = project(Math.min(d.expectedPct * (hitChance / base), holds ? foeHp - 1 : Infinity), theirHit, myHp, foeHp, first);
+    const ko = holds ? undefined : d.minPct >= foeHp ? 'sure' : d.maxPct >= foeHp ? 'chance' : undefined;
     let reason: string;
     if (ko === 'sure' && first !== false) reason = 'KOs now' + (first === null ? ' (speed tie)' : ', you move first') + '.';
     else if (ko === 'sure') reason = out.threat?.ko === 'sure' ? 'Would KO, but they move first and KO you.' : 'KOs after taking their hit.';
     else if (ko === 'chance') reason = `Can KO now (needs a high roll)${first === false ? ', after their hit' : ''}.`;
     else reason = `${p.myTurns === Infinity ? 'No KO' : `${p.myTurns} hits to KO`}; ${p.win ? 'you win the trade' : 'you lose the trade'}.`;
+    if (holds) reason = `${foe.mon.name} holds on at 1 HP (${holds}). ${reason}`;
     if (!alwaysHits && hitChance < 1) {
       reason += accMul === 1 ? ` ${baseAcc}% accuracy.` : ` ~${Math.round(hitChance * 100)}% to hit (accuracy/evasion stages).`;
     }
@@ -542,6 +577,10 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
         reason = `${r.reason} (${pctTxt(d)} now.)`;
       }
     }
+    if (loafs) {
+      out.actions.push({ kind: 'move', label: m.name, moveId: g.id, minPct: d.minPct, maxPct: d.maxPct, score: SELF_KO_MOVES.has(g.id) ? Math.min(score, 15) : score, reason: `${snap.player.name} loafs around this turn (Truant): no move does anything`, line });
+      continue;
+    }
     if (SELF_KO_MOVES.has(g.id)) {
       // One use only and you faint too: worth it for a sure KO, otherwise a last resort.
       const name = snap.player.name;
@@ -572,25 +611,25 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
     const facts: MoveFacts = {
       koNow: ko, hitsToKo: p.myTurns === Infinity ? undefined : p.myTurns, movesFirst: first,
       accuracy: !alwaysHits && hitChance < 1 ? Math.round(hitChance * 100) : undefined,
+      ...(holds ? { holds } : {}),
     };
-    out.actions.push({ kind: 'move', label: m.name, moveId: g.id, minPct: d.minPct, maxPct: d.maxPct, ko, score, reason, koChance, critKo, line, facts });
+    out.actions.push({ kind: 'move', label: m.name, moveId: g.id, minPct: d.minPct, maxPct: d.maxPct, ko, score, reason, koChance, critKo, rank: lv?.rank, line, facts });
   }
   // The loop pushes exactly one row per entry of snap.moves, in order.
   out.actions.slice(moveRowsFrom).forEach((a, i) => (a.slot = i));
 
-  // Items from your bag
-  const supply = resolveItems(snap, opts.items);
-  if (supply.counts.size && itemsAllowed(snap, rules)) {
+  if (useItems) {
     const itemRows = itemAdvice({
       ds, snap, rules, supply, box, myMon: me.mon, myCalc, foeCalc, myMoveIds, foeMoves, field,
       allMoveIds: snap.moves.flatMap((m) => { const id = idx.moves.get(lc(m.name))?.id; return id ? [{ name: m.name, id, pp: m.pp, maxPp: m.maxPp }] : []; }),
       foes: [{ name: foe.mon.name, calc: foeCalc }, ...(support.foesLeft ?? [])],
+      revive,
       h: { applyState, mySet: (b, names) => mySet(idx, box, b, names) },
     });
     // Item rows are scored on the one-turn projection. Under lookahead, keep each item's gain over
     // plan A (best attack, one-turn) and add it to the best attack's lookahead score, as field moves do.
     if (look && bestAttackLook >= 0 && planA1 >= 0) {
-      for (const a of itemRows) if (a.score != null) a.score = Math.round(Math.max(0, Math.min(100, bestAttackLook + (a.score - planA1))));
+      for (const a of itemRows) if (a.score != null && !a.looked) a.score = Math.round(Math.max(0, Math.min(100, bestAttackLook + (a.score - planA1))));
     }
     out.actions.push(...itemRows);
   }
@@ -608,7 +647,7 @@ function adviseTurnInner(ds: Dataset, snap: BattleSnapshot, box: BoxMon[], opts:
   if (rules.gen === 3) notes.push('Battle Frontier: Gen III rules (no Fairy, the type decides physical/special, Gen III moves and items only). Bag items cannot be used.');
   else if (!itemsAllowed(snap, rules)) notes.push('Bag medicine cannot be used in Battle Towers or Player Battles; HP, status and PP carry over between opponents.');
 
-  out.actions.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+  out.actions.sort(byScore);
   if (Object.keys(snap.boosts.player).length || Object.keys(snap.boosts.opponent).length) notes.push('Stat stages come from the battle log and are included.');
   return out;
 }
@@ -626,6 +665,30 @@ function benchFor(ds: Dataset, idx: Idx, box: BoxMon[], snap: BattleSnapshot, ru
     });
   }
   return out;
+}
+
+/** Healing medicine the NPC has left: the wiki's list minus what the battle log shows it used. */
+function medicinesLeft(ds: Dataset, v: NpcTeamVariant | undefined, snap: BattleSnapshot): string[] {
+  const left = [...(v?.medicines ?? [])];
+  for (const id of snap.npcItems ?? []) {
+    const i = left.indexOf(id);
+    if (i >= 0) left.splice(i, 1);
+  }
+  return left.flatMap((id) => {
+    const it = HEAL_ITEMS.find(([x]) => x === id && !x.endsWith('berry'));
+    return it ? [ds.items[id]?.name ?? it[1]] : [];
+  });
+}
+
+/** Your fainted Pokémon at half HP (about what a Revive gives), for the lookahead. */
+function faintedFor(ds: Dataset, idx: Idx, box: BoxMon[], snap: BattleSnapshot, rules: BattleRules): BenchRow[] {
+  return snap.bench.filter((r) => !r.active && (r.fainted || (r.hp ?? 1) <= 0)).flatMap((r) => {
+    const mine = mySet(idx, box, r, (r.moves ?? []).map((m) => m.name));
+    if (!mine) return [];
+    const calc = boxToCalc(ds, mine.mon);
+    calc.originalCurHP = Math.max(1, Math.floor(calc.maxHP() / 2));
+    return [{ row: r, name: r.name, calc, moves: repeatable(movesForBox(ds, mine.mon).filter((id) => !rules.bannedMoves.has(id))) }];
+  });
 }
 
 type BenchRow = BenchMon & { row: RosterMon; friendship?: number };
@@ -662,12 +725,22 @@ const firstOnField = (snap: BattleSnapshot, side: 'player' | 'opponent', name: s
 const usedFocusEnergy = (snap: BattleSnapshot, side: 'player' | 'opponent', name: string, idx: Idx) =>
   sinceIn(snap, side, name).some((e) => !e.missed && idx.moves.get(lc(e.move))?.id === 'focusenergy');
 
+/**
+ * Truant: it loafs on the coming turn when it moved on the last one (alternation seen live 2026-11-25). Guess: worked
+ * out from the turns of its logged moves, so a turn lost to flinch or sleep can put this off by one.
+ */
+function loafsNow(snap: BattleSnapshot, side: 'player' | 'opponent', name: string, p: CalcPokemon): boolean {
+  if (p.ability !== 'Truant' || snap.turn === undefined) return false;
+  const last = sinceIn(snap, side, name).at(-1);
+  return last?.turn !== undefined && last.turn >= snap.turn - 1;
+}
+
 type Look = { engine: Lookahead; values: RootValue[]; depth: number };
 
 function lookFor(
   ds: Dataset, idx: Idx, snap: BattleSnapshot, field: ReturnType<typeof makeField>, rules: BattleRules, me: LookMon | null, bench: BenchRow[],
   foeName: string, foeCalc: CalcPokemon, foeMoves: string[], left: { name: string; calc: CalcPokemon; moves: string[] }[],
-  prediction: NpcGuess[] | undefined, depth: number | undefined, foeHitMult?: number,
+  prediction: NpcGuess[] | undefined, depth: number | undefined, foeHitMult?: number, fainted: BenchRow[] = [],
 ): Look | undefined {
   let active = me;
   if (!active) {
@@ -680,6 +753,7 @@ function lookFor(
   const mine: LookMon[] = [
     { ...active, asDefender: defenderVsNpc(active.calc, rules) },
     ...bench.map((b) => ({ name: b.name, calc: b.calc, asDefender: defenderVsNpc(b.calc, rules), moves: b.moves, friendship: b.friendship })),
+    ...fainted.map((b) => ({ name: b.name, calc: b.calc, asDefender: defenderVsNpc(b.calc, rules), moves: b.moves, fainted: true })),
   ];
   const foes: LookMon[] = [{ name: foeName, calc: foeCalc, moves: repeatable(foeMoves) }, ...left.map((f) => ({ name: f.name, calc: f.calc, moves: repeatable(f.moves) }))];
   return runLookahead({
@@ -693,6 +767,10 @@ function lookFor(
       me: !!me && !!snap.player && firstOnField(snap, 'player', snap.player.name),
       foe: !!snap.opponent && firstOnField(snap, 'opponent', snap.opponent.name),
     },
+    loafing: {
+      me: !!me && !!snap.player && loafsNow(snap, 'player', snap.player.name, me.calc),
+      foe: !!snap.opponent && loafsNow(snap, 'opponent', snap.opponent.name, foeCalc),
+    },
     prediction: me ? prediction?.map((g) => ({ moveId: g.moveId, prob: g.prob })) : undefined,
     depth,
     foeHitMult,
@@ -705,6 +783,7 @@ function applySwitchLook(adv: ActionAdvice, look: Look, to: number) {
   const v = look.values.find((x) => x.action.kind === 'switch' && x.action.to === to);
   if (!v) return;
   adv.score = Math.round(v.score);
+  adv.rank = v.rank;
   adv.line = planLine(v);
   if (adv.threat) {
     const t = look.engine.threatOdds(to);
@@ -755,6 +834,19 @@ function switchAdvice(ds: Dataset, idx: Idx, box: BoxMon[], r: RosterMon, foeCal
   return adv;
 }
 
+/** Your pick: the strongest move, unless a more accurate one with no cost (recoil, stat drop) also KOs on every roll. */
+function bestMoveToKo(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, moveIds: string[], field: ReturnType<typeof makeField>): MoveDamage | null {
+  const acc = (id: string) => { const a = ds.moves[id]?.accuracy; return typeof a === 'number' ? a : 101; };
+  let best = bestMove(ds, atk, def, moveIds, field);
+  for (const id of moveIds) {
+    const fx = moveFx(ds, id);
+    if (!best || acc(id) <= acc(best.moveId) || fx.recoil || fx.userDrop) continue;
+    const d = bestMove(ds, atk, def, [id], field);
+    if (d && d.minPct >= curPct(def)) best = d;
+  }
+  return best;
+}
+
 function switchAdviceInner(ds: Dataset, idx: Idx, box: BoxMon[], r: RosterMon, foeCalc: CalcPokemon, foeMoves: string[], rules: BattleRules, field: ReturnType<typeof makeField>, free = false): ActionAdvice {
   const label = free ? `Send in ${r.name}` : `Switch to ${r.name}`;
   const mine = mySet(idx, box, r, (r.moves ?? []).map((m) => m.name));
@@ -765,7 +857,7 @@ function switchAdviceInner(ds: Dataset, idx: Idx, box: BoxMon[], r: RosterMon, f
   if (free) return freeSwitchAdvice(ds, label, mine.known, p, moves, incoming, foeCalc, rules, field);
   const hpAfter = curPct(p) - avg(incoming);
   if (hpAfter <= 0) return { kind: 'switch', label, score: 0, reason: `Would faint switching in (${incoming ? `${incoming.name} ${pctTxt(incoming)}` : ''}).` };
-  const mineBest = bestMove(ds, p, foeCalc, repeatable(moves.filter((id) => !rules.bannedMoves.has(id))), field);
+  const mineBest = bestMoveToKo(ds, p, foeCalc, repeatable(moves.filter((id) => !rules.bannedMoves.has(id))), field);
   if (!mineBest) {
     return mine.known
       ? { kind: 'switch', label, score: 5, reason: `Takes ~${Math.round(avg(incoming))}% switching in; no known damaging move.` }
@@ -786,10 +878,10 @@ function freeSwitchAdvice(
   foeCalc: CalcPokemon, rules: BattleRules, field: ReturnType<typeof makeField>,
 ): ActionAdvice {
   const hp = curPct(p);
-  const mineBest = bestMove(ds, p, foeCalc, repeatable(moves.filter((id) => !rules.bannedMoves.has(id))), field);
+  const mineBest = bestMoveToKo(ds, p, foeCalc, repeatable(moves.filter((id) => !rules.bannedMoves.has(id))), field);
   const first = order(p, foeCalc, mineBest?.priority ?? 0, incoming?.priority ?? 0);
   const threat: ThreatInfo | undefined = incoming
-    ? { name: incoming.name, minPct: incoming.minPct, maxPct: incoming.maxPct, ko: incoming.minPct >= hp ? 'sure' : incoming.maxPct >= hp ? 'chance' : undefined, youFirst: first }
+    ? { name: incoming.name, minPct: incoming.minPct, maxPct: incoming.maxPct, ko: holdsFull(ds, foeCalc, p, incoming) ? undefined : incoming.minPct >= hp ? 'sure' : incoming.maxPct >= hp ? 'chance' : undefined, youFirst: first }
     : undefined;
   const hit = threat ? `Their ${threat.name} does ${pctTxt(threat)} to it${threat.ko === 'sure' ? ' (KOs it)' : threat.ko ? ' (can KO it)' : ''}. ` : '';
   const note = known ? '' : ' (Not in your box: average IVs.)';

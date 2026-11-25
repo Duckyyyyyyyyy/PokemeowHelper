@@ -294,6 +294,19 @@ export function damageRolls(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, mov
   return [...(d as number[])].sort((a, b) => a - b);
 }
 
+const IGNORES_STURDY = new Set(['Mold Breaker', 'Teravolt', 'Turboblaze']);
+
+/**
+ * What keeps `def` at 1 HP after one hit from FULL HP (the caller checks the HP): Sturdy ("Brock's Golem endured the
+ * hit!", seen live 2026-11-25) or Focus Sash (mainline rule, not seen yet: a guess). Not against a move with several
+ * hits; in Gen III Sturdy only stops one-hit KO moves.
+ */
+export function holdsOn(ds: Dataset, atk: CalcPokemon, def: CalcPokemon, moveId: string): string | undefined {
+  const cg = atk.gen as Gen;
+  const why = def.item === 'Focus Sash' ? 'Focus Sash' : cg.num > 4 && def.ability === 'Sturdy' && !IGNORES_STURDY.has(atk.ability ?? '') ? 'Sturdy' : undefined;
+  return why && (calcMove(ds, moveId, cg)?.hits ?? 1) === 1 ? why : undefined;
+}
+
 /** Moves that make the user faint: they can't be repeated, so they never "win a 1v1" by spamming. */
 export const SELF_KO_MOVES: ReadonlySet<string> = new Set(['selfdestruct', 'explosion', 'mistyexplosion', 'finalgambit', 'memento', 'healingwish', 'lunardance']);
 /** Moves a Pokémon can keep using turn after turn (for 1v1 projections). */
@@ -368,7 +381,10 @@ export function duel(ds: Dataset, me: CalcPokemon, myMoves: string[], foe: CalcP
     const plainAvg = plain ? (plain.minPct + plain.maxPct) / 2 : 0;
     if (plainAvg > 0 && plainAvg < myAvg) myTurns = myAvg >= 100 ? 1 : 1 + Math.ceil((100 - myAvg) / plainAvg);
   }
-  const theirTurns = theirAvg > 0 ? Math.ceil(100 / theirAvg) : Infinity;
+  let theirTurns = theirAvg > 0 ? Math.ceil(100 / theirAvg) : Infinity;
+  // Both start at full HP: Sturdy / Focus Sash take a second hit.
+  if (myTurns === 1 && holdsOn(ds, me, foe, mine!.moveId)) myTurns = 2;
+  if (theirTurns === 1 && holdsOn(ds, foe, me, theirs!.moveId)) theirTurns = 2;
   const first = youFirst ?? false; // ties are counted pessimistically
   const win = myTurns !== Infinity && (first ? myTurns <= theirTurns : myTurns < theirTurns);
 

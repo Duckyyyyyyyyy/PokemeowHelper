@@ -1,5 +1,5 @@
 import type { Pokemon as CalcPokemon } from '@smogon/calc';
-import type { BattleSnapshot, Boosts } from '../shared/battle';
+import type { BattleSnapshot, Boosts, RosterMon } from '../shared/battle';
 import type { BoxMon, Dataset } from '../shared/types';
 import { bestMove, boxToCalc, defenderVsNpc, makeField, repeatable, type MoveDamage } from './damage';
 import { order, project } from './projection';
@@ -21,7 +21,7 @@ const avg = (d: MoveDamage | null) => (d ? (d.minPct + d.maxPct) / 2 : 0);
 
 const ALL_STATUS = ['par', 'brn', 'psn', 'tox', 'slp', 'frz'];
 /** [id, name, HP restored given max HP]. Berries are marked in BERRIES. */
-const HEAL_ITEMS: [id: string, name: string, hp: (maxHp: number) => number][] = [
+export const HEAL_ITEMS: [id: string, name: string, hp: (maxHp: number) => number][] = [
   ['oranberry', 'Oran Berry', () => 10], ['potion', 'Potion', () => 20], ['superpotion', 'Super Potion', () => 60], ['moomoomilk', 'Moomoo Milk', () => 100],
   ['sitrusberry', 'Sitrus Berry', (m) => Math.floor(m / 4)], ['hyperpotion', 'Hyper Potion', () => 120],
   ['maxpotion', 'Max Potion', () => Infinity], ['fullrestore', 'Full Restore', () => Infinity],
@@ -77,6 +77,8 @@ export interface ItemContext {
   /** The active foe plus the NPC Pokémon still to come. */
   foes: { name: string; calc: CalcPokemon }[];
   field: ReturnType<typeof makeField>;
+  /** Lookahead: the best fainted Pokémon to bring back at this share of its HP, with the row's score. */
+  revive?: (frac: number) => { row: RosterMon; score: number } | undefined;
   h: {
     applyState: (p: CalcPokemon, b: { hp?: number; maxHp?: number; status?: string }, boosts?: Boosts) => CalcPokemon;
     mySet: (b: { name: string; level?: number; item?: string }, moveNames: string[]) => { mon: BoxMon; known: boolean } | undefined;
@@ -144,9 +146,11 @@ export function itemAdvice(c: ItemContext): ActionAdvice[] {
   const rev = REVIVE_ITEMS.filter(([id]) => has(id));
   if (rev.length) {
     let best: ActionAdvice | null = null;
+    const look = c.revive?.(rev[0][2]);
     for (const r of snap.bench) {
       // Not the active Pokémon: when it is down the advice is a forced switch, never a Revive on it.
       if (r.active || (!r.fainted && (r.hp ?? 1) > 0)) continue;
+      if (look && look.row !== r) continue;
       const mine = c.h.mySet(r, (r.moves ?? []).map((m) => m.name));
       if (!mine) continue;
       const [id, name, frac] = rev[0];
@@ -156,10 +160,11 @@ export function itemAdvice(c: ItemContext): ActionAdvice[] {
       const incoming = bestMove(ds, foeCalc, defenderVsNpc(p, rules), c.foeMoves, field);
       if (!mineBest) continue;
       const proj = project(mineBest.expectedPct, avg(incoming), curPct(p) - avg(incoming), foeHp, order(p, foeCalc, mineBest.priority, incoming?.priority ?? 0));
-      // Two turns before it acts (revive, then switch in): a clear penalty.
-      const score = Math.round(Math.max(0, Math.min(100, proj.score - 25)));
+      // The lookahead plays the rest of the battle with it back. Without it: two turns before it acts (revive, then
+      // switch in), a clear penalty.
+      const score = look?.score ?? Math.round(Math.max(0, Math.min(100, proj.score - 25)));
       if (!best || score > (best.score ?? 0)) {
-        best = { kind: 'item', label: `${name} on ${r.name}`, score, reason: `Brings ${r.name} back at ${frac === 1 ? 'full' : 'half'} HP (${left(id)}). Switched in later, it ${proj.win ? 'wins' : 'loses'} the 1v1 with ${mineBest.name}.` };
+        best = { kind: 'item', label: `${name} on ${r.name}`, score, reason: `Brings ${r.name} back at ${frac === 1 ? 'full' : 'half'} HP (${left(id)}). Switched in later, it ${proj.win ? 'wins' : 'loses'} the 1v1 with ${mineBest.name}.`, ...(look ? { looked: true } : {}) };
       }
     }
     if (best) out.push(best);

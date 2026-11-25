@@ -12,6 +12,8 @@ export interface BattleMon {
   level?: number;
   hp?: number;
   maxHp?: number;
+  /** HP in %, when the screen shows only a bar (opponents since 2026-11-25). */
+  hpPct?: number;
   /** Game status code: par, brn, psn, tox, slp, frz. */
   status?: string;
   item?: string;
@@ -37,6 +39,8 @@ export interface RosterMon {
   level?: number;
   hp?: number;
   maxHp?: number;
+  /** HP in %, when the screen shows only a bar. */
+  hpPct?: number;
   active: boolean;
   fainted: boolean;
   /** Gender when the page shows it (Explore team panel). */
@@ -114,6 +118,8 @@ export interface BattleSnapshot {
   log: string[];
   /** Move uses parsed from the whole log (v2+; missing in v1 snapshots). */
   events?: BattleEvent[];
+  /** Items the trainer used in this battle, from the log (ids; repeats kept). */
+  npcItems?: string[];
   /**
    * Your active Pokémon fainted and the game wants the next one ("Choose your next Pokémon."):
    * only a switch-in can be picked. Missing in older snapshots: use activeFainted().
