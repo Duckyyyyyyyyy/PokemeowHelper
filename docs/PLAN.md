@@ -1,9 +1,11 @@
 # MeowRPGAdvisor: Plan
 
-Current version: **0.16.1** · Details and history: `docs/archive/PLAN-v1.md` (Vietnamese; grep, don't read whole)
+Current version: **0.17.0** · Details and history: `docs/archive/PLAN-v1.md` (Vietnamese; grep, don't read whole)
 Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing · ⬜ planned
 
 ## ⏳ Ongoing
+
+- 🔶 **Train tab (released in 0.17.0, not checked in the real game)**: a new HUD tab, Team / Box views. Each Pokémon gets a role (Fast attacker, Bulky attacker, Physical wall, Special wall: auto from base stats, a guess, or your pick in `md-ev-roles`) and shows its EVs against that spread: Done, Grind, Reset first (lower only what is past 510), EVs unknown, Later (under Lv 25), plus a nature warning. Tap a name for the Build card: roles side by side, stats at the fight's level, Speed and hits taken against the Prep NPC, "Lean" (fewest Spe EVs to pass one foe), roles scored on tap against League rematches / Rivals / Battle Tower, and where to farm. Prep → Team → EVs links to it. Farm view: the box's needs grouped by stat (who battles, who holds Exp. Share), shopping list against the bag (`md-ev-farm` ticks). Also: **Speed order** ladder in Prep → Team (ghost rungs = a few Spe EVs pass the next foe), **Battle Debrief** after a won/lost battle (content script keeps it in `mdLastBattle`; knockouts, "hit first" with the Spe EVs that would have moved first; singles only), **Best session now** in Wild → Maps (hunt catches, Farm EVs, EXP). Engines `evRoles.ts`, `debrief.ts`, `route.ts`. Prototypes: `docs/design/ev-trainer-prototypes.html`.
 
 - 🔶 **Hunt & Grind for an NPC** (Prep step 3): wild Pokémon to catch and train, hunt list (`mdHunt`), Explore marker, wild CATCH rule, Battle link. Released in 0.13.0, not checked in the real game yet. Spec: `docs/design/hunt-and-grind-spec.md`.
 - 🔶 **World Boss**: per-spawn move picker, lobby reader, counter team (Prep). Released in 0.13.0, not checked in a real raid yet.
@@ -50,6 +52,7 @@ Claude reads the page through Claude in Chrome and the user plays. Tick an item 
 - [ ] Friendship (WS4) in a real battle: survive-at-1-HP and crit ×2 at 255. The box field `friendship` (0–255) is confirmed in the real /api/collection response (2026-11-22). Guesses: survival never rolls when already at 1 HP and can trigger more than once per battle; "−10 accuracy" is 10 points off before stages (not ×0.9) and never-miss moves are unaffected; Battle Frontier has no Friendship (not mentioned by the guide); the gate reads the arena `data-kind` (only "gym" confirmed: league/elite/champion/rival/tower/mega/chamber/wild and player/world-boss are guessed values) or the matched NPC category; unknown kind = no effects. Doubles advice does not model it
 
 - [ ] EV advice (2026-11-23): the spreads are scored at the Pokémon's current level; EVs from NPC battles are the sum of species yields (golden-tested on Brock's rematch vs the user's League sheet); a Power item holder gets +8 per knockout it takes part in (guess: "if it knocks out all" assumes it earns EXP from each); Battle Tower and Mega Chamber battles are assumed to give EVs (the wiki only names World Bosses, Frontier, PvP and Quick catch as giving none); wild spots list maps only, not exact parts or time of day
+- [ ] Train tab: the auto role is a base-stat guess (wall when its attack stat is under 90 and Def or SpD is 110+, fast at base Speed 80+, else bulky); Speed lines use the NPC's wiki set (no Scarf, paralysis, stages, Trick Room); Team = locked Pokémon, else the 6 highest levels (the game's own party is not read). Farm: Exp. Share holders get the same EVs, Power item +8 per knockout taken part in, vitamin/Power item bag ids (lowercase name). Debrief: `data-status` "won"/"lost" (other end words unseen), "hit first" rule, foe Speed estimate (31 IVs, no EVs, neutral). Session Route: reachability guess, "EXP" = wild top level within 10 of your strongest six
 - [ ] Grind levels: wins use the best moves it can have by each level (TMs only when the bag is known); checked every 5 levels and at evolutions, so a win can come a few levels earlier than shown
 
 ## Known data gaps (not bugs)
@@ -83,3 +86,4 @@ Claude reads the page through Claude in Chrome and the user plays. Tick an item 
 | 0.15.1 | Fix for the "No SW" error after installing or updating (the side panel setup retries until Chrome has registered the background worker) |
 | 0.16.0 | Battle advice: switch and move scoring plays the rest of the battle out (beats 0.15.1 in simulated battles), opponent HP read from the bar, Revive judged by the lookahead, Sturdy / Focus Sash, Truant, sure KO with better accuracy, better lead on ties, note when an NPC may heal |
 | 0.16.1 | Fix for the "No tab with id" error in side panel mode when a tab closes at once |
+| 0.17.0 | Train tab: EV role per Pokémon for the team and the box (board, Build card with speed, hits taken, Lean and goal scoring, Farm sessions with a shopping list), Speed order in Prep → Team, Battle Debrief, Best session now in Wild → Maps |

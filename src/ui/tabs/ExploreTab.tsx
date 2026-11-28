@@ -24,6 +24,7 @@ import { ALL_TYPES } from '../../engine/typeChart';
 import { MapTips } from './TipsTab';
 import { huntBySpecies } from '../huntStore';
 import { hpPct as pctOfHp } from '../components/hud';
+import { SessionRoute } from '../components/SessionRoute';
 
 type View = 'maps' | 'encounter' | 'balls';
 const view = signal<View>('maps');
@@ -127,7 +128,7 @@ export function ExploreTab() {
           </button>
         ))}
       </div>
-      {view.value === 'maps' && <Maps ds={ds} />}
+      {view.value === 'maps' && <><SessionRoute ds={ds} /><Maps ds={ds} /></>}
       {view.value === 'encounter' && <Encounter ds={ds} />}
       {view.value === 'balls' && <Balls ds={ds} />}
     </>

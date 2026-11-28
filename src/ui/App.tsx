@@ -5,11 +5,12 @@ import { SettingsTab } from './tabs/SettingsTab';
 import { ExploreTab } from './tabs/ExploreTab';
 import { TipsTab } from './tabs/TipsTab';
 import { PrepTab } from './tabs/PrepTab';
+import { TrainTab } from './tabs/TrainTab';
 import { battle } from './battleStore';
 import { wild } from './wildStore';
 import { Icon } from './components/hud';
 
-/** Tab registry: the four HUD tabs; Settings sits behind the gear. */
+/** Tab registry: the five HUD tabs; Settings sits behind the gear. */
 export interface TabDef {
   id: TabId;
   label: string;
@@ -21,6 +22,7 @@ export const TABS: TabDef[] = [
   { id: 'battle', label: 'Battle', icon: 'battle', component: BattleTab },
   { id: 'wild', label: 'Wild', icon: 'wild', component: ExploreTab },
   { id: 'prep', label: 'Prep', icon: 'prep', component: PrepTab },
+  { id: 'train', label: 'Train', icon: 'train', component: TrainTab },
   { id: 'guide', label: 'Guide', icon: 'guide', component: TipsTab },
 ];
 

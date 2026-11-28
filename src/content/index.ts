@@ -10,6 +10,7 @@ import { lobbySig, mergeBossLobby, readBossLobby } from './bossLobbyReader';
  * snapshot for the side panel. It never clicks, types, changes the page, or calls the game's API.
  */
 const KEY = 'mdBattle';
+const LAST_KEY = 'mdLastBattle';
 const BAG_KEY = 'mdBag';
 const WILD_KEY = 'mdWild';
 const LOBBY_KEY = 'mdBossLobby';
@@ -76,6 +77,8 @@ function publish() {
   last = sig;
   try {
     chrome.storage.local.set({ [KEY]: snap }).catch(() => observer.disconnect());
+    // Keep the finished battle for the Debrief: mdBattle is cleared when you leave the battle page.
+    if (snap && (snap.status === 'won' || snap.status === 'lost')) chrome.storage.local.set({ [LAST_KEY]: snap }).catch(() => {});
   } catch {
     // Extension reloaded or updated: this old copy is orphaned, stop quietly.
     observer.disconnect();

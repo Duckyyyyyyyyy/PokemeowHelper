@@ -7,7 +7,8 @@ import { DangerStrip, Fold, Hp, Icon, Plate, RatePill, TypeAvatar, hpPct, specie
 import { adviseTurn, foeSet, indexes, matchNpc, mySet, type ActionAdvice, type ThreatInfo, type TurnAdvice } from '../../engine/turnAdvisor';
 import { factsLine, plainLine, rate } from '../../engine/plain';
 import { npcKey, seenByOthers, seenByYou } from '../../engine/observed';
-import { battle, damageChecks, doublesMoves, forceGen3, guessScore, loadSampleBattle, observed, setForceGen3, towerRun } from '../battleStore';
+import { battle, damageChecks, doublesMoves, forceGen3, guessScore, lastBattle, loadSampleBattle, loadSampleLastBattle, observed, setForceGen3, towerRun } from '../battleStore';
+import { Debrief } from '../components/Debrief';
 import { runSummary } from '../../engine/towerPlan';
 import { adviseDoubles, type DoublesAction, type DoublesAdvice, type DoublesMonAdvice } from '../../engine/doublesAdvisor';
 import { activeTab, box, dataset, goPrep, isExtension, selectedNpcId, selectedVariant } from '../store';
@@ -44,7 +45,9 @@ export function BattleTab() {
           {isExtension && <p class="small muted">Just installed or updated MeowRPGAdvisor? Reload the game tab once so it can see the battle.</p>}
         </Empty>
         {import.meta.env.DEV && <button class="btn" style={{ width: '100%' }} onClick={() => loadSampleBattle()}>Load sample battle (dev)</button>}
+        {lastBattle.value && <Debrief ds={ds} snap={lastBattle.value} title="Last battle" />}
         {import.meta.env.DEV && <button class="btn" style={{ width: '100%' }} onClick={() => loadSampleBattle('doubles')}>Load sample doubles battle (dev)</button>}
+        {import.meta.env.DEV && <button class="btn" style={{ width: '100%' }} onClick={() => loadSampleLastBattle()}>Load sample lost battle (dev)</button>}
         <Tip kind="info">MeowRPGAdvisor only gives advice. You always pick your moves; it never clicks for you.</Tip>
       </>
     );
@@ -110,6 +113,9 @@ function Live({ ds, snap }: { ds: Dataset; snap: BattleSnapshot }) {
           {snap.status === 'won' ? 'You won the battle!' : 'You lost this one.'}{' '}
           <button class="link" onClick={() => (activeTab.value = 'prep')}>Plan the next NPC in Prep →</button>
         </Tip>
+      ) : null}
+      {ended ? (
+        <Debrief ds={ds} snap={snap} />
       ) : snap.status !== 'active' ? (
         <Tip kind="info">Battle state: {snap.status}. Advice shows while the battle is active.</Tip>
       ) : advice && !advice.actions.length ? (
