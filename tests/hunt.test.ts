@@ -54,6 +54,11 @@ describe('hunt: reachable maps (guess)', () => {
     expect(mapAccess('azure-shore', progress({ seenMaps: new Set(['azure-shore']) })).access).toBe('seen');
     expect(mapAccess('void-wastes', progress({ passed: 9 })).access).toBe('locked'); // no path stage: never guessed
   });
+  it('"All maps unlocked" opens every map, but seen and ticked still say so', () => {
+    expect(mapAccess('void-wastes', progress({ allOpen: true })).access).toBe('open');
+    expect(mapAccess('azure-shore', progress({ passed: 0, allOpen: true })).access).toBe('open');
+    expect(mapAccess('azure-shore', progress({ seenMaps: new Set(['azure-shore']), allOpen: true })).access).toBe('seen');
+  });
   it('finds the map from the encounter card title', () => {
     expect(mapIdForTitle(ds, 'Grasslands 3')).toBe('verdant-trail');
     expect(mapIdForTitle(ds, 'The Blue Sea 2')).toBe('azure-shore');

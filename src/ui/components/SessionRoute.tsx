@@ -7,7 +7,7 @@ import { allTips } from '../../engine/tips';
 import { sessionRoutes, EXP_WINDOW } from '../../engine/route';
 import { box, selectedNpc } from '../store';
 import { doneTips } from '../tipsStore';
-import { hunt, seenMaps } from '../huntStore';
+import { allMapsOpen, hunt, seenMaps, setAllMapsOpen } from '../huntStore';
 import { evRoles } from '../evRoleStore';
 
 const ACCESS: Record<string, string> = { seen: 'Seen', ticked: 'Unlocked', open: 'Open', guess: 'Reachable?' };
@@ -21,18 +21,18 @@ export function SessionRoute({ ds }: { ds: Dataset }) {
     const rows = box.value.map((m) => trainRow(ds, m, 'own', evRoles.value));
     const needs = new Map<StatKey, number>(farmGroups(rows).map((g) => [g.stat, g.total]));
     const top = box.value.filter((b) => b.level).map((b) => b.level!).sort((a, b) => b - a).slice(0, 6);
-    const progress = { tips: allTips(ds), done: new Set(doneTips.value), seenMaps: seenMaps.value, passed: passedStage(selectedNpc.value) };
+    const progress = { tips: allTips(ds), done: new Set(doneTips.value), seenMaps: seenMaps.value, passed: passedStage(selectedNpc.value), allOpen: allMapsOpen.value };
     return sessionRoutes(ds, {
       hunt: new Set(hunt.value.list.map((e) => e.species)),
       needs,
       teamLevel: top.length ? Math.round(top.reduce((a, b) => a + b, 0) / top.length) : undefined,
       access: (id) => mapAccess(id, progress).access,
     });
-  }, [ds, box.value, evRoles.value, hunt.value, doneTips.value, seenMaps.value, selectedNpc.value]);
-  if (!stops.length) return null;
+  }, [ds, box.value, evRoles.value, hunt.value, doneTips.value, seenMaps.value, selectedNpc.value, allMapsOpen.value]);
   return (
     <div class="card">
       <p class="title">Best session now <span class="r">catch · EVs · EXP</span></p>
+      {!stops.length && <div class="small muted">No map serves your hunt list, EV needs or EXP right now.</div>}
       {stops.map((s, i) => (
         <div class="routestop">
           <div class="row" style={{ justifyContent: 'space-between' }}>
@@ -46,8 +46,12 @@ export function SessionRoute({ ds }: { ds: Dataset }) {
           </div>
         </div>
       ))}
+      <label class="small row" style={{ gap: '6px', marginTop: '6px' }}>
+        <input type="checkbox" checked={allMapsOpen.value} onChange={(e) => setAllMapsOpen(e.currentTarget.checked)} />
+        All maps unlocked
+      </label>
       <div class="small muted" style={{ marginTop: '4px' }}>
-        Catch = your hunt list. EVs = what Train → Farm still needs (each Pokémon's own role). EXP = wild levels within {EXP_WINDOW} of your strongest six. "Reachable?" is a guess from Tips and your Prep NPC. Maps only, not exact spots or time of day.
+        Catch = your hunt list. EVs = what Train → Farm still needs (each Pokémon's own role). EXP = wild levels within {EXP_WINDOW} of your strongest six. {allMapsOpen.value ? 'Every map counts as unlocked (your switch).' : '"Reachable?" is a guess from Tips and your Prep NPC; tick "All maps unlocked" if you have them all.'} Maps only, not exact spots or time of day.
       </div>
     </div>
   );

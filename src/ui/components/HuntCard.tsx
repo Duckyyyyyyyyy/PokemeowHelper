@@ -9,7 +9,7 @@ import { allTips } from '../../engine/tips';
 import { bag, ownedItems } from '../bagStore';
 import { box } from '../store';
 import { doneTips, openTip } from '../tipsStore';
-import { hunt, onHuntList, seenMaps, toggleHunt } from '../huntStore';
+import { allMapsOpen, hunt, onHuntList, seenMaps, setAllMapsOpen, toggleHunt } from '../huntStore';
 import { MoveChip, Tip, Types, scoreClass } from './common';
 
 const pct = (x: number) => (x >= 0.0995 ? `${Math.round(x * 100)}%` : x >= 0.001 ? `${(x * 100).toFixed(1)}%` : x > 0 ? '<0.1%' : '–');
@@ -38,9 +38,9 @@ export function HuntCard({ ds, npc, v, ready, grind, rules, size }: {
     const gear = knownGear(doneSet, new Set(items.keys()));
     return huntFor(ds, v, box.value, ready, grind, {
       levelCap: v.levelCap, rules, size, showLocked,
-      progress: { tips: allTips(ds), done: doneSet, seenMaps: seen, passed: passedStage(npc) }, gear,
+      progress: { tips: allTips(ds), done: doneSet, seenMaps: seen, passed: passedStage(npc), allOpen: allMapsOpen.value }, gear,
     });
-  }, [ds, v, ready, grind, rules, size, showLocked, done, seen, items, npc]);
+  }, [ds, v, ready, grind, rules, size, showLocked, done, seen, items, npc, allMapsOpen.value]);
   const listed = hunt.value.list.filter((e) => e.npcId === npc.id);
 
   if (!ds.wild) return <Tip>Hunt for {npcName}: sync the data again in ⚙ Settings to load the explore maps.</Tip>;
@@ -55,9 +55,13 @@ export function HuntCard({ ds, npc, v, ready, grind, rules, size }: {
       {res.picks.map((p) => <HuntRow ds={ds} p={p} npc={npc} npcName={npcName} />)}
       {!res.covered && !res.picks.length && <div class="small muted">No wild Pokémon on the maps you can reach answers them{res.lockedForms ? '; try the locked maps' : ''}.</div>}
       <label class="small row" style={{ gap: '6px', marginTop: '6px' }}>
+        <input type="checkbox" checked={allMapsOpen.value} onChange={(e) => setAllMapsOpen((e.target as HTMLInputElement).checked)} />
+        All maps unlocked
+      </label>
+      {!allMapsOpen.value && <label class="small row" style={{ gap: '6px', marginTop: '6px' }}>
         <input type="checkbox" checked={showLocked} onChange={(e) => setShowLocked((e.target as HTMLInputElement).checked)} />
         Show locked maps{!showLocked && res.lockedForms ? ` (${res.lockedForms} more Pokémon)` : ''}
-      </label>
+      </label>}
       {listed.length > 0 && (
         <div class="small" style={{ marginTop: '4px' }}>
           Hunt list for {npcName}:{' '}
@@ -67,7 +71,7 @@ export function HuntCard({ ds, npc, v, ready, grind, rules, size }: {
         </div>
       )}
       <div class="small muted" style={{ marginTop: '4px' }}>
-        Reachable maps are a guess: maps seen on the game's Explore page, Tips you ticked, and {npcName}'s place on the Tips progress path. A "needs …?" tag (Surf, a rod, the Safari Ticket) means MeowRPGAdvisor doesn't know if you have it.
+        {allMapsOpen.value ? 'Every map counts as unlocked (your switch). ' : ''}Reachable maps are a guess: maps seen on the game's Explore page, Tips you ticked, and {npcName}'s place on the Tips progress path. A "needs …?" tag (Surf, a rod, the Safari Ticket) means MeowRPGAdvisor doesn't know if you have it.
         Scored like Worth grinding, with average IVs (15), no EVs and the level-up moves it has by then.
       </div>
     </div>

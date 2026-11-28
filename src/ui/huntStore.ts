@@ -28,6 +28,25 @@ export const hunt = signal<HuntState>(EMPTY);
 export const huntBySpecies = computed(() => new Map(hunt.value.list.map((e) => [e.species, e.npcName])));
 export const seenMaps = computed<ReadonlySet<string>>(() => new Set(hunt.value.seenMaps));
 
+/** "All maps unlocked": you unlocked every map, so no map is treated as locked. Per browser. */
+const ALL_KEY = 'md-all-maps';
+function readAll(): boolean {
+  try {
+    return localStorage.getItem(ALL_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+export const allMapsOpen = signal<boolean>(readAll());
+export function setAllMapsOpen(on: boolean) {
+  allMapsOpen.value = on;
+  try {
+    localStorage.setItem(ALL_KEY, on ? '1' : '0');
+  } catch {
+    /* private mode */
+  }
+}
+
 const valid = (x: unknown): HuntState => {
   const s = x as Partial<HuntState> | null | undefined;
   return { v: 1, list: Array.isArray(s?.list) ? s!.list : [], seenMaps: Array.isArray(s?.seenMaps) ? s!.seenMaps : [] };
