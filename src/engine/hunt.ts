@@ -65,6 +65,8 @@ export interface Progress {
   seenMaps: ReadonlySet<string>;
   /** Path stage you probably passed (see `passedStage`); undefined = unknown. */
   passed?: number;
+  /** You said every map is unlocked ("All maps unlocked" switch): no map is locked. */
+  allOpen?: boolean;
 }
 
 /**
@@ -84,6 +86,7 @@ export function mapAccess(mapId: string, p: Progress): MapAccess {
   const requires = tip?.requires ?? [];
   if (p.seenMaps.has(mapId)) return { access: 'seen', tip, requires };
   if (tip && p.done.has(tip.id)) return { access: 'ticked', tip, requires };
+  if (p.allOpen) return { access: 'open', tip, requires };
   if (!requires.length) return { access: 'open', tip, requires };
   if (p.passed !== undefined && tip?.stage !== undefined && tip.stage <= p.passed) return { access: 'guess', tip, requires };
   return { access: 'locked', tip, requires };

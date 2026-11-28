@@ -1,6 +1,6 @@
 # MeowRPGAdvisor: Plan
 
-Current version: **0.17.0** · Details and history: `docs/archive/PLAN-v1.md` (Vietnamese; grep, don't read whole)
+Current version: **0.17.1** · Details and history: `docs/archive/PLAN-v1.md` (Vietnamese; grep, don't read whole)
 Legend: ✅ done · 🔶 code done, not checked in a real battle · ⏳ ongoing · ⬜ planned
 
 ## ⏳ Ongoing
@@ -87,3 +87,4 @@ Claude reads the page through Claude in Chrome and the user plays. Tick an item 
 | 0.16.0 | Battle advice: switch and move scoring plays the rest of the battle out (beats 0.15.1 in simulated battles), opponent HP read from the bar, Revive judged by the lookahead, Sturdy / Focus Sash, Truant, sure KO with better accuracy, better lead on ties, note when an NPC may heal |
 | 0.16.1 | Fix for the "No tab with id" error in side panel mode when a tab closes at once |
 | 0.17.0 | Train tab: EV role per Pokémon for the team and the box (board, Build card with speed, hits taken, Lean and goal scoring, Farm sessions with a shopping list), Speed order in Prep → Team, Battle Debrief, Best session now in Wild → Maps |
+| 0.17.1 | "All maps unlocked" switch (Wild → Best session now, Prep → Hunt): no map is treated as locked |
