@@ -22,6 +22,9 @@ export const doublesMoves = signal<Record<string, string[]>>({});
 /** How often the NPC's actual move was MeowRPGAdvisor's top guess, this battle. */
 export const guessScore = signal<{ hit: number; total: number }>({ hit: 0, total: 0 });
 const KEY = 'mdBattle';
+/** The last finished battle (won/lost), kept by the content script after the battle page closes. */
+export const lastBattle = signal<BattleSnapshot | null>(null);
+const LAST_KEY = 'mdLastBattle';
 
 /** Battle tab switch: score this battle with Battle Frontier (Gen III) rules. Remembered per browser. */
 const GEN3_KEY = 'mh-battle-gen3';
@@ -196,9 +199,14 @@ export function initBattle() {
       record(p);
     }
   });
-  chrome.storage.local.get(KEY).then((r) => onSnapshot((r[KEY] as BattleSnapshot | null) ?? null)).catch(() => {});
+  chrome.storage.local.get([KEY, LAST_KEY]).then((r) => {
+    lastBattle.value = (r[LAST_KEY] as BattleSnapshot | null) ?? null;
+    onSnapshot((r[KEY] as BattleSnapshot | null) ?? null);
+  }).catch(() => {});
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && KEY in changes) onSnapshot((changes[KEY].newValue as BattleSnapshot | null) ?? null);
+    if (area !== 'local') return;
+    if (LAST_KEY in changes) lastBattle.value = (changes[LAST_KEY].newValue as BattleSnapshot | null) ?? null;
+    if (KEY in changes) onSnapshot((changes[KEY].newValue as BattleSnapshot | null) ?? null);
   });
 }
 
@@ -212,4 +220,15 @@ export async function loadSampleBattle(kind: 'singles' | 'doubles' = 'singles') 
     import('../content/battleReader'),
   ]);
   onSnapshot(readBattle(new DOMParser().parseFromString(html, 'text/html')));
+}
+
+/** Dev harness only: the singles sample as a lost battle, then the battle page closed (shows the Debrief). */
+export async function loadSampleLastBattle() {
+  if (!import.meta.env.DEV) return;
+  const [{ default: html }, { readBattle }] = await Promise.all([
+    import('../../tests/fixtures/battle/brock-turn3.reconstructed.html?raw'),
+    import('../content/battleReader'),
+  ]);
+  const snap = readBattle(new DOMParser().parseFromString(html, 'text/html'));
+  if (snap) lastBattle.value = { ...snap, status: 'lost' };
 }

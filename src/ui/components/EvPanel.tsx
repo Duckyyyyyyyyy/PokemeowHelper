@@ -1,5 +1,7 @@
 import { useMemo } from 'preact/hooks';
 import type { BoxMon, Dataset, NpcTeamVariant } from '../../shared/types';
+import { activeTab } from '../store';
+import { trainFocus } from '../evRoleStore';
 import type { BattleRules } from '../../engine/rules';
 import {
   EV_BERRY, POWER_ITEM, STAT_NAME, VITAMIN, VITAMIN_EVS, evPlanFor, koCount, npcEvBattles, trainingAccounts, wildEvSpots, type StatKey,
@@ -39,6 +41,9 @@ export function EvPanel({ ds, mon, v, rules, tower }: { ds: Dataset; mon: BoxMon
         <div class="muted">Your EVs already match the best common spread here ({plan.best.label}).</div>
       )}
       <div class="muted">Others: {plan.ranked.slice(1, 4).map((r) => `${r.label} ${r.wins}/${n}`).join(' · ')}</div>
+      <button class="link small" onClick={() => { trainFocus.value = mon.uid; activeTab.value = 'train'; window.scrollTo(0, 0); }}>
+        Compare roles, speed and hits taken in Train →
+      </button>
       {raise.map((c) => <FarmStat ds={ds} stat={c.stat} need={c.to - c.from} hasYields={hasYields} maxLevel={maxLevel} />)}
       {raise.length > 0 && <div class="muted">Tip: a teammate that holds an Exp. Share gets the same EVs while another Pokémon does the battling.</div>}
       <div class="muted" style={{ marginTop: '4px' }}>
@@ -49,7 +54,7 @@ export function EvPanel({ ds, mon, v, rules, tower }: { ds: Dataset; mon: BoxMon
   );
 }
 
-function FarmStat({ ds, stat, need, hasYields, maxLevel }: { ds: Dataset; stat: StatKey; need: number; hasYields: boolean; maxLevel: number }) {
+export function FarmStat({ ds, stat, need, hasYields, maxLevel }: { ds: Dataset; stat: StatKey; need: number; hasYields: boolean; maxLevel: number }) {
   const wild = useMemo(() => wildEvSpots(ds, stat, 2), [ds, stat]);
   const npcs = useMemo(() => npcEvBattles(ds, stat, 2, maxLevel), [ds, stat, maxLevel]);
   const accounts = useMemo(() => trainingAccounts(ds, stat), [ds, stat]);

@@ -1,0 +1,737 @@
+<title>EV Trainer Prototypes</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&display=swap">
+<style>
+/* Layout: a design doc. Each prototype is a row: reasoning (why / what / how) on the left, a live
+   side-panel mock (360px, the extension's real Arena HUD tokens from src/ui/theme.css) on the right. */
+:root {
+  --bg: #E9EDF3; --surface: #FFFFFF; --surface-2: #F0F3F8; --border: #CED5E1;
+  --text: #10141F; --muted: #465065;
+  --link: #0B5CD5; --accent: #0B5CD5; --on-accent: #FFFFFF; --accent-soft: #E3ECFB;
+  --good: #0E7A3E; --good-soft: #DCF3E5;
+  --warn: #855000; --warn-soft: #FFEBC7;
+  --bad: #B3170F; --bad-soft: #FDE2DF;
+  --hud: #141A28; --hud-text: #FFFFFF; --hud-muted: #B9C2D3; --hud-mark: #FFCB05;
+  --track: #DDE3EC; --target: #10141F;
+  --paper: #F6F8FB;
+  --t-normal: #A8A77A; --t-fire: #EE8130; --t-water: #6390F0; --t-electric: #F7D02C; --t-grass: #7AC74C; --t-ice: #96D9D6;
+  --t-fighting: #C22E28; --t-poison: #A33EA1; --t-ground: #E2BF65; --t-flying: #A98FF3; --t-psychic: #F95587; --t-bug: #A6B91A;
+  --t-rock: #B6A136; --t-ghost: #735797; --t-dragon: #6F35FC; --t-dark: #705746; --t-steel: #B7B7CE; --t-fairy: #D685AD;
+  --cond: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --sans: Barlow, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D1017; --surface: #171C26; --surface-2: #1E2431; --border: #2C3444;
+    --text: #ECEFF5; --muted: #A3ADBF;
+    --link: #7DB2FF; --accent: #4C8DFF; --on-accent: #06122B; --accent-soft: #1A2A47;
+    --good: #5ED895; --good-soft: #10301F; --warn: #F5BE55; --warn-soft: #33260B; --bad: #FF8577; --bad-soft: #3A1612;
+    --hud: #05070B; --hud-muted: #A3ADBF; --track: #2A3242; --target: #ECEFF5; --paper: #11151D;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D1017; --surface: #171C26; --surface-2: #1E2431; --border: #2C3444;
+  --text: #ECEFF5; --muted: #A3ADBF;
+  --link: #7DB2FF; --accent: #4C8DFF; --on-accent: #06122B; --accent-soft: #1A2A47;
+  --good: #5ED895; --good-soft: #10301F; --warn: #F5BE55; --warn-soft: #33260B; --bad: #FF8577; --bad-soft: #3A1612;
+  --hud: #05070B; --hud-muted: #A3ADBF; --track: #2A3242; --target: #ECEFF5; --paper: #11151D;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--text); font: 500 15px/1.5 var(--sans); margin: 0; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 28px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--cond); letter-spacing: .01em; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(34px, 6vw, 52px); font-weight: 800; line-height: 1; }
+h1 b { color: var(--accent); }
+h2 { font-size: 30px; font-weight: 800; line-height: 1.05; }
+h3 { font-size: 19px; font-weight: 700; }
+p { margin: 0; max-width: 66ch; }
+a { color: var(--link); }
+.eyebrow { font: 700 13px/1 var(--cond); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 17px; color: var(--muted); max-width: 70ch; }
+.stack { display: flex; flex-direction: column; gap: 12px; }
+header.top { display: flex; flex-direction: column; gap: 14px; padding-bottom: 28px; border-bottom: 1px solid var(--border); }
+section { padding-block: 40px; border-bottom: 1px solid var(--border); }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: 32px; align-items: start; }
+@media (max-width: 860px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.cols3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.note { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.note h3 { font-size: 17px; }
+.why, .what, .how { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.why > span, .what > span, .how > span { font: 800 13px/1 var(--cond); letter-spacing: .1em; text-transform: uppercase; padding: 4px 0; border-top: 3px solid var(--accent); }
+.what > span { border-color: var(--good); }
+.how > span { border-color: var(--warn); }
+ul.tight { margin: 4px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
+.table-x { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font: 700 13px/1.2 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--surface-2); }
+tr:last-child td { border-bottom: 0; }
+td.num, .num { font-variant-numeric: tabular-nums; }
+.tag { display: inline-block; font: 700 12px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; padding: 3px 6px; border-radius: 4px; background: var(--warn-soft); color: var(--warn); }
+.tag.ok { background: var(--good-soft); color: var(--good); }
+.tag.info { background: var(--accent-soft); color: var(--link); }
+.tag.bad { background: var(--bad-soft); color: var(--bad); }
+code { font: 500 13px/1.3 ui-monospace, "Cascadia Mono", Consolas, monospace; background: var(--surface-2); padding: 1px 4px; border-radius: 4px; overflow-wrap: anywhere; }
+
+/* ---------- side-panel mock (mirrors the extension) ---------- */
+.panel { width: 100%; max-width: 372px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 2px 6px rgba(16,20,31,.08), 0 12px 32px rgba(16,20,31,.10); font-size: 14px; }
+.hudbar { display: flex; align-items: center; gap: 6px; background: var(--hud); color: var(--hud-text); padding: 7px 8px; }
+.logo { font: 800 13px/.95 var(--cond); letter-spacing: .05em; display: flex; flex-direction: column; margin-right: 4px; }
+.logo b { color: var(--hud-mark); }
+.navt { display: flex; gap: 2px; flex: 1; min-width: 0; }
+.navt span { font: 700 12px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--hud-muted); padding: 6px 6px; border-radius: 5px; white-space: nowrap; }
+.navt span.on { color: var(--hud); background: var(--hud-mark); }
+.navt span.new { position: relative; }
+.navt span.new::after { content: "NEW"; position: absolute; top: -5px; right: -6px; font-size: 8px; background: var(--bad); color: #fff; padding: 1px 3px; border-radius: 3px; }
+.pbody { padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.seg { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 2px; gap: 2px; }
+.seg button { flex: 1; border: 0; background: transparent; padding: 6px 4px; border-radius: 6px; font: 700 13px/1 var(--cond); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; display: flex; flex-direction: column; gap: 6px; }
+.ctitle { font: 700 15px/1.1 var(--cond); letter-spacing: .03em; text-transform: uppercase; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.ctitle small { font: 600 12px/1 var(--sans); text-transform: none; letter-spacing: 0; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: 600 12px/1 var(--sans); padding: 5px 8px; border-radius: 999px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--link); }
+.small { font-size: 12.5px; line-height: 1.4; }
+.muted { color: var(--muted); }
+.row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mon { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 4px 8px; align-items: center; padding: 7px 0; border-top: 1px solid var(--border); }
+.mon:first-of-type { border-top: 0; }
+.mon .full { grid-column: 1 / -1; }
+.av { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font: 800 12px/1 var(--cond); color: #fff; text-shadow: 0 1px 1px rgba(0,0,0,.4); }
+.nm { font: 700 15px/1.1 var(--cond); letter-spacing: .02em; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.nm small { font: 500 12px/1.2 var(--sans); color: var(--muted); letter-spacing: 0; }
+.pill { font: 700 12px/1 var(--cond); letter-spacing: .05em; text-transform: uppercase; padding: 4px 7px; border-radius: 5px; white-space: nowrap; }
+.pill.good { background: var(--good-soft); color: var(--good); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.info { background: var(--accent-soft); color: var(--link); }
+.btn { border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: 700 12px/1 var(--cond); letter-spacing: .05em; text-transform: uppercase; padding: 6px 9px; border-radius: 6px; cursor: pointer; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.linkb { border: 0; background: none; color: var(--link); font: 600 12.5px/1.3 var(--sans); padding: 0; cursor: pointer; }
+button:focus-visible, .chip:focus-visible { outline: 3px solid var(--link); outline-offset: 2px; }
+
+/* EV strip: six cells, fill = EVs now, tick = target */
+.strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; }
+.cell { display: flex; flex-direction: column; gap: 2px; }
+.cell .bar { position: relative; height: 8px; background: var(--track); border-radius: 2px; overflow: hidden; }
+.cell .fill { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+.cell .fill.over { background: var(--bad); }
+.cell .fill.done { background: var(--good); }
+.cell .tick { position: absolute; top: -1px; bottom: -1px; width: 2px; background: var(--target); }
+.cell .lab { font: 700 10.5px/1 var(--cond); letter-spacing: .05em; color: var(--muted); display: flex; justify-content: space-between; }
+.cell .lab b { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Build card stat rows */
+.srow { display: grid; grid-template-columns: 48px minmax(0, 1fr) 82px; gap: 8px; align-items: center; font-variant-numeric: tabular-nums; }
+.srow .k { font: 700 12px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.srow .v { text-align: right; font-size: 13px; }
+.srow .v .up { color: var(--good); font-weight: 700; }
+.srow .v .dn { color: var(--bad); font-weight: 700; }
+.sbar { position: relative; height: 10px; background: var(--track); border-radius: 3px; overflow: hidden; }
+.sbar .a { position: absolute; inset: 0 auto 0 0; background: var(--muted); opacity: .45; }
+.sbar .b { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+.buys { display: flex; flex-direction: column; gap: 4px; }
+.buys div { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 6px; font-size: 13px; }
+.buys i { font-style: normal; font-weight: 800; text-align: center; }
+.buys .y i { color: var(--good); }
+.buys .n i { color: var(--bad); }
+
+.alert { border-radius: 8px; padding: 7px 9px; font-size: 12.5px; line-height: 1.4; }
+.alert.warn { background: var(--warn-soft); color: var(--warn); }
+.alert.bad { background: var(--bad-soft); color: var(--bad); }
+.alert.info { background: var(--accent-soft); color: var(--link); }
+.alert b { color: inherit; }
+
+/* Farm session */
+.farm { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+.farm:first-of-type { border-top: 0; padding-top: 0; }
+.farm .hd { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.farm .hd b { font: 800 16px/1 var(--cond); letter-spacing: .03em; text-transform: uppercase; }
+.who { display: flex; flex-wrap: wrap; gap: 4px; }
+.who span { font-size: 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-variant-numeric: tabular-nums; }
+.opt { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 6px; font-size: 12.5px; align-items: start; }
+.opt input { margin: 2px 0 0; accent-color: var(--accent); }
+.shop { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 2px 10px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.shop .h { font: 700 11px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding-bottom: 3px; }
+
+/* Speed ladder */
+.ladder { display: flex; flex-direction: column; gap: 3px; }
+.rung { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; align-items: center; font-variant-numeric: tabular-nums; }
+.rung .sp { font: 700 14px/1 var(--cond); text-align: right; }
+.rung .lane { position: relative; height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: 5px; font-size: 13px; font-weight: 600; min-width: 0; }
+.rung.me .lane { background: var(--accent-soft); color: var(--link); }
+.rung.foe .lane { background: var(--bad-soft); color: var(--bad); }
+.rung.ghost .lane { background: transparent; border: 1.5px dashed var(--good); color: var(--good); }
+.rung .lane span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Debrief timeline */
+.tl { display: flex; flex-direction: column; gap: 0; }
+.tl .ev { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px; padding: 6px 0; border-top: 1px dashed var(--border); }
+.tl .ev:first-child { border-top: 0; }
+.tl .t { font: 800 13px/1.2 var(--cond); color: var(--muted); }
+.tl .ev.key .t { color: var(--bad); }
+
+/* Route */
+.lanes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.lanebox { background: var(--surface-2); border-radius: 8px; padding: 7px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.lanebox h4 { margin: 0; font: 800 12px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.lanebox div { font-size: 12.5px; line-height: 1.3; }
+
+.navmap { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.navmap span { font: 700 13px/1 var(--cond); letter-spacing: .06em; text-transform: uppercase; padding: 7px 10px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); }
+.navmap span.on { background: var(--hud-mark); color: #141A28; border-color: var(--hud-mark); }
+.navmap em { font-style: normal; color: var(--muted); font-size: 13px; }
+.rec { background: var(--surface); border: 2px solid var(--accent); border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }
+.rec ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; max-width: 75ch; }
+@media (prefers-reduced-motion: no-preference) { .cell .fill, .sbar .b { transition: width .25s ease; } }
+</style>
+
+<div class="wrap">
+<header class="top">
+  <span class="eyebrow">MeowRPGAdvisor · design prototypes · 2026-11-28</span>
+  <h1>EV Trainer <b>for team &amp; box</b></h1>
+  <p class="lede">Prototypes for a new feature: which EVs each Pokémon should grind, for the whole box and the team, by play style. A second part has three more feature ideas with their own mocks. Every mock is interactive and uses invented sample Pokémon, not anyone's real box.</p>
+</header>
+
+<!-- ============ RESEARCH ============ -->
+<section class="stack">
+  <span class="eyebrow">Research</span>
+  <h2>What already exists, and what's missing</h2>
+  <div class="cols3">
+    <div class="note">
+      <h3>Already in 0.15.0</h3>
+      <p class="small">Prep → Team → <b>EVs →</b> on each team member. It scores 6–8 common 252/252 spreads (8 for mixed attackers) against <i>one</i> NPC, lists what to raise or lower, and where to farm (vitamins, Power items, wild Pokémon, NPC rematches, training accounts). Code: <code>evPlan.ts</code>, <code>EvPanel.tsx</code>.</p>
+    </div>
+    <div class="note">
+      <h3>The gap</h3>
+      <ul class="tight small">
+        <li>It only appears after you pick an NPC, and only for the 6 suggested Pokémon.</li>
+        <li>No idea of <b>style</b>: a Snorlax can be a slow bulky hitter or a special wall.</li>
+        <li>No box view, so you can't plan farm sessions across several Pokémon.</li>
+        <li>No overview of what's done, what's wrong (510 used on the wrong stats) and what it costs.</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h3>Game EV rules (wiki, read 2026-11-23)</h3>
+      <ul class="tight small">
+        <li>Max 252 per stat, 510 total. 4 EVs = 1 point at Lv 100 (about half that at Lv 50).</li>
+        <li>From wild, trainer and NPC battles. <b>None</b> from World Bosses, the Frontier, live PvP or Quick catch.</li>
+        <li>Power item +8 per KO. Macho Brace doubles. Vitamin +10. EV Berry −10. Fresh-Start Mochi resets all six.</li>
+        <li>Rematch NPCs have 31 IVs and 508 EVs. Rivals are Lv 120 with trained EVs.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 style="margin-top:12px">What "style" should mean in this game</h3>
+  <p class="small muted">On competitive sites a style is a role in PvP (sweeper, wall, Trick Room). Most battles here are against NPCs, so a style combines a <b>role</b> (how the Pokémon fights) with a <b>goal</b> (which battles it trains for). Roles come from base stats and moves, so they cost almost nothing to compute for a whole box. Goals reuse the existing scorer (<code>evPlanFor</code>) on a set of NPCs. That's accurate but expensive, so it runs only when you ask.</p>
+  <div class="table-x">
+    <table>
+      <thead><tr><th>Role</th><th>Spread</th><th>Auto picks it when (heuristic)</th><th>Good for</th></tr></thead>
+      <tbody>
+        <tr><td><b>Fast attacker</b></td><td class="num">252 Atk/SpA · 252 Spe</td><td>Base Spe ≥ 80, attack stat ≥ 90</td><td>Story NPCs, Gyms: KO before they move</td></tr>
+        <tr><td><b>Bulky attacker</b></td><td class="num">252 HP · 252 Atk/SpA</td><td>Base Spe ≤ 60 and good HP/defenses</td><td>Battle Tower (HP carries over), Lv 120 rivals that outspeed anyway</td></tr>
+        <tr><td><b>Physical wall</b></td><td class="num">252 HP · 252 Def</td><td>Def ≥ 110 and the attack stats are low</td><td>Rematch teams with mostly physical hitters</td></tr>
+        <tr><td><b>Special wall</b></td><td class="num">252 HP · 252 SpD</td><td>SpD ≥ 110 and the attack stats are low</td><td>Special-heavy NPCs, World Boss tanks (EVs earned elsewhere)</td></tr>
+        <tr><td><b>Lean (benchmark)</b></td><td class="num">Spe just past a target, rest HP + attack</td><td>Never auto: you opt in</td><td>Fewest EVs to grind: outspeed one threat, put the rest where it counts</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="table-x" style="margin-top:10px">
+    <table>
+      <thead><tr><th>Goal</th><th>NPCs it scores against</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td><b>Next story fights</b></td><td>The next 3 NPCs on your Guide progress path</td><td>At each fight's level cap. Low-level Pokémon get "EVs barely matter yet"</td></tr>
+        <tr><td><b>League rematches</b></td><td>The "Rematch" team of each NPC in your region</td><td>NPCs have 31 IVs / 508 EVs, so the margins are real</td></tr>
+        <tr><td><b>Rivals</b></td><td>The rival teams in the Dataset (Lv 120)</td><td>Only after every rematch in a region is cleared</td></tr>
+        <tr><td><b>Battle Tower</b></td><td>Tower NPCs, sustain bonus on</td><td>HP and bulk count more because nothing heals between fights</td></tr>
+        <tr><td><b>Battle Frontier</b></td><td>Frontier Brains only (the data has no pool of regular Frontier trainers), Gen III calc</td><td>EVs count there but can't be earned there. Farm them first</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note" style="margin-top:6px">
+    <h3>Smogon spreads: an optional, unverified source <span class="tag">not recommended for v1</span></h3>
+    <p class="small">The pkmn project publishes Smogon sets as JSON (<code>data.pkmn.cc</code>, which now redirects to <code>pkmn.github.io/smogon/data/</code>). I couldn't read its README or confirm the file shape this session: one fetch returned 503, the other 404. Costs: sets written in Smogon analyses are copyrighted by Smogon (only sets derived from usage stats are MIT), so they can't go in this public repo; fetching them needs a new host permission in the manifest; and they're tuned for PvP at Lv 50/100 rather than for NPC fights at the game's level caps. If you want it later, add it as a "Smogon reference" line on the Build card that's fetched on Sync, never stored in the repo.</p>
+  </div>
+</section>
+
+<!-- ============ NAV ============ -->
+<section class="stack">
+  <span class="eyebrow">Placement</span>
+  <h2>Where it lives: a new <i>Train</i> tab</h2>
+  <div class="navmap"><span>Battle</span><span>Wild</span><span>Prep</span><span class="on">Train</span><span>Guide</span><em>· ⚙ Settings stays on the right</em></div>
+  <p class="small">Prep is a flow that starts with "pick an NPC", but box-wide EV planning isn't about one NPC. A tab of its own keeps Prep short and gives the box a home. Prep → Team keeps its <b>EVs →</b> link, which now opens the Build card (Prototype B) with the goal set to that NPC. The 0.15.0 logic is reused, not thrown away. One alternative is a 4th Prep step, "Train". It's cheaper to build, but it inherits the NPC gate, so I don't recommend it.</p>
+</section>
+
+<!-- ============ PROTOTYPE A ============ -->
+<section>
+  <div class="grid2">
+    <div class="stack">
+      <span class="eyebrow">Prototype A · Train → Box</span>
+      <h2>EV Board: the whole box at a glance</h2>
+      <div class="why"><span>Why</span><p>The main question is "who should I train next, and in what?", and it's about many Pokémon at once. A scannable list with progress bars answers that faster than opening cards one by one. It also catches mistakes, such as a Gengar with 252 Attack.</p></div>
+      <div class="what"><span>What</span><div>
+        <p>Each row shows six EV bars (fill = now, black tick = target), a status pill and what's left to grind. Chips at the top change the role for every row. A row's own role can be changed in its Build card.</p>
+        <ul class="tight small">
+          <li><b>Filters:</b> Team (the carried 6) · Needs work · Lv 30+. Sorted by "least left first", so quick wins come first.</li>
+          <li><b>States:</b> <span class="pill good">Done</span> <span class="pill info">Grind</span> <span class="pill bad">Reset first</span> (510 used on the wrong stats) <span class="pill warn">EVs unknown</span> (typed by hand) <span class="pill warn">Later</span> (under Lv 25, 252 EVs add 15 points or fewer). Natures that lower the role's attack stat get a warning line.</li>
+          <li><b>Goal mode</b> ("League rematches" chip): rows aren't scored until you tap one. That's honest about the cost.</li>
+        </ul>
+      </div></div>
+      <div class="how"><span>How</span><div>
+        <ul class="tight small">
+          <li>Reads the box already stored in IndexedDB (<code>meowdex</code>, key <code>box</code>), where EVs, IVs, nature and level are already synced. No new game requests.</li>
+          <li>Roles: a new pure function <code>roleFor(species, moves)</code> using <code>attackSide()</code> from <code>evPlan.ts</code> plus base stats. No damage calc, so it should stay cheap for hundreds of Pokémon (not measured yet).</li>
+          <li>Goal scores: <code>evPlanFor</code> × the goal's NPC teams, run on tap and cached per (Pokémon, goal) until the next Box Sync. <code>scoreAgainstTeam</code> runs a full calc duel per pair, so scoring 300 Pokémon × 8 spreads × 12 teams live would freeze the panel.</li>
+          <li>The role choice per Pokémon is stored in a new key, <code>mdEvStyle</code>. <code>Dataset</code> doesn't change, so there's no <code>SCHEMA_VERSION</code> bump.</li>
+        </ul>
+      </div></div>
+    </div>
+
+    <div class="panel" aria-label="Prototype A mock">
+      <div class="hudbar"><div class="logo"><span><b>MEOW</b>RPG</span><span>ADVISOR</span></div>
+        <div class="navt"><span>Battle</span><span>Wild</span><span>Prep</span><span class="on new">Train</span><span>Guide</span></div></div>
+      <div class="pbody">
+        <div class="seg" role="group" aria-label="Train view"><button aria-pressed="false" data-view="team" id="a-v-team">Team</button><button aria-pressed="true" data-view="box" id="a-v-box">Box</button><button aria-pressed="false" data-goto="c">Farm</button></div>
+        <div class="card">
+          <div class="ctitle">Role for every row <small id="a-count"></small></div>
+          <div class="chips" id="a-roles" role="group" aria-label="Role"></div>
+          <div class="chips" id="a-filters" role="group" aria-label="Filters"></div>
+        </div>
+        <div class="card" id="a-list" aria-live="polite"></div>
+        <p class="small muted" style="padding:0 4px">Example data. Black tick = target, fill = EVs now. Tap a name for its Build card.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PROTOTYPE B ============ -->
+<section>
+  <div class="grid2">
+    <div class="stack">
+      <span class="eyebrow">Prototype B · Train → one Pokémon</span>
+      <h2>Build card: compare styles by what they buy</h2>
+      <div class="why"><span>Why</span><p>"252 Atk / 252 Spe" means little on its own. People decide when they see the result: "outspeeds Weavile", "survives Earthquake". You also asked for different maximized EVs depending on style. Comparing them side by side, each with its consequences, makes that choice concrete instead of a label.</p></div>
+      <div class="what"><span>What</span><div>
+        <ul class="tight small">
+          <li>Style tabs: Fast attacker · Bulky attacker · Lean. Stat bars show now (grey) against the style (blue) at the fight's level.</li>
+          <li>"What it buys" against the chosen goal: speed order is computed live (mainline formula). Survival lines come from the calc.</li>
+          <li>Warnings: a nature that works against the style, 510 already full (berries vs Mochi), and "too low for EVs to matter".</li>
+          <li>The farm plan for this Pokémon reuses the 0.15.0 "where to farm" list.</li>
+        </ul>
+      </div></div>
+      <div class="how"><span>How</span><div>
+        <ul class="tight small">
+          <li>Stats: the existing <code>boxToCalc</code> with real IVs and nature. Speed lines: compare against the goal's NPC sets (rematch NPCs at 508 EVs: <b>their spread isn't known</b>, so it shows a range, and that's a guess).</li>
+          <li>Lean: the smallest Spe EVs (a multiple of 4, at the fight's level) that move first against the chosen threat. The rest goes to the attack stat, then HP.</li>
+          <li>Opens from Box rows, Team rows and Prep → Team → EVs (goal = that NPC).</li>
+        </ul>
+      </div></div>
+    </div>
+
+    <div class="panel" aria-label="Prototype B mock">
+      <div class="hudbar"><div class="logo"><span><b>MEOW</b>RPG</span><span>ADVISOR</span></div>
+        <div class="navt"><span>Battle</span><span>Wild</span><span>Prep</span><span class="on">Train</span><span>Guide</span></div></div>
+      <div class="pbody">
+        <div class="row small"><button class="linkb">← Box</button><span class="muted">· Goal:</span><b>Example rival · Lv 80 cap</b></div>
+        <div class="card">
+          <div class="mon" style="padding:0;border:0">
+            <div class="av" style="background:var(--t-dragon)">GA</div>
+            <span class="nm">Garchomp<small>Lv 78 · Jolly · 31 IVs · Rough Skin</small></span>
+            <span class="pill info">Auto: Fast</span>
+          </div>
+          <div class="seg" role="tablist" aria-label="Style" id="b-tabs"></div>
+          <div id="b-stats" class="stack" style="gap:5px"></div>
+          <div class="small muted" id="b-cost"></div>
+        </div>
+        <div class="card">
+          <div class="ctitle">What it buys <small>vs Example rival</small></div>
+          <div class="buys" id="b-buys"></div>
+          <div class="small muted">Speed: mainline formula, NPC Spe EVs assumed 0–252 (unknown: guess). Survival lines are sample numbers here; the real card uses the calc.</div>
+        </div>
+        <div class="card">
+          <div class="ctitle">Checks</div>
+          <div class="alert info"><b>Nature fits.</b> Jolly (+Spe −SpA) suits every physical style here.</div>
+          <div class="alert warn" id="b-room"></div>
+          <button class="btn primary" style="align-self:flex-start">Add to Farm queue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PROTOTYPE C ============ -->
+<section>
+  <div class="grid2">
+    <div class="stack">
+      <span class="eyebrow">Prototype C · Train → Farm</span>
+      <h2>Farm session: grouped by stat, not by Pokémon</h2>
+      <div class="why"><span>Why</span><p>Grinding is done one stat at a time: you fight Speed-yield Pokémon in one area for a while. Three Pokémon that each need Speed can train together (with Exp. Share holders), so a per-Pokémon list hides the cheapest plan. This view turns the box plan into sessions and a shopping list.</p></div>
+      <div class="what"><span>What</span><div>
+        <ul class="tight small">
+          <li>One block per stat: total needed, who needs it, and the ways to get it, cheapest first (training account, wild spot, vitamins).</li>
+          <li>"Bring": who battles and who holds Exp. Share, with the right Power item on each.</li>
+          <li>A shopping list against the bag (vitamins, berries, Power items) shows what you have and what to buy.</li>
+          <li>It updates from Prototype A: change the role chip there and these totals change.</li>
+        </ul>
+      </div></div>
+      <div class="how"><span>How</span><div>
+        <ul class="tight small">
+          <li>Sums the per-Pokémon gaps from A. The farm options are the existing <code>wildEvSpots</code>, <code>npcEvBattles</code>, <code>trainingAccounts</code> and <code>koCount</code>.</li>
+          <li>The bag comes from <code>mdBag</code> (Bag reader). Ticks are stored in a new local key, <code>mdEvQueue</code>. Nothing is clicked in the game.</li>
+          <li><b>Guesses to label:</b> Exp. Share holders get the same EVs (as the current tip says), and a Power item gives +8 per KO the holder takes part in.</li>
+        </ul>
+      </div></div>
+    </div>
+
+    <div class="panel" aria-label="Prototype C mock" id="c">
+      <div class="hudbar"><div class="logo"><span><b>MEOW</b>RPG</span><span>ADVISOR</span></div>
+        <div class="navt"><span>Battle</span><span>Wild</span><span>Prep</span><span class="on">Train</span><span>Guide</span></div></div>
+      <div class="pbody">
+        <div class="seg" role="group" aria-label="Train view"><button aria-pressed="false">Team</button><button aria-pressed="false">Box</button><button aria-pressed="true">Farm</button></div>
+        <div class="card" id="c-farm"></div>
+        <div class="card">
+          <div class="ctitle">Shopping list <small>vs your bag</small></div>
+          <div class="shop" id="c-shop"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ EXTRA IDEAS ============ -->
+<section class="stack">
+  <span class="eyebrow">More ideas to grow the extension</span>
+  <h2>Three extras, each read-only and advice-only</h2>
+  <p class="small muted">All of them read data the extension already has or a screen it already reads. None clicks or types in the game, injects UI into the game page or sends a request outside a Sync button.</p>
+</section>
+
+<section>
+  <div class="grid2">
+    <div class="stack">
+      <span class="eyebrow">Idea 1 · Prep → Team</span>
+      <h2>Speed Ladder</h2>
+      <div class="why"><span>Why</span><p>Most of the 0.16.0 advice comes down to "who moves first". It's also the main question for EV choices (Prototype B). A ladder makes the speed order visible for a fight and shows exactly what a few Spe EVs would change.</p></div>
+      <div class="what"><span>What</span><p class="small">Your team and the NPC's at the fight level, sorted by Speed. Dashed rungs show "with +N Spe EVs" ghosts where a small amount of EVs passes a foe. Tapping a ghost opens the Build card in Lean mode.</p></div>
+      <div class="how"><span>How</span><p class="small">Speed from <code>boxToCalc</code>/<code>npcToCalc</code>. No new data, no schema change. Guesses: NPC EV spreads (shown as a range for rematch NPCs), Choice Scarf/paralysis only when seen. Mainline speed ties are random, which the ladder marks with "tie".</p></div>
+    </div>
+    <div class="panel" aria-label="Speed ladder mock">
+      <div class="hudbar"><div class="logo"><span><b>MEOW</b>RPG</span><span>ADVISOR</span></div>
+        <div class="navt"><span>Battle</span><span>Wild</span><span class="on">Prep</span><span>Train</span><span>Guide</span></div></div>
+      <div class="pbody">
+        <div class="card">
+          <div class="ctitle">Speed order <small>Example rival · Lv 80</small></div>
+          <div class="ladder" id="ladder"></div>
+          <div class="small muted">Blue = yours, red = theirs (0 Spe EVs assumed), dashed = what EVs would add.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="grid2">
+    <div class="stack">
+      <span class="eyebrow">Idea 2 · Battle tab, after the battle</span>
+      <h2>Battle Debrief</h2>
+      <div class="why"><span>Why</span><p>Today the advice disappears when the battle ends. After a loss, people want to know what decided it and what to change: levels, EVs, a move, or the lead. The battle reader already logs every turn, so the debrief can point at the 1–2 turns that mattered.</p></div>
+      <div class="what"><span>What</span><p class="small">Result, then 2–3 "turning points" (outsped by 17, a 2HKO that became an OHKO after a crit, a switch that was scored badly), each with one fix that links somewhere (Build card, Grind levels, moves). It also lists damage checks that were "off", which hint that the opponent's set differs from the wiki.</p></div>
+      <div class="how"><span>How</span><p class="small"><code>mdBattle</code> holds only the latest screen, so the content script would also copy the final snapshot to a <b>new</b> key, <code>mdLastBattle</code> (no renames). Turning points: replay the log through <code>damageCheck</code> and the lookahead score swing per turn. No game requests. "Would have won with X" is a model estimate and must be labeled as one.</p></div>
+    </div>
+    <div class="panel" aria-label="Debrief mock">
+      <div class="hudbar"><div class="logo"><span><b>MEOW</b>RPG</span><span>ADVISOR</span></div>
+        <div class="navt"><span class="on">Battle</span><span>Wild</span><span>Prep</span><span>Train</span><span>Guide</span></div></div>
+      <div class="pbody">
+        <div class="card">
+          <div class="ctitle">Lost · Example rival <small>2 of theirs left · 9 turns</small></div>
+          <div class="tl">
+            <div class="ev key"><span class="t">T3</span><div class="small"><b>Weavile moved first</b> (229 vs 212) and Ice Shard KO'd Garchomp from 61%.<br><button class="linkb">Fix: +88 Spe EVs moves first → Build card</button></div></div>
+            <div class="ev key"><span class="t">T6</span><div class="small"><b>Switching to Snorlax lost 18 points</b> of win chance; staying in with Skarmory was scored best.<br><button class="linkb">Why: see turn 6 advice</button></div></div>
+            <div class="ev"><span class="t">T8</span><div class="small">Damage check <span class="tag bad">off</span> on Salamence's Earthquake (hit 41%, calc 30–36%): its set may have trained Attack EVs.</div></div>
+          </div>
+          <div class="alert info">Model estimate: with the T3 fix, this battle is about a coin flip instead of a loss. Not checked in a real battle.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="grid2">
+    <div class="stack">
+      <span class="eyebrow">Idea 3 · Wild / Explore tab</span>
+      <h2>Session Route: one map, three goals</h2>
+      <div class="why"><span>Why</span><p>Hunt list, EV farming and level grinding currently send you to different maps. Since time is what people spend, a map that serves all three in one session beats three separate trips.</p></div>
+      <div class="what"><span>What</span><p class="small">The top 3 reachable maps, each scored by what it covers: catches from the hunt list, EVs from the Farm queue, EXP for the next Grind level target. Each shows what to KO, what to catch and what to hold.</p></div>
+      <div class="how"><span>How</span><p class="small">Joins <code>mdHunt</code>, the Farm queue (C), <code>wildEvSpots</code> and the grind plan over the wiki map encounter tables already in the Dataset. Reachability reuses the Hunt &amp; Grind gate guess (already in "Needs real-game check"). Maps only, no exact parts or time of day. No new requests and no schema bump.</p></div>
+    </div>
+    <div class="panel" aria-label="Route mock">
+      <div class="hudbar"><div class="logo"><span><b>MEOW</b>RPG</span><span>ADVISOR</span></div>
+        <div class="navt"><span>Battle</span><span class="on">Wild</span><span>Prep</span><span>Train</span><span>Guide</span></div></div>
+      <div class="pbody">
+        <div class="card">
+          <div class="ctitle">Best session now <small>3 of 3 goals</small></div>
+          <div class="row" style="justify-content:space-between"><b style="font:800 18px/1 var(--cond)">Example Meadow Route</b><span class="pill good">Reachable?</span></div>
+          <div class="lanes">
+            <div class="lanebox"><h4>Catch</h4><div><b>Example Riolu</b> for your hunt list · rare</div></div>
+            <div class="lanebox"><h4>EVs</h4><div>KO <b>Example Zubat</b>: 1 Spe + 8 with Power Anklet → Garchomp, Gengar</div></div>
+            <div class="lanebox"><h4>EXP</h4><div>Lv 34–37 foes · Scizor reaches Lv 50 in about 40 KOs</div></div>
+          </div>
+          <div class="small muted">Next: Example Cave (Catch, EXP) · Example Bay (EVs). "Reachable?" = the gate guess from Tips and the Bag.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RECOMMENDATION ============ -->
+<section style="border-bottom:0">
+  <div class="rec">
+    <span class="eyebrow">Recommendation</span>
+    <h2>Build A with B as its detail view first, then C</h2>
+    <ol class="small">
+      <li><b>v1 (0.17.0):</b> Train tab, Box and Team views (A) with heuristic roles, plus the Build card (B) with Fast / Bulky / Lean and speed lines. Goal scoring runs only on tap. Prep → Team → EVs opens B. No schema bump. Tests: <code>roleFor</code> on a table of species, Lean on known speed numbers, the 510/berries/Mochi math.</li>
+      <li><b>v1.1:</b> Farm sessions (C) with the bag shopping list and <code>mdEvQueue</code>.</li>
+      <li><b>Extras, smallest first:</b> Speed Ladder (reuses B's math), then Battle Debrief (needs <code>mdLastBattle</code>), then Session Route (depends on C and the unverified reachability guess).</li>
+      <li><b>To add to PLAN "Needs real-game check":</b> Exp. Share EV sharing, Power item +8 per participation, NPC EV spreads (rematch 508 split), and that Battle Tower and Chamber battles give EVs.</li>
+    </ol>
+  </div>
+</section>
+</div>
+
+<script>
+(() => {
+  const K = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'];
+  const LAB = { hp: 'HP', atk: 'Atk', def: 'Def', spa: 'SpA', spd: 'SpD', spe: 'Spe' };
+  const NAT = { Jolly: { spe: 1.1, spa: .9 }, Adamant: { atk: 1.1, spa: .9 }, Modest: { spa: 1.1, atk: .9 }, Impish: { def: 1.1, spa: .9 }, Timid: { spe: 1.1, atk: .9 }, Calm: { spd: 1.1, atk: .9 }, Hardy: {} };
+  const T = (t) => `var(--t-${t.toLowerCase()})`;
+  // Example box (invented). base = [hp, atk, def, spa, spd, spe]
+  const MONS = [
+    { n: 'Garchomp', ty: ['Dragon', 'Ground'], lv: 78, nat: 'Jolly', base: [108, 130, 95, 80, 85, 102], ev: [0, 180, 0, 0, 0, 0], side: 'atk', team: true },
+    { n: 'Snorlax', ty: ['Normal'], lv: 64, nat: 'Adamant', base: [160, 110, 65, 65, 110, 30], ev: [120, 60, 0, 0, 0, 0], side: 'atk', team: true },
+    { n: 'Gengar', ty: ['Ghost', 'Poison'], lv: 55, nat: 'Modest', base: [60, 65, 60, 130, 75, 110], ev: [0, 252, 0, 0, 6, 252], side: 'spa', team: true },
+    { n: 'Skarmory', ty: ['Steel', 'Flying'], lv: 70, nat: 'Impish', base: [65, 80, 140, 40, 70, 70], ev: [252, 0, 252, 0, 0, 0], side: 'atk', team: true },
+    { n: 'Lapras', ty: ['Water', 'Ice'], lv: 40, nat: 'Modest', base: [130, 85, 80, 85, 95, 60], ev: null, side: 'spa', team: true, manual: true },
+    { n: 'Pikachu', ty: ['Electric'], lv: 14, nat: 'Timid', base: [35, 55, 40, 50, 50, 90], ev: [0, 4, 0, 8, 0, 20], side: 'spa', team: true },
+    { n: 'Alakazam', ty: ['Psychic'], lv: 82, nat: 'Timid', base: [55, 50, 45, 135, 95, 120], ev: [0, 0, 0, 252, 0, 200], side: 'spa' },
+    { n: 'Arcanine', ty: ['Fire'], lv: 50, nat: 'Modest', base: [90, 110, 80, 100, 80, 95], ev: [0, 40, 0, 0, 0, 24], side: 'atk' },
+    { n: 'Blissey', ty: ['Normal'], lv: 61, nat: 'Calm', base: [255, 10, 10, 75, 135, 55], ev: [100, 0, 0, 0, 120, 0], side: 'spa' },
+  ];
+  const ev = (o) => K.map((k) => o[k] || 0);
+  function autoRole(m) {
+    const [hp, atk, def, spa, spd, spe] = m.base;
+    const att = Math.max(atk, spa);
+    if (att < 90 && spd >= 110) return 'swall';
+    if (att < 90 && def >= 110) return 'pwall';
+    if (spe >= 80 && att >= 90) return 'fast';
+    return 'bulky';
+  }
+  function target(m, role) {
+    const a = m.side;
+    const r = role === 'auto' ? autoRole(m) : role;
+    if (r === 'fast') return ev({ [a]: 252, spe: 252 });
+    if (r === 'bulky') return ev({ hp: 252, [a]: 252 });
+    if (r === 'pwall') return ev({ hp: 252, def: 252 });
+    if (r === 'swall') return ev({ hp: 252, spd: 252 });
+  }
+  const ROLE_NAME = { auto: 'Auto', fast: 'Fast attacker', bulky: 'Bulky attacker', pwall: 'Physical wall', swall: 'Special wall', goal: 'League rematches' };
+  function stateOf(m, tgt) {
+    if (!m.ev) return { k: 'unknown', pill: 'warn', label: 'EVs unknown' };
+    if (m.lv < 25) return { k: 'later', pill: 'warn', label: 'Later' };
+    const need = K.reduce((s, _, i) => s + Math.max(0, tgt[i] - m.ev[i]), 0);
+    const kept = K.reduce((s, _, i) => s + Math.max(m.ev[i], tgt[i]), 0);
+    if (need === 0) return { k: 'done', pill: 'good', label: 'Done', need };
+    if (kept > 510) return { k: 'reset', pill: 'bad', label: 'Reset first', need, kept, lower: lowerNeeded(m.ev, tgt, kept - 510) };
+    return { k: 'grind', pill: 'info', label: 'Grind', need };
+  }
+  // Same rule as lowerNeeded() in evPlan.ts: remove only the overflow, from the stats with the most extra first.
+  function lowerNeeded(cur, tgt, over) {
+    const out = [];
+    for (const i of K.map((_, i) => i).sort((a, b) => (cur[b] - tgt[b]) - (cur[a] - tgt[a]))) {
+      if (over <= 0) break;
+      const extra = cur[i] - tgt[i];
+      if (extra <= 0) continue;
+      const cut = Math.min(extra, over);
+      out.push([K[i], cut]);
+      over -= cut;
+    }
+    return out;
+  }
+  const lowers = (m) => (NAT[m.nat] || {})[m.side] === 0.9;
+  const st = { role: 'auto', filters: new Set(), scored: new Set(['Garchomp']) };
+  const el = (id) => document.getElementById(id);
+
+  function strip(m, tgt) {
+    return '<div class="strip">' + K.map((k, i) => {
+      const now = m.ev ? m.ev[i] : 0, t = tgt[i];
+      const cls = now > t ? 'over' : (now >= t && t > 0 ? 'done' : '');
+      return `<div class="cell"><div class="bar"><div class="fill ${cls}" style="width:${now / 252 * 100}%"></div>${t ? `<div class="tick" style="left:calc(${t / 252 * 100}% - 2px)"></div>` : ''}</div><div class="lab"><span>${LAB[k]}</span><b>${m.ev ? now : '?'}</b></div></div>`;
+    }).join('') + '</div>';
+  }
+  function detail(m, s, tgt) {
+    if (s.k === 'unknown') return 'Typed by hand, so EVs aren\'t known. Press <b>Box Sync</b> to read them from the game.';
+    if (s.k === 'later') return `Lv ${m.lv}: 252 EVs add only ${Math.floor(63 * m.lv / 100)} points now. Level it first; EVs earned now still count later.`;
+    if (s.k === 'done') return 'Matches this role. Nothing to grind.';
+    const gaps = K.map((k, i) => tgt[i] - m.ev[i] > 0 ? `${LAB[k]} +${tgt[i] - m.ev[i]}` : null).filter(Boolean).join(' · ');
+    if (s.k === 'reset') {
+      const cut = s.lower.map(([k, n]) => `${LAB[k]} −${n}`).join(', ');
+      const berries = s.lower.reduce((x, [, n]) => x + Math.ceil(n / 10), 0);
+      return `No room: this role plus what it has adds up to ${s.kept} (max 510). Lower ${cut} (${berries} EV Berries), or reset all six with one Fresh-Start Mochi. Then ${gaps}.`;
+    }
+    const nat = lowers(m) ? `<br><span style="color:var(--warn)">⚠ ${m.nat} lowers ${LAB[m.side]}: this role loses about 10% of it. A matching nature would help (whether the game has Mints isn't known: guess).</span>` : '';
+    return `${gaps} · about ${Math.ceil(s.need / 10)} KOs on 2-EV foes with a Power item, or ${K.reduce((x, _, i) => x + Math.ceil(Math.max(0, tgt[i] - m.ev[i]) / 10), 0)} vitamins${nat}`;
+  }
+  function renderA() {
+    el('a-roles').innerHTML = ['auto', 'fast', 'bulky', 'pwall', 'swall', 'goal'].map((r) => `<button class="chip" aria-pressed="${st.role === r}" data-role="${r}">${ROLE_NAME[r]}</button>`).join('');
+    el('a-filters').innerHTML = [['team', 'Team'], ['work', 'Needs work'], ['lv30', 'Lv 30+']].map(([f, l]) => `<button class="chip" aria-pressed="${st.filters.has(f)}" data-filter="${f}">${st.filters.has(f) ? '✓ ' : ''}${l}</button>`).join('');
+    let rows = MONS.map((m) => {
+      const role = st.role === 'goal' ? 'auto' : st.role;
+      const tgt = target(m, role);
+      return { m, tgt, s: stateOf(m, tgt) };
+    });
+    if (st.filters.has('team')) rows = rows.filter((r) => r.m.team);
+    if (st.filters.has('lv30')) rows = rows.filter((r) => r.m.lv >= 30);
+    if (st.filters.has('work')) rows = rows.filter((r) => r.s.k !== 'done');
+    const order = { reset: 0, grind: 1, unknown: 2, later: 3, done: 4 };
+    rows.sort((a, b) => order[a.s.k] - order[b.s.k] || (a.s.need ?? 0) - (b.s.need ?? 0));
+    el('a-count').textContent = `${rows.length} of ${MONS.length} shown`;
+    el('a-v-team').setAttribute('aria-pressed', st.filters.has('team'));
+    el('a-v-box').setAttribute('aria-pressed', !st.filters.has('team'));
+    el('a-list').innerHTML = rows.map(({ m, tgt, s }) => {
+      const goal = st.role === 'goal';
+      const scored = st.scored.has(m.n);
+      const roleLbl = ROLE_NAME[st.role === 'auto' || goal ? autoRole(m) : st.role];
+      const goalLine = goal ? (scored
+        ? `<div class="full small"><span class="tag ok">Scored</span> vs 12 rematch teams: <b>${roleLbl}</b> wins 9/12 (now 6/12)</div>`
+        : `<div class="full"><button class="btn" data-score="${m.n}">Score vs 12 rematch teams</button> <span class="small muted">a few seconds (estimate)</span></div>`) : '';
+      return `<div class="mon">
+        <div class="av" style="background:${T(m.ty[0])}">${m.n.slice(0, 2).toUpperCase()}</div>
+        <span class="nm"><button class="linkb" style="font:700 15px/1.1 var(--cond);color:var(--text);text-align:left" data-goto="b">${m.n}</button><small>Lv ${m.lv} · ${m.nat} · ${roleLbl}${m.manual ? ' · typed by hand' : ''}</small></span>
+        <span class="pill ${s.pill}">${s.label}</span>
+        <div class="full">${strip(m, tgt)}</div>
+        <div class="full small muted">${detail(m, s, tgt)}</div>${goalLine}
+      </div>`;
+    }).join('') || '<div class="small muted">Nothing left to grind with these filters.</div>';
+    renderC();
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.role) { st.role = b.dataset.role; renderA(); }
+    else if (b.dataset.filter) { const f = b.dataset.filter; st.filters.has(f) ? st.filters.delete(f) : st.filters.add(f); renderA(); }
+    else if (b.dataset.score) { st.scored.add(b.dataset.score); renderA(); }
+    else if (b.dataset.view) { b.dataset.view === 'team' ? st.filters.add('team') : st.filters.delete('team'); renderA(); }
+    else if (b.dataset.goto) { document.getElementById(b.dataset.goto === 'b' ? 'b-tabs' : b.dataset.goto).closest('section').scrollIntoView({ behavior: 'smooth' }); }
+    else if (b.dataset.style) { bStyle = b.dataset.style; renderB(); }
+  });
+
+  // ---------- B: Build card (Garchomp) ----------
+  const G = MONS[0];
+  const LV = 80;
+  function stat(base, iv, e, lv, k, nat) {
+    const core = Math.floor((2 * base + iv + Math.floor(e / 4)) * lv / 100);
+    if (k === 'hp') return core + lv + 10;
+    return Math.floor((core + 5) * ((NAT[nat] || {})[k] || 1));
+  }
+  const statsOf = (m, evs, lv) => K.map((k, i) => stat(m.base[i], 31, evs[i], lv, k, m.nat));
+  const FOES = [{ n: 'Weavile', spe: 125 }, { n: 'Salamence', spe: 100 }, { n: 'Gyarados', spe: 81 }];
+  const foeSpe = (b, e) => stat(b, 31, e, LV, 'spe', 'Hardy');
+  function leanSpe() {
+    const need = foeSpe(125, 0) + 1;
+    for (let e = 0; e <= 252; e += 4) if (stat(G.base[5], 31, e, LV, 'spe', G.nat) >= need) return e;
+    return 252;
+  }
+  const STYLES = {
+    fast: { name: 'Fast', evs: () => ev({ atk: 252, spe: 252 }) },
+    bulky: { name: 'Bulky', evs: () => ev({ hp: 252, atk: 252 }) },
+    lean: { name: 'Lean', evs: () => { const s = leanSpe(); return ev({ atk: 252, spe: s, hp: Math.min(252, 508 - 252 - s) }); } },
+  };
+  let bStyle = 'fast';
+  function renderB() {
+    el('b-tabs').innerHTML = Object.entries(STYLES).map(([k, s]) => `<button role="tab" aria-selected="${k === bStyle}" aria-pressed="${k === bStyle}" data-style="${k}">${s.name}</button>`).join('');
+    const evs = STYLES[bStyle].evs();
+    const now = statsOf(G, G.ev, LV), next = statsOf(G, evs, LV);
+    const max = Math.max(...next, ...now) * 1.05;
+    el('b-stats').innerHTML = K.map((k, i) => {
+      const d = next[i] - now[i];
+      return `<div class="srow"><span class="k">${LAB[k]} <span class="muted" style="font-weight:600">${evs[i]}</span></span><div class="sbar"><div class="b" style="width:${next[i] / max * 100}%"></div><div class="a" style="width:${now[i] / max * 100}%"></div></div><span class="v">${next[i]} ${d ? `<span class="${d > 0 ? 'up' : 'dn'}">${d > 0 ? '+' : ''}${d}</span>` : ''}</span></div>`;
+    }).join('');
+    const need = K.reduce((s, _, i) => s + Math.max(0, evs[i] - G.ev[i]), 0);
+    const total = evs.reduce((a, b) => a + b, 0);
+    el('b-cost').innerHTML = `Lv ${LV} (the fight's cap). Spread: ${K.map((k, i) => evs[i] ? `${evs[i]} ${LAB[k]}` : null).filter(Boolean).join(' / ')} (${total}). Left to grind: <b>${need} EVs</b>, about ${Math.ceil(need / 10)} KOs with a Power item.`;
+    const mySpe = next[5];
+    const buys = FOES.map((f) => {
+      const lo = foeSpe(f.spe, 0), hi = foeSpe(f.spe, 252);
+      const y = mySpe > hi ? 'y' : mySpe > lo ? 'm' : 'n';
+      const txt = y === 'y' ? `Outspeeds ${f.n} (${mySpe} vs ${lo}–${hi})` : y === 'm' ? `Outspeeds ${f.n} unless it has Spe EVs (${mySpe} vs ${lo}–${hi})` : `Slower than ${f.n} (${mySpe} vs ${lo}–${hi})`;
+      return `<div class="${y === 'n' ? 'n' : 'y'}"><i>${y === 'n' ? '✕' : y === 'y' ? '✓' : '~'}</i><span>${txt}</span></div>`;
+    });
+    const hp = next[0];
+    buys.push(hp >= 300 ? `<div class="y"><i>✓</i><span>Survives Example Gyarados's Waterfall from full (${hp} HP: 2HKO, sample)</span></div>` : `<div class="n"><i>✕</i><span>Example Gyarados's Waterfall is a likely 2HKO with a crit chance to OHKO (${hp} HP, sample)</span></div>`);
+    el('b-buys').innerHTML = buys.join('');
+    const kept = K.reduce((s, _, i) => s + Math.max(G.ev[i], evs[i]), 0);
+    el('b-room').innerHTML = kept > 510
+      ? `<b>Room:</b> this spread and the current EVs add up to ${kept}. Lower ${K.map((k, i) => G.ev[i] > evs[i] ? `${LAB[k]} −${G.ev[i] - evs[i]}` : null).filter(Boolean).join(', ')} with EV Berries first.`
+      : `<b>Room:</b> fits in 510 next to the current EVs (${G.ev.reduce((a, b) => a + b, 0)} used). No berries needed.`;
+  }
+
+  // ---------- C: Farm session (from A's current role) ----------
+  const ACC = { hp: 'HP training account (Player Battles)', atk: 'Attack training account', def: 'Defense training account', spa: 'Sp. Atk training account', spd: 'Sp. Def training account', spe: 'Speed training account' };
+  const VIT = { hp: 'HP Up', atk: 'Protein', def: 'Iron', spa: 'Calcium', spd: 'Zinc', spe: 'Carbos' };
+  const POW = { hp: 'Power Weight', atk: 'Power Bracer', def: 'Power Belt', spa: 'Power Lens', spd: 'Power Band', spe: 'Power Anklet' };
+  const BAG = { Carbos: 4, Protein: 0, Calcium: 2, 'HP Up': 1, Iron: 0, Zinc: 0, 'Power Anklet': 1, 'Power Bracer': 0, 'Power Lens': 0, 'Power Weight': 0, 'Power Band': 0, 'Power Belt': 0 };
+  function renderC() {
+    const role = st.role === 'goal' ? 'auto' : st.role;
+    const per = {};
+    MONS.forEach((m) => {
+      if (!m.ev || m.lv < 25) return;
+      const tgt = target(m, role);
+      const s = stateOf(m, tgt);
+      if (s.k !== 'grind') return;
+      K.forEach((k, i) => { const g = tgt[i] - m.ev[i]; if (g > 0) (per[k] ||= []).push([m.n, g]); });
+    });
+    const keys = K.filter((k) => per[k]).sort((a, b) => per[b].reduce((s, x) => s + x[1], 0) - per[a].reduce((s, x) => s + x[1], 0));
+    el('c-farm').innerHTML = `<div class="ctitle">Farm sessions <small>role: ${ROLE_NAME[st.role]} · from Box</small></div>` + (keys.map((k) => {
+      const list = per[k];
+      const most = Math.max(...list.map((x) => x[1]));
+      return `<div class="farm"><div class="hd"><b>${LAB[k]}</b><span class="small muted num">${list.reduce((s, x) => s + x[1], 0)} EVs · ${list.length} Pokémon</span></div>
+        <div class="who">${list.map(([n, g]) => `<span>${n} +${g}</span>`).join('')}</div>
+        <label class="opt"><input type="checkbox" id="c-${k}-1"><span><b>Bring:</b> ${list[0][0]} battles with a ${POW[k]}${list.length > 1 ? `; ${list.slice(1).map((x) => x[0]).join(', ')} hold Exp. Share <span class="tag">guess</span>` : ''}</span></label>
+        <label class="opt"><input type="checkbox" id="c-${k}-2"><span>${ACC[k]}: about ${Math.ceil(most / 11)} wins with ${POW[k]} <span class="tag">unverified</span></span></label>
+        <label class="opt"><input type="checkbox" id="c-${k}-3"><span>Or top up with ${Math.ceil(most / 10)} × ${VIT[k]} (10 each)</span></label></div>`;
+    }).join('') || '<div class="small muted">Nothing to farm for this role: every Pokémon is done, unknown or still low level.</div>');
+    const shop = keys.map((k) => {
+      const most = Math.max(...per[k].map((x) => x[1]));
+      return [[VIT[k], Math.ceil(most / 10)], [POW[k], 1]];
+    }).flat();
+    el('c-shop').innerHTML = '<span class="h">Item</span><span class="h">Need</span><span class="h">Have</span>' + shop.map(([n, q]) => {
+      const have = BAG[n] ?? 0;
+      return `<span>${n}</span><span>${q}</span><span style="color:var(${have >= q ? '--good' : '--bad'})">${have}${have >= q ? ' ✓' : ''}</span>`;
+    }).join('') + '<span class="muted" style="grid-column:1/-1;padding-top:4px">Bag from the Bag reader (example). Vitamin prices aren\'t known.</span>';
+  }
+
+  // ---------- Speed ladder ----------
+  function renderLadder() {
+    const mine = [MONS[0], MONS[2], MONS[3], MONS[1]].map((m) => ({ n: m.n, s: stat(m.base[5], 31, m.ev ? m.ev[5] : 0, LV, 'spe', m.nat), me: 1, m }));
+    const foes = [{ n: 'Weavile', b: 125 }, { n: 'Salamence', b: 100 }, { n: 'Gyarados', b: 81 }, { n: 'Tyranitar', b: 61 }].map((f) => ({ n: f.n, s: foeSpe(f.b, 0) }));
+    const ghosts = [];
+    mine.forEach((x) => {
+      const above = foes.filter((f) => f.s >= x.s).sort((a, b) => a.s - b.s)[0];
+      if (!above) return;
+      const from = x.m.ev ? x.m.ev[5] : 0;
+      for (let e = from; e <= Math.min(252, from + 128); e += 4) {
+        const v = stat(x.m.base[5], 31, e, LV, 'spe', x.m.nat);
+        if (v > above.s) { ghosts.push({ n: `${x.n} +${e - (x.m.ev ? x.m.ev[5] : 0)} Spe EVs passes ${above.n}`, s: v, ghost: 1 }); break; }
+      }
+    });
+    const all = [...mine, ...foes, ...ghosts].sort((a, b) => b.s - a.s);
+    el('ladder').innerHTML = all.map((r) => `<div class="rung ${r.ghost ? 'ghost' : r.me ? 'me' : 'foe'}"><span class="sp">${r.s}</span><div class="lane"><span>${r.n}</span></div></div>`).join('');
+  }
+
+  renderA(); renderB(); renderLadder();
+})();
+</script>

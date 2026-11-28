@@ -378,3 +378,43 @@ button.mv:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
 .wbm { padding: 6px 0; border-top: 1px solid var(--border); }
 .wbm:first-of-type { border-top: 0; }
 .wbm .row { gap: 6px; align-items: center; }
+
+/* ---------- Train tab: EV strip (fill = now, tick = target) and role stat rows ---------- */
+.nmlink { font: inherit; text-transform: inherit; letter-spacing: inherit; color: var(--link); }
+.evstrip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin: 3px 0 2px; }
+.evcell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.evbar { position: relative; height: 8px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.evbar .fill { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+.evbar .fill.done { background: var(--good); }
+.evbar .fill.over { background: var(--bad); }
+.evbar .tick { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); }
+.evcell > span { display: flex; justify-content: space-between; font: 700 11px/1 var(--cond); letter-spacing: .04em; color: var(--muted); }
+.evcell > span b { color: var(--text); font-variant-numeric: tabular-nums; }
+.statrow { display: grid; grid-template-columns: 60px minmax(0, 1fr) 70px; gap: 8px; align-items: center; padding: 2px 0; font-variant-numeric: tabular-nums; }
+.statrow .k { font: 700 13px/1 var(--cond); letter-spacing: .05em; text-transform: uppercase; }
+.statrow .v { text-align: right; font-size: 13px; }
+.statrow .v .up { color: var(--good); }
+.statrow .v .dn { color: var(--bad); }
+.sbar { position: relative; height: 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 3px; overflow: hidden; }
+.sbar .a { position: absolute; inset: 0 auto 0 0; background: var(--muted); opacity: .45; }
+.sbar .b { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+.farmgrp { display: flex; flex-direction: column; gap: 5px; padding: 8px 0; border-top: 1px solid var(--border); }
+.farmgrp:first-of-type { border-top: 0; padding-top: 0; }
+.farmstat { font: 800 16px/1 var(--cond); letter-spacing: .04em; text-transform: uppercase; }
+.farmopt { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 6px; align-items: start; }
+.farmopt input { margin: 2px 0 0; }
+.shop { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 2px 12px; }
+.shop .h { font: 700 11px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding-bottom: 3px; }
+.ladder { display: flex; flex-direction: column; gap: 3px; }
+.rung { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 8px; align-items: center; }
+.rung .sp { font: 700 15px/1 var(--cond); text-align: right; }
+.rung .lane { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 26px; padding: 2px 8px; border-radius: 6px; font-size: 13px; font-weight: 600; text-align: left; border: 0; width: 100%; }
+.rung .lane > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rung.me .lane { background: var(--accent-soft); color: var(--link); }
+.rung.foe .lane { background: var(--bad-soft); color: var(--bad); }
+.rung.ghost .lane { background: none; border: 1.5px dashed var(--good); color: var(--good); cursor: pointer; }
+.routestop { display: flex; flex-direction: column; gap: 5px; padding: 8px 0; border-top: 1px solid var(--border); }
+.routestop:first-of-type { border-top: 0; padding-top: 0; }
+.lanes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.lanebox { background: var(--surface-2); border-radius: 8px; padding: 6px 7px; font-size: 12.5px; line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
+.lanebox h4 { margin: 0 0 3px; font: 800 11.5px/1 var(--cond); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }

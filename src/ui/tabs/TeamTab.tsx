@@ -28,6 +28,7 @@ import { boxToShowdown, npcToShowdown, toShowdownTeam } from '../../engine/showd
 import { SimExport } from '../components/SimExport';
 import { GrindPlanCard, LadderPanel } from '../components/GrindLadder';
 import { EvPanel } from '../components/EvPanel';
+import { SpeedLadder } from '../components/SpeedLadder';
 
 /** Battle Frontier entry problems: who can't enter, what changes under Gen III rules, item clause. */
 function FrontierNotes({ ds, team, entries, blocked, ownTeam }: { ds: Dataset; team: BoxMon[]; entries: Map<string, { blocking: string[]; notes: string[] }>; blocked: string[]; ownTeam: boolean }) {
@@ -262,6 +263,7 @@ function Suggestion({ ds: base, part }: { ds: Dataset; part: 'team' | 'hunt' }) 
             <div class="small muted">{held ? '🎒 Held items: from your bag, one each. Damage items use the calc; the rest are rules of thumb.' : '🎒 Open your Bag page in the game once to get held item advice from what you own.'}</div>
           </div>
           {showGrind && res.team.length > 0 && <GrindPlanCard ds={ds} v={v} rules={rules} tower={tower} team={res.team} />}
+          {res.team.length > 0 && !(npc && isWorldBoss(npc)) && npc?.category !== 'frontier' && <SpeedLadder ds={ds} team={res.team.map((c) => c.mon)} v={v} />}
           {lockedOut.length > 0 && (
             <Tip kind="warn">Locked but not on the team: {lockedOut.map((c) => `${name(c)} (${c.reason ?? 'team is full'})`).join(', ')}</Tip>
           )}

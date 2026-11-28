@@ -4,7 +4,7 @@ import { clearDataset, loadBox, loadDataset, saveBox, saveDataset } from '../dat
 import { syncDataset } from '../data/sync';
 
 /** Top tabs: Battle / Wild / Prep / Guide, plus Settings (gear). Prep holds the NPC → Team → Hunt & grind steps. */
-export type TabId = 'battle' | 'wild' | 'prep' | 'guide' | 'settings';
+export type TabId = 'battle' | 'wild' | 'prep' | 'train' | 'guide' | 'settings';
 export type PrepStep = 'npc' | 'team' | 'hunt';
 
 export const dataset = signal<Dataset | null>(null);
